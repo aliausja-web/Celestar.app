@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && getUserRole() == 'admin';
+    }
+
+    function isSupervisor() {
+      return isAuthenticated() && getUserRole() == 'supervisor';
+    }
+
+    function isClient() {
+      return isAuthenticated() && getUserRole() == 'client';
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /zones/{zoneId} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || isSupervisor();
+    }
+
+    match /proofs/{proofId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || isSupervisor();
+      allow delete: if isAdmin();
+    }
+
+    match /updates/{updateId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || isSupervisor();
+      allow delete: if isAdmin();
+    }
+
+    match /escalations/{escalationId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}

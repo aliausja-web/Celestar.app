@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 215 28% 7%;
+    --foreground: 210 40% 95%;
+    --card: 215 26% 10%;
+    --card-foreground: 210 40% 95%;
+    --popover: 215 26% 10%;
+    --popover-foreground: 210 40% 95%;
+    --primary: 213 94% 68%;
+    --primary-foreground: 215 28% 7%;
+    --secondary: 215 20% 15%;
+    --secondary-foreground: 210 40% 95%;
+    --muted: 215 20% 15%;
+    --muted-foreground: 215 15% 65%;
+    --accent: 213 94% 68%;
+    --accent-foreground: 215 28% 7%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 215 30% 18%;
+    --input: 215 30% 18%;
+    --ring: 213 94% 68%;
+    --radius: 0.875rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .celestar-gradient {
+    background: radial-gradient(1200px 600px at 20% -10%, rgba(74, 163, 255, 0.18), transparent 55%),
+                radial-gradient(900px 500px at 95% 0%, rgba(46, 204, 113, 0.12), transparent 55%);
+  }
+}

@@ -1,0 +1,27 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && getUserRole() == 'admin';
+    }
+
+    function isSupervisor() {
+      return isAuthenticated() && getUserRole() == 'supervisor';
+    }
+
+    match /proofs/{projectId}/{zoneId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isSupervisor();
+      allow delete: if isAdmin();
+    }
+  }
+}
