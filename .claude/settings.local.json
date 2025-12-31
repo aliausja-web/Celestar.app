@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -Command \"Get-Process | Where-Object {$_ProcessName -eq ''node''} | Select-Object Id, ProcessName, CPU\")",
+      "Bash(npm run dev:*)"
+    ]
+  }
+}
