@@ -86,8 +86,6 @@ export default function ClientDashboard() {
   const project = projects.find(p => p.id === selectedProject);
   const overallStatus = zones.some(z => z.status === 'RED')
     ? 'RED'
-    : zones.some(z => z.status === 'AMBER')
-    ? 'AMBER'
     : 'GREEN';
 
   return (
