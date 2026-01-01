@@ -54,6 +54,13 @@ export default function AdminDashboard() {
   const [newZoneStatus, setNewZoneStatus] = useState<'RED' | 'GREEN'>('RED');
   const [creatingZone, setCreatingZone] = useState(false);
 
+  const [showNewUserDialog, setShowNewUserDialog] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'supervisor' | 'client'>('supervisor');
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+
   useEffect(() => {
     if (!authLoading && (!userData || userData.role !== 'admin')) {
       router.push('/');
@@ -72,6 +79,15 @@ export default function AdminDashboard() {
 
           const zonesData = await getZonesByProject(projectId);
           setZones(zonesData);
+        }
+
+        // Load users
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (usersData) {
+          setUsers(usersData);
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -214,6 +230,88 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleCreateUser = async () => {
+    if (!newUserEmail || !newUserPassword) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if (newUserPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    setCreatingUser(true);
+    try {
+      // Create auth user using Supabase admin API
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: newUserEmail,
+        password: newUserPassword,
+        email_confirm: true,
+      });
+
+      if (authError) throw authError;
+
+      // Insert user record into users table
+      const { error: dbError } = await supabase.from('users').insert([
+        {
+          uid: authData.user.id,
+          email: newUserEmail,
+          role: newUserRole,
+          org_id: userData?.org_id || 'org_001',
+        },
+      ]);
+
+      if (dbError) throw dbError;
+
+      // Refresh users list
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (usersData) {
+        setUsers(usersData);
+      }
+
+      toast.success(`User created successfully! Login: ${newUserEmail}`);
+      setShowNewUserDialog(false);
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserRole('supervisor');
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      toast.error(error.message || 'Failed to create user');
+    } finally {
+      setCreatingUser(false);
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string, projectName: string) => {
+    if (!confirm(`Are you sure you want to delete project "${projectName}"? This will also delete all associated zones, proofs, and updates. This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from('projects').delete().eq('id', projectId);
+
+      if (error) throw error;
+
+      // Remove from local state
+      setProjects(projects.filter(p => p.id !== projectId));
+
+      // If this was the selected project, clear zones
+      if (selectedProject === projectId) {
+        setSelectedProject(null);
+        setZones([]);
+      }
+
+      toast.success('Project deleted successfully');
+    } catch (error: any) {
+      console.error('Error deleting project:', error);
+      toast.error(error.message || 'Failed to delete project');
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -345,11 +443,23 @@ export default function AdminDashboard() {
                         key={project.id}
                         className="p-4 bg-black/25 border border-gray-800 rounded-lg hover:border-gray-700 transition-colors"
                       >
-                        <div className="font-semibold text-white mb-1">{project.name}</div>
-                        <div className="text-sm text-gray-400">
-                          {project.brand} • {project.agency} • {project.location}
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="font-semibold text-white mb-1">{project.name}</div>
+                            <div className="text-sm text-gray-400">
+                              {project.brand} • {project.agency} • {project.location}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">Start Date: {project.startDate}</div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteProject(project.id, project.name)}
+                            className="border-red-700 bg-red-500/10 hover:bg-red-500/20 text-red-300 hover:text-red-200"
+                          >
+                            Delete
+                          </Button>
                         </div>
-                        <div className="text-xs text-gray-500 mt-1">Start Date: {project.startDate}</div>
                       </div>
                     ))}
                   </div>
@@ -406,13 +516,62 @@ export default function AdminDashboard() {
 
           <TabsContent value="users">
             <Card className="bg-[#121826]/90 border-[#23304a] backdrop-blur">
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-white">User Management</CardTitle>
+                <Button
+                  onClick={() => setShowNewUserDialog(true)}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  + New User
+                </Button>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-400 text-sm">
-                  Use the seed data script to create users. Full user management interface coming soon.
-                </p>
+                {users.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-gray-400 mb-4">No users yet. Create your first user!</p>
+                    <Button
+                      onClick={() => setShowNewUserDialog(true)}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      Create First User
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-800">
+                          <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Email</th>
+                          <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Role</th>
+                          <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Created</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map((user) => (
+                          <tr key={user.uid} className="border-b border-gray-800/50">
+                            <td className="py-3 px-4 text-white">{user.email}</td>
+                            <td className="py-3 px-4">
+                              <Badge
+                                className={
+                                  user.role === 'admin'
+                                    ? 'border-purple-500/40 bg-purple-500/12 text-purple-200'
+                                    : user.role === 'supervisor'
+                                    ? 'border-blue-500/40 bg-blue-500/12 text-blue-200'
+                                    : 'border-green-500/40 bg-green-500/12 text-green-200'
+                                }
+                              >
+                                {user.role.toUpperCase()}
+                              </Badge>
+                            </td>
+                            <td className="py-3 px-4 text-gray-400 text-xs">
+                              {new Date(user.created_at).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -616,6 +775,70 @@ export default function AdminDashboard() {
               className="bg-blue-600 hover:bg-blue-700"
             >
               {creatingZone ? 'Creating...' : 'Create Zone'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showNewUserDialog} onOpenChange={setShowNewUserDialog}>
+        <DialogContent className="bg-[#0f1522] border-gray-800">
+          <DialogHeader>
+            <DialogTitle className="text-white">Create New User</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-gray-300">Email</Label>
+              <Input
+                type="email"
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
+                placeholder="e.g., supervisor@company.com"
+                className="bg-black/25 border-gray-700 text-white placeholder:text-gray-500"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-gray-300">Password</Label>
+              <Input
+                type="password"
+                value={newUserPassword}
+                onChange={(e) => setNewUserPassword(e.target.value)}
+                placeholder="Minimum 6 characters"
+                className="bg-black/25 border-gray-700 text-white placeholder:text-gray-500"
+              />
+              <p className="text-xs text-gray-500">User will use this password to login</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-gray-300">Role</Label>
+              <Select
+                value={newUserRole}
+                onValueChange={(value) => setNewUserRole(value as 'supervisor' | 'client')}
+              >
+                <SelectTrigger className="bg-black/25 border-gray-700 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="supervisor">Supervisor - Can upload proof and update zones</SelectItem>
+                  <SelectItem value="client">Client - View-only access</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowNewUserDialog(false)}
+              className="border-gray-700"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateUser}
+              disabled={creatingUser || !newUserEmail || !newUserPassword}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {creatingUser ? 'Creating...' : 'Create User'}
             </Button>
           </DialogFooter>
         </DialogContent>
