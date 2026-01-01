@@ -52,6 +52,7 @@ export default function AdminDashboard() {
   const [newZoneDeliverable, setNewZoneDeliverable] = useState('');
   const [newZoneOwner, setNewZoneOwner] = useState('');
   const [newZoneStatus, setNewZoneStatus] = useState<'RED' | 'GREEN'>('RED');
+  const [newZoneAcceptanceCriteria, setNewZoneAcceptanceCriteria] = useState('');
   const [creatingZone, setCreatingZone] = useState(false);
 
   const [showNewUserDialog, setShowNewUserDialog] = useState(false);
@@ -198,6 +199,12 @@ export default function AdminDashboard() {
 
     setCreatingZone(true);
     try {
+      // Parse acceptance criteria (split by line, filter empty)
+      const criteriaArray = newZoneAcceptanceCriteria
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
       const { data, error } = await supabase
         .from('zones')
         .insert([
@@ -207,6 +214,7 @@ export default function AdminDashboard() {
             deliverable: newZoneDeliverable,
             owner: newZoneOwner,
             status: newZoneStatus,
+            acceptance_criteria: criteriaArray.length > 0 ? criteriaArray : [],
           },
         ])
         .select()
@@ -222,6 +230,7 @@ export default function AdminDashboard() {
       setNewZoneDeliverable('');
       setNewZoneOwner('');
       setNewZoneStatus('RED');
+      setNewZoneAcceptanceCriteria('');
     } catch (error) {
       console.error('Error creating zone:', error);
       toast.error('Failed to create zone');
@@ -792,6 +801,18 @@ export default function AdminDashboard() {
                 placeholder="e.g., John Smith"
                 className="bg-black/25 border-gray-700 text-white placeholder:text-gray-500"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-gray-300">Acceptance Criteria (Optional)</Label>
+              <Textarea
+                value={newZoneAcceptanceCriteria}
+                onChange={(e) => setNewZoneAcceptanceCriteria(e.target.value)}
+                placeholder="Enter criteria, one per line:&#10;- All equipment installed&#10;- Quality check passed&#10;- Client approval received"
+                rows={4}
+                className="bg-black/25 border-gray-700 text-white placeholder:text-gray-500"
+              />
+              <p className="text-xs text-gray-500">Enter each criterion on a new line</p>
             </div>
 
             <div className="space-y-2">
