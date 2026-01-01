@@ -252,26 +252,32 @@ export default function AdminDashboard() {
 
     setCreatingUser(true);
     try {
-      // Create auth user using Supabase admin API
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: newUserEmail,
-        password: newUserPassword,
-        email_confirm: true,
-      });
+      // Get current session token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Not authenticated');
+      }
 
-      if (authError) throw authError;
-
-      // Insert user record into users table
-      const { error: dbError } = await supabase.from('users').insert([
-        {
-          uid: authData.user.id,
+      // Call server-side API to create user
+      const response = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
           email: newUserEmail,
+          password: newUserPassword,
           role: newUserRole,
           org_id: userData?.org_id || 'org_001',
-        },
-      ]);
+        }),
+      });
 
-      if (dbError) throw dbError;
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create user');
+      }
 
       // Refresh users list
       const { data: usersData } = await supabase
