@@ -51,7 +51,7 @@ export default function AdminDashboard() {
   const [newZoneName, setNewZoneName] = useState('');
   const [newZoneDeliverable, setNewZoneDeliverable] = useState('');
   const [newZoneOwner, setNewZoneOwner] = useState('');
-  const [newZoneStatus, setNewZoneStatus] = useState<'RED' | 'AMBER' | 'GREEN'>('RED');
+  const [newZoneStatus, setNewZoneStatus] = useState<'RED' | 'GREEN'>('RED');
   const [creatingZone, setCreatingZone] = useState(false);
 
   useEffect(() => {
@@ -225,8 +225,6 @@ export default function AdminDashboard() {
   const project = projects.find(p => p.id === selectedProject);
   const overallStatus = zones.some(z => z.status === 'RED')
     ? 'RED'
-    : zones.some(z => z.status === 'AMBER')
-    ? 'AMBER'
     : 'GREEN';
 
   return (
@@ -287,8 +285,6 @@ export default function AdminDashboard() {
                         className={
                           overallStatus === 'RED'
                             ? 'border-red-500/40 bg-red-500/12 text-red-200'
-                            : overallStatus === 'AMBER'
-                            ? 'border-amber-500/40 bg-amber-500/12 text-amber-200'
                             : 'border-green-500/40 bg-green-500/12 text-green-200'
                         }
                       >
@@ -594,15 +590,14 @@ export default function AdminDashboard() {
               <Label className="text-gray-300">Initial Status</Label>
               <Select
                 value={newZoneStatus}
-                onValueChange={(value) => setNewZoneStatus(value as 'RED' | 'AMBER' | 'GREEN')}
+                onValueChange={(value) => setNewZoneStatus(value as 'RED' | 'GREEN')}
               >
                 <SelectTrigger className="bg-black/25 border-gray-700 text-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="RED">RED - Not Started / Issues</SelectItem>
-                  <SelectItem value="AMBER">AMBER - In Progress</SelectItem>
-                  <SelectItem value="GREEN">GREEN - On Track</SelectItem>
+                  <SelectItem value="RED">RED - Not Verified</SelectItem>
+                  <SelectItem value="GREEN">GREEN - Verified</SelectItem>
                 </SelectContent>
               </Select>
             </div>

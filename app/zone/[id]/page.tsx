@@ -62,10 +62,16 @@ export default function ZoneDetailPage() {
 
   useEffect(() => {
     if (stream && showCameraDialog) {
-      const video = document.getElementById('camera-video') as HTMLVideoElement;
-      if (video) {
-        video.srcObject = stream;
-      }
+      // Wait for video element to be rendered in the DOM
+      const timer = setTimeout(() => {
+        const video = document.getElementById('camera-video') as HTMLVideoElement;
+        if (video) {
+          video.srcObject = stream;
+          video.play().catch(err => console.error('Error playing video:', err));
+        }
+      }, 100);
+
+      return () => clearTimeout(timer);
     }
   }, [stream, showCameraDialog]);
 
@@ -303,8 +309,6 @@ export default function ZoneDetailPage() {
             className={
               zone.status === 'RED'
                 ? 'border-red-500/40 bg-red-500/12 text-red-200'
-                : zone.status === 'AMBER'
-                ? 'border-amber-500/40 bg-amber-500/12 text-amber-200'
                 : 'border-green-500/40 bg-green-500/12 text-green-200'
             }
           >
@@ -437,7 +441,6 @@ export default function ZoneDetailPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="RED">RED</SelectItem>
-                          <SelectItem value="AMBER">AMBER</SelectItem>
                           <SelectItem value="GREEN">GREEN</SelectItem>
                         </SelectContent>
                       </Select>
@@ -465,7 +468,7 @@ export default function ZoneDetailPage() {
                     </Button>
 
                     <p className="text-xs text-gray-500">
-                      Rule: GREEN requires proof. RED→AMBER/GREEN requires proof.
+                      Rule: GREEN requires proof. RED→GREEN requires proof.
                     </p>
                   </div>
                 </CardContent>

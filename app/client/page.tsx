@@ -30,8 +30,16 @@ export default function ClientDashboard() {
 
   useEffect(() => {
     async function loadData() {
+      if (!userData?.role || userData.role !== 'client') {
+        console.log('User is not a client, skipping data load');
+        setLoading(false);
+        return;
+      }
+
       try {
+        console.log('Loading client dashboard data...');
         const projectsData = await getProjects();
+        console.log('Projects loaded:', projectsData);
         setProjects(projectsData);
 
         if (projectsData.length > 0) {
@@ -43,20 +51,25 @@ export default function ClientDashboard() {
             getEscalationsByProject(projectId),
           ]);
 
+          console.log('Zones loaded:', zonesData);
+          console.log('Escalations loaded:', escalationsData);
           setZones(zonesData);
           setEscalations(escalationsData);
+        } else {
+          console.log('No projects found');
         }
       } catch (error) {
-        console.error('Error loading data:', error);
+        console.error('Error loading client data:', error);
+        alert('Failed to load dashboard data. Please check console for details.');
       } finally {
         setLoading(false);
       }
     }
 
-    if (userData?.role === 'client') {
+    if (!authLoading) {
       loadData();
     }
-  }, [userData]);
+  }, [userData, authLoading]);
 
   const handleZoneClick = (zoneId: string) => {
     router.push(`/zone/${zoneId}?view=client`);
@@ -109,7 +122,13 @@ export default function ClientDashboard() {
           </div>
         </div>
 
-        {project && (
+        {projects.length === 0 ? (
+          <Card className="bg-[#121826]/90 border-[#23304a] backdrop-blur">
+            <CardContent className="py-12 text-center">
+              <p className="text-gray-400">No projects available. Please contact your administrator.</p>
+            </CardContent>
+          </Card>
+        ) : project && (
           <>
             <Card className="bg-[#121826]/90 border-[#23304a] backdrop-blur">
               <CardHeader>
@@ -126,8 +145,6 @@ export default function ClientDashboard() {
                     className={
                       overallStatus === 'RED'
                         ? 'border-red-500/40 bg-red-500/12 text-red-200'
-                        : overallStatus === 'AMBER'
-                        ? 'border-amber-500/40 bg-amber-500/12 text-amber-200'
                         : 'border-green-500/40 bg-green-500/12 text-green-200'
                     }
                   >

@@ -13,13 +13,11 @@ interface ZoneTableProps {
 function StatusBadge({ status }: { status: string }) {
   const colors = {
     RED: 'border-red-500/40 bg-red-500/12 text-red-200',
-    AMBER: 'border-amber-500/40 bg-amber-500/12 text-amber-200',
     GREEN: 'border-green-500/40 bg-green-500/12 text-green-200',
   };
 
   const dotColors = {
     RED: 'bg-red-500',
-    AMBER: 'bg-amber-500',
     GREEN: 'bg-green-500',
   };
 
@@ -79,7 +77,7 @@ export function ZoneTable({ zones, onZoneClick, showEscalateButton, onEscalate }
               </td>
               {showEscalateButton && (
                 <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                  {(zone.status === 'RED' || zone.status === 'AMBER') && (
+                  {zone.status === 'RED' && (
                     <button
                       onClick={() => onEscalate?.(zone.id)}
                       className="px-3 py-1 text-xs font-bold border border-gray-700 bg-gray-800/50 hover:bg-red-500/20 hover:border-red-500 rounded-lg transition-colors"

@@ -1,6 +1,6 @@
 export type UserRole = 'admin' | 'supervisor' | 'client';
 
-export type ZoneStatus = 'RED' | 'AMBER' | 'GREEN';
+export type ZoneStatus = 'RED' | 'GREEN';
 
 export type EscalationLevel = 'L0' | 'L1' | 'L2' | 'L3';
 

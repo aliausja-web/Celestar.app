@@ -65,8 +65,6 @@ export default function SupervisorDashboard() {
   const project = projects.find(p => p.id === selectedProject);
   const overallStatus = zones.some(z => z.status === 'RED')
     ? 'RED'
-    : zones.some(z => z.status === 'AMBER')
-    ? 'AMBER'
     : 'GREEN';
 
   return (
@@ -118,8 +116,6 @@ export default function SupervisorDashboard() {
                     className={
                       overallStatus === 'RED'
                         ? 'border-red-500/40 bg-red-500/12 text-red-200'
-                        : overallStatus === 'AMBER'
-                        ? 'border-amber-500/40 bg-amber-500/12 text-amber-200'
                         : 'border-green-500/40 bg-green-500/12 text-green-200'
                     }
                   >
