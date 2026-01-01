@@ -312,6 +312,42 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDeleteUser = async (userId: string, userEmail: string, userRole: string) => {
+    // Prevent deleting admin users
+    if (userRole === 'admin') {
+      toast.error('Cannot delete admin users');
+      return;
+    }
+
+    // Prevent deleting yourself
+    if (userEmail === userData?.email) {
+      toast.error('Cannot delete your own account');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete user "${userEmail}"? This will revoke their access to the portal immediately. This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // Delete from auth system
+      const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+      if (authError) throw authError;
+
+      // Delete from users table
+      const { error: dbError } = await supabase.from('users').delete().eq('uid', userId);
+      if (dbError) throw dbError;
+
+      // Remove from local state
+      setUsers(users.filter(u => u.uid !== userId));
+
+      toast.success('User deleted successfully');
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      toast.error(error.message || 'Failed to delete user');
+    }
+  };
+
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -544,6 +580,7 @@ export default function AdminDashboard() {
                           <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Email</th>
                           <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Role</th>
                           <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Created</th>
+                          <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -565,6 +602,18 @@ export default function AdminDashboard() {
                             </td>
                             <td className="py-3 px-4 text-gray-400 text-xs">
                               {new Date(user.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="py-3 px-4">
+                              {user.role !== 'admin' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDeleteUser(user.uid, user.email, user.role)}
+                                  className="border-red-700 bg-red-500/10 hover:bg-red-500/20 text-red-300 hover:text-red-200"
+                                >
+                                  Delete
+                                </Button>
+                              )}
                             </td>
                           </tr>
                         ))}
