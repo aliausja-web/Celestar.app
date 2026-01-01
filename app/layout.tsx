@@ -8,7 +8,6 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'Celestar - Execution Readiness Portal',
   description: 'Proof-first execution verification system',
-  // Force deployment refresh
 };
 
 export default function RootLayout({
