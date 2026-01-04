@@ -40,11 +40,8 @@ export default function ZoneDetailPage() {
   const [loading, setLoading] = useState(true);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadedProofId, setUploadedProofId] = useState<string | null>(null);
-  const [newStatus, setNewStatus] = useState<ZoneStatus | ''>('');
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [gpsCoords, setGpsCoords] = useState<{lat: number, lon: number} | null>(null);
   const [captureTimestamp, setCaptureTimestamp] = useState<string>('');
   const [showCameraDialog, setShowCameraDialog] = useState(false);
@@ -205,11 +202,21 @@ export default function ZoneDetailPage() {
       );
 
       setProofs([proof, ...proofs]);
-      setUploadedProofId(proof.id);
       setSelectedFile(null);
+      setNote('');
+      setCapturedImage(null);
       setGpsCoords(null);
       setCaptureTimestamp('');
-      toast.success('Proof uploaded with timestamp & GPS');
+
+      // Reload zone data to get updated status (changed automatically by database trigger)
+      const updatedZone = await getZone(zoneId);
+      setZone(updatedZone);
+
+      // Reload updates to see the automatic status change
+      const updatedUpdates = await getUpdatesByZone(zoneId);
+      setUpdates(updatedUpdates);
+
+      toast.success('✅ Proof uploaded! Status automatically changed to GREEN.');
 
       const fileInput = document.getElementById('proof-file') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
@@ -221,43 +228,6 @@ export default function ZoneDetailPage() {
     }
   };
 
-  const handleSaveUpdate = async () => {
-    if (!zone || !userData || !newStatus) return;
-
-    const needsProof = requiresProof(zone.status, newStatus);
-    if (needsProof && !uploadedProofId) {
-      toast.error('Upload proof to change status');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const update = await createUpdate(
-        zone.projectId,
-        zone.id,
-        zone.status,
-        newStatus,
-        userData.uid,
-        userData.email,
-        'STATUS_CHANGE',
-        uploadedProofId || undefined,
-        note || undefined
-      );
-
-      setUpdates([update, ...updates]);
-      setZone({ ...zone, status: newStatus });
-      setNewStatus('');
-      setNote('');
-      setUploadedProofId(null);
-
-      toast.success(`Status updated: ${zone.status} → ${newStatus}`);
-    } catch (error) {
-      console.error('Error saving update:', error);
-      toast.error('Failed to save update');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleBack = () => {
     if (isReadOnly) {
@@ -424,52 +394,16 @@ export default function ZoneDetailPage() {
                       </div>
                     </div>
                   )}
-                  <p className="text-xs text-gray-500 text-center">
-                    📍 GPS location and timestamp captured automatically
-                  </p>
-
-                  <div className="border-t border-gray-800 pt-4 space-y-4">
-                    <div className="space-y-2">
-                      <Label>New Status</Label>
-                      <Select
-                        value={newStatus}
-                        onValueChange={(value) => setNewStatus(value as ZoneStatus)}
-                        disabled={!uploadedProofId}
-                      >
-                        <SelectTrigger className="bg-black/25 border-gray-700">
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="RED">RED</SelectItem>
-                          <SelectItem value="GREEN">GREEN</SelectItem>
-                        </SelectContent>
-                      </Select>
+                  <div className="border-t border-gray-800 pt-4 mt-4">
+                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                      <p className="text-sm text-blue-200 font-semibold mb-2">🔒 Proof-First Verification System</p>
+                      <ul className="text-xs text-blue-300/80 space-y-1">
+                        <li>• Uploading proof automatically changes status from RED to GREEN</li>
+                        <li>• No manual status manipulation possible</li>
+                        <li>• GPS location and timestamp captured with every proof</li>
+                        <li>• All changes are tracked in update history</li>
+                      </ul>
                     </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="note">Note (optional)</Label>
-                      <Textarea
-                        id="note"
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                        placeholder="Example: 'Painter incomplete at 14:05'"
-                        maxLength={200}
-                        className="bg-black/25 border-gray-700"
-                      />
-                      <p className="text-xs text-gray-500">{note.length}/200 characters</p>
-                    </div>
-
-                    <Button
-                      onClick={handleSaveUpdate}
-                      disabled={!newStatus || saving}
-                      className="w-full"
-                    >
-                      {saving ? 'Saving...' : 'Save Update'}
-                    </Button>
-
-                    <p className="text-xs text-gray-500">
-                      Rule: GREEN requires proof. RED→GREEN requires proof.
-                    </p>
                   </div>
                 </CardContent>
               </Card>

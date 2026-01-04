@@ -36,6 +36,14 @@ export interface Zone {
   acceptanceCriteria: string[];
   isEscalated: boolean;
   escalationLevel: EscalationLevel | null;
+  deadline: Date | string | null;
+  escalation1Hours: number;
+  escalation2Hours: number;
+  escalation3Hours: number;
+  siteCoordinator: string | null;
+  siteAuthority: string | null;
+  finalAuthority: string | null;
+  lastEscalationCheck: Date | string | null;
 }
 
 export interface Proof {
