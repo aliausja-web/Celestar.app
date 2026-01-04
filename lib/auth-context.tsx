@@ -49,9 +49,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const userEmail = session?.user?.email;
 
     if (!userEmail) {
+      console.error('No user email found in session');
       setLoading(false);
       return;
     }
+
+    console.log('Loading user data for:', userEmail);
 
     // Fetch user by email since UID comparison is failing
     const { data, error } = await supabase
@@ -60,8 +63,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq('email', userEmail)
       .maybeSingle();
 
+    if (error) {
+      console.error('Error fetching user data:', error);
+    }
+
     if (data) {
+      console.log('User data loaded:', { email: data.email, role: data.role });
       setUserData(data as User);
+    } else {
+      console.error('No user record found in users table for:', userEmail);
+      console.error('This user exists in Supabase Auth but not in the users table.');
+      console.error('Please ensure the user is created through the admin panel or has a corresponding record in the users table.');
     }
     setLoading(false);
   };

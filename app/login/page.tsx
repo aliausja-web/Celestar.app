@@ -25,6 +25,10 @@ export default function LoginPage() {
       } else if (userData.role === 'client') {
         router.push('/client');
       }
+    } else if (user && !userData) {
+      // User is authenticated but has no user record in the database
+      console.error('User authenticated but no user data found. Check console for details.');
+      toast.error('Account setup incomplete. Please contact administrator.');
     }
   }, [user, userData, router]);
 
