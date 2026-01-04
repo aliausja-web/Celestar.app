@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/lib/firebase';
 
 export default function Home() {
   const router = useRouter();
@@ -21,6 +22,12 @@ export default function Home() {
         } else if (userData.role === 'client') {
           router.push('/client');
         }
+      } else if (user && !userData) {
+        // User is authenticated but has no user data - sign them out and redirect to login
+        console.error('User authenticated but no user data found. Signing out...');
+        supabase.auth.signOut().then(() => {
+          router.push('/login');
+        });
       }
     }
   }, [user, userData, loading, router]);
