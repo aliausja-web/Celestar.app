@@ -1,0 +1,15 @@
+name: Escalation Checker
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger escalation check
+        run: |
+          curl -X GET https://celestar.app/api/cron/check-escalations \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -f
