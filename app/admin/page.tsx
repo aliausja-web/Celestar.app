@@ -60,7 +60,7 @@ export default function AdminDashboard() {
   const [showNewUserDialog, setShowNewUserDialog] = useState(false);
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
-  const [newUserRole, setNewUserRole] = useState<'supervisor' | 'client'>('supervisor');
+  const [newUserRole, setNewUserRole] = useState<'system_owner' | 'org_admin' | 'project_manager' | 'site_coordinator' | 'viewer' | 'supervisor' | 'client'>('site_coordinator');
   const [creatingUser, setCreatingUser] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
 
@@ -300,7 +300,7 @@ export default function AdminDashboard() {
       setShowNewUserDialog(false);
       setNewUserEmail('');
       setNewUserPassword('');
-      setNewUserRole('supervisor');
+      setNewUserRole('site_coordinator');
     } catch (error: any) {
       console.error('Error creating user:', error);
       toast.error(error.message || 'Failed to create user');
@@ -909,16 +909,24 @@ export default function AdminDashboard() {
               <Label className="text-gray-300">Role</Label>
               <Select
                 value={newUserRole}
-                onValueChange={(value) => setNewUserRole(value as 'supervisor' | 'client')}
+                onValueChange={(value) => setNewUserRole(value as 'system_owner' | 'org_admin' | 'project_manager' | 'site_coordinator' | 'viewer' | 'supervisor' | 'client')}
               >
                 <SelectTrigger className="bg-black/25 border-gray-700 text-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="supervisor">Supervisor - Can upload proof and update zones</SelectItem>
-                  <SelectItem value="client">Client - View-only access</SelectItem>
+                  <SelectItem value="system_owner">System Owner - Full control (Celestar)</SelectItem>
+                  <SelectItem value="org_admin">Org Admin - Organization management (CEO)</SelectItem>
+                  <SelectItem value="project_manager">Project Manager - Escalations, acknowledgments</SelectItem>
+                  <SelectItem value="site_coordinator">Site Coordinator - Proof uploads, notes (Recommended)</SelectItem>
+                  <SelectItem value="viewer">Viewer - Read-only access</SelectItem>
+                  <SelectItem value="supervisor">Supervisor - Legacy role (proof uploads)</SelectItem>
+                  <SelectItem value="client">Client - Legacy role (view-only)</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-gray-500">
+                💡 Most field users should be Site Coordinators. Project Managers handle escalations.
+              </p>
             </div>
           </div>
           <DialogFooter>
