@@ -53,6 +53,8 @@ export default function AdminDashboard() {
   const [newZoneOwner, setNewZoneOwner] = useState('');
   const [newZoneStatus, setNewZoneStatus] = useState<'RED' | 'GREEN'>('RED');
   const [newZoneAcceptanceCriteria, setNewZoneAcceptanceCriteria] = useState('');
+  const [newZoneReadinessDeadline, setNewZoneReadinessDeadline] = useState('');
+  const [newZoneRequiredProofCount, setNewZoneRequiredProofCount] = useState(1);
   const [creatingZone, setCreatingZone] = useState(false);
 
   const [showNewUserDialog, setShowNewUserDialog] = useState(false);
@@ -214,7 +216,11 @@ export default function AdminDashboard() {
             deliverable: newZoneDeliverable,
             owner: newZoneOwner,
             status: newZoneStatus,
+            computed_status: 'RED', // Always starts RED (proof-first system)
             acceptance_criteria: criteriaArray.length > 0 ? criteriaArray : [],
+            readiness_deadline: newZoneReadinessDeadline || null,
+            required_proof_count: newZoneRequiredProofCount,
+            required_proof_types: ['photo'], // Default to photo
           },
         ])
         .select()
@@ -224,13 +230,15 @@ export default function AdminDashboard() {
 
       const newZone = data as Zone;
       setZones([...zones, newZone]);
-      toast.success('Zone created successfully!');
+      toast.success('Zone created successfully! Escalations will trigger automatically if deadline is missed.');
       setShowNewZoneDialog(false);
       setNewZoneName('');
       setNewZoneDeliverable('');
       setNewZoneOwner('');
       setNewZoneStatus('RED');
       setNewZoneAcceptanceCriteria('');
+      setNewZoneReadinessDeadline('');
+      setNewZoneRequiredProofCount(1);
     } catch (error) {
       console.error('Error creating zone:', error);
       toast.error('Failed to create zone');
@@ -822,19 +830,31 @@ export default function AdminDashboard() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-gray-300">Initial Status</Label>
-              <Select
-                value={newZoneStatus}
-                onValueChange={(value) => setNewZoneStatus(value as 'RED' | 'GREEN')}
-              >
-                <SelectTrigger className="bg-black/25 border-gray-700 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="RED">RED - Not Verified</SelectItem>
-                  <SelectItem value="GREEN">GREEN - Verified</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label className="text-gray-300">Readiness Deadline (Optional)</Label>
+              <Input
+                type="datetime-local"
+                value={newZoneReadinessDeadline}
+                onChange={(e) => setNewZoneReadinessDeadline(e.target.value)}
+                className="bg-black/25 border-gray-700 text-white placeholder:text-gray-500"
+              />
+              <p className="text-xs text-gray-500">
+                ⚡ Automatic escalations will trigger at T-24h, T-16h, T-8h if zone stays RED past this deadline
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-gray-300">Required Proof Count</Label>
+              <Input
+                type="number"
+                min="1"
+                max="10"
+                value={newZoneRequiredProofCount}
+                onChange={(e) => setNewZoneRequiredProofCount(parseInt(e.target.value) || 1)}
+                className="bg-black/25 border-gray-700 text-white placeholder:text-gray-500"
+              />
+              <p className="text-xs text-gray-500">
+                🔒 Zone will automatically turn GREEN only when this many valid proofs are uploaded
+              </p>
             </div>
           </div>
           <DialogFooter>
