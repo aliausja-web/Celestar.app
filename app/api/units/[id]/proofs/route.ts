@@ -45,7 +45,7 @@ export async function POST(
           captured_at: body.captured_at || new Date().toISOString(),
           uploaded_by: context!.user_id,
           uploaded_by_email: context!.email,
-          notes: body.notes || null,
+          validation_notes: body.notes || null,
           metadata_exif: body.metadata_exif || {},
           gps_latitude: body.gps_latitude || null,
           gps_longitude: body.gps_longitude || null,
