@@ -286,7 +286,7 @@ export default function WorkstreamBoard() {
               >
                 View Details
               </Button>
-              {(permissions.isPlatformAdmin || permissions.isProgramOwner || permissions.isWorkstreamLead) && !isGreen && (
+              {(permissions.isPlatformAdmin || permissions.role === 'PROGRAM_OWNER' || permissions.role === 'WORKSTREAM_LEAD') && !isGreen && (
                 <Button
                   size="sm"
                   onClick={() => handleEscalate(unit.id)}
