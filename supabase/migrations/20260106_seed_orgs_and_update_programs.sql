@@ -5,25 +5,21 @@
 -- 1. SEED ORGANIZATIONS
 -- ============================================================================
 
--- Insert sample organizations
+-- Insert Celestar as the platform organization
 INSERT INTO orgs (id, name, metadata) VALUES
-  ('org_celestar', 'Celestar', '{"industry": "Event Management", "country": "Saudi Arabia"}'::jsonb),
-  ('org_almarai', 'Almarai', '{"industry": "Retail", "country": "Saudi Arabia"}'::jsonb)
+  ('org_celestar', 'Celestar', '{"type": "platform_owner", "country": "Saudi Arabia"}'::jsonb)
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================================
 -- 2. UPDATE EXISTING PROGRAMS WITH ORG_ID
 -- ============================================================================
 
--- Assign Riyadh Season Launch Event to Celestar
+-- Assign all existing programs to Celestar by default
+-- In a multi-tenant system, programs would belong to different orgs
+-- For now, all execution projects are managed by Celestar
 UPDATE programs
 SET org_id = 'org_celestar'
-WHERE name = 'Riyadh Season Launch Event';
-
--- Assign Almarai 4 Malls to Almarai
-UPDATE programs
-SET org_id = 'org_almarai'
-WHERE name = 'Almarai 4 Malls';
+WHERE org_id IS NULL;
 
 -- ============================================================================
 -- MIGRATION COMPLETE

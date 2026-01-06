@@ -139,66 +139,29 @@ Content-Type: application/json
 
 ### Test Users to Create:
 
-#### 1. Program Owner - Celestar
+#### 1. Program Owner
 ```json
 {
   "email": "program.owner@celestar.com",
   "password": "Owner@123",
-  "full_name": "Program Owner (Celestar)",
+  "full_name": "Program Owner",
   "org_id": "org_celestar",
   "role": "PROGRAM_OWNER"
 }
 ```
 
-#### 2. Program Owner - Almarai
-```json
-{
-  "email": "program.owner@almarai.com",
-  "password": "Owner@123",
-  "full_name": "Program Owner (Almarai)",
-  "org_id": "org_almarai",
-  "role": "PROGRAM_OWNER"
-}
-```
-
-#### 3. Workstream Lead - Riyadh Zones
-First, get the workstream ID for "Riyadh Season Zones":
-```sql
-SELECT id FROM workstreams WHERE name = 'Riyadh Season Zones';
-```
-
-Then create the user:
+#### 2. Workstream Lead
 ```json
 {
   "email": "workstream.lead@celestar.com",
   "password": "Lead@123",
   "full_name": "Workstream Lead",
   "org_id": "org_celestar",
-  "role": "WORKSTREAM_LEAD",
-  "workstream_id": "<WORKSTREAM_ID>",
-  "role_override": "WORKSTREAM_LEAD"
+  "role": "WORKSTREAM_LEAD"
 }
 ```
 
-#### 4. Workstream Lead - Almarai Jeddah
-Get the workstream ID for "Jeddah Mall":
-```sql
-SELECT id FROM workstreams WHERE name = 'Jeddah Mall';
-```
-
-```json
-{
-  "email": "workstream.jeddah@almarai.com",
-  "password": "Lead@123",
-  "full_name": "Jeddah Mall Lead",
-  "org_id": "org_almarai",
-  "role": "WORKSTREAM_LEAD",
-  "workstream_id": "<WORKSTREAM_ID>",
-  "role_override": "WORKSTREAM_LEAD"
-}
-```
-
-#### 5. Field Contributor
+#### 3. Field Contributor
 ```json
 {
   "email": "field@celestar.com",
@@ -209,24 +172,13 @@ SELECT id FROM workstreams WHERE name = 'Jeddah Mall';
 }
 ```
 
-#### 6. Client Viewer - Celestar
+#### 4. Client Viewer
 ```json
 {
   "email": "client@celestar.com",
   "password": "Client@123",
-  "full_name": "Client Viewer (Celestar)",
+  "full_name": "Client Viewer",
   "org_id": "org_celestar",
-  "role": "CLIENT_VIEWER"
-}
-```
-
-#### 7. Client Viewer - Almarai
-```json
-{
-  "email": "client@almarai.com",
-  "password": "Client@123",
-  "full_name": "Client Viewer (Almarai)",
-  "org_id": "org_almarai",
   "role": "CLIENT_VIEWER"
 }
 ```
@@ -236,29 +188,31 @@ SELECT id FROM workstreams WHERE name = 'Jeddah Mall';
 ### Test Role Permissions
 
 1. **Platform Admin** (`admin@celestar.com`)
-   - Should see all programs (Celestar + Almarai)
-   - Can create new programs
+   - Should see all programs
+   - Can create new programs (any type: events, retail, construction, etc.)
    - Can manage all resources
+   - Full system access
 
 2. **Program Owner** (`program.owner@celestar.com`)
-   - Should see only Celestar programs
-   - Can create new programs in Celestar org
+   - Can see all programs in their org
+   - Can create new programs for any execution type
    - Can manage all workstreams/units in their programs
+   - Can approve proofs
 
 3. **Workstream Lead** (`workstream.lead@celestar.com`)
-   - Should see assigned workstream
+   - Can see programs they're assigned to
    - Can manage units in their workstream
    - Can upload and approve proofs
    - Cannot create programs
 
 4. **Field Contributor** (`field@celestar.com`)
    - Can view programs in their org
-   - Can upload proofs
+   - Can upload proofs for units
    - Cannot approve proofs
    - Cannot create/edit programs or workstreams
 
 5. **Client Viewer** (`client@celestar.com`)
-   - Read-only access
+   - Read-only access to programs they're assigned to
    - Cannot upload proofs
    - Cannot create/edit anything
 

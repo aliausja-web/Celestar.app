@@ -32,58 +32,33 @@ Test Users to Create:
    - Role: PLATFORM_ADMIN
    - Full Name: Platform Administrator
 
-2. Program Owner - Celestar
+2. Program Owner
    - Email: program.owner@celestar.com
    - Password: Owner@123
    - Org: org_celestar
    - Role: PROGRAM_OWNER
-   - Full Name: Program Owner (Celestar)
-   - Assigned to: Riyadh Season Launch Event
+   - Full Name: Program Owner
 
-3. Program Owner - Almarai
-   - Email: program.owner@almarai.com
-   - Password: Owner@123
-   - Org: org_almarai
-   - Role: PROGRAM_OWNER
-   - Full Name: Program Owner (Almarai)
-   - Assigned to: Almarai 4 Malls
-
-4. Workstream Lead - Riyadh Zones
+3. Workstream Lead
    - Email: workstream.lead@celestar.com
    - Password: Lead@123
    - Org: org_celestar
    - Role: WORKSTREAM_LEAD
    - Full Name: Workstream Lead
-   - Assigned to: Riyadh Season Zones workstream
 
-5. Workstream Lead - Almarai Jeddah
-   - Email: workstream.jeddah@almarai.com
-   - Password: Lead@123
-   - Org: org_almarai
-   - Role: WORKSTREAM_LEAD
-   - Full Name: Jeddah Mall Lead
-   - Assigned to: Jeddah Mall workstream
-
-6. Field Contributor
+4. Field Contributor
    - Email: field@celestar.com
    - Password: Field@123
    - Org: org_celestar
    - Role: FIELD_CONTRIBUTOR
    - Full Name: Field Contributor
 
-7. Client Viewer - Celestar
+5. Client Viewer
    - Email: client@celestar.com
    - Password: Client@123
    - Org: org_celestar
    - Role: CLIENT_VIEWER
-   - Full Name: Client Viewer (Celestar)
-
-8. Client Viewer - Almarai
-   - Email: client@almarai.com
-   - Password: Client@123
-   - Org: org_almarai
-   - Role: CLIENT_VIEWER
-   - Full Name: Client Viewer (Almarai)
+   - Full Name: Client Viewer
 */
 
 -- ============================================================================
