@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
-import { authorize, canUploadProof } from '@/lib/auth-utils';
+import { authorize } from '@/lib/auth-utils';
 
 // POST /api/units/[id]/proofs - Upload proof for a unit
 export async function POST(
@@ -15,17 +15,24 @@ export async function POST(
       return NextResponse.json({ error: authError }, { status: 401 });
     }
 
-    // Check if user can upload proof for this unit
-    const canUpload = await canUploadProof(context!.user_id, params.id);
-    if (!canUpload) {
+    // CLIENT_VIEWER cannot upload proofs, all other roles can
+    if (context!.role === 'CLIENT_VIEWER') {
       return NextResponse.json(
-        { error: 'Forbidden - You do not have permission to upload proofs for this unit' },
+        { error: 'Forbidden - CLIENT_VIEWER role cannot upload proofs' },
         { status: 403 }
       );
     }
 
     const supabase = getSupabaseServer();
     const body = await request.json();
+
+    // Get public URL from file path
+    const filePath = body.file_path || body.url;
+    const { data: urlData } = supabase.storage
+      .from('proofs')
+      .getPublicUrl(filePath);
+
+    const publicUrl = urlData.publicUrl;
 
     // Create proof
     const { data: proof, error: proofError } = await supabase
@@ -34,10 +41,11 @@ export async function POST(
         {
           unit_id: params.id,
           type: body.type || 'photo',
-          url: body.url,
+          url: publicUrl,
           captured_at: body.captured_at || new Date().toISOString(),
           uploaded_by: context!.user_id,
           uploaded_by_email: context!.email,
+          notes: body.notes || null,
           metadata_exif: body.metadata_exif || {},
           gps_latitude: body.gps_latitude || null,
           gps_longitude: body.gps_longitude || null,
