@@ -186,3 +186,133 @@ export interface AuditLogEntry {
   rationale: string | null;
   created_at: Date | string;
 }
+
+// ============================================================================
+// HIERARCHICAL MODEL TYPES (Generic Execution Readiness Platform)
+// ============================================================================
+// Model: Program → Workstream → Unit (Deliverable)
+// Supports: single projects, multi-site initiatives, phased programs, parallel workstreams
+// ============================================================================
+
+export type UnitStatus = 'RED' | 'GREEN'; // COMPUTED ONLY - never manually set
+export type WorkstreamStatus = 'RED' | 'GREEN'; // COMPUTED based on units
+
+export type StatusChangeReason =
+  | 'valid_proof_received'
+  | 'proof_deleted'
+  | 'proof_invalidated'
+  | 'deadline_missed'
+  | 'manual_override'
+  | 'system_init';
+
+// Program: Top-level initiative (can be single or multi-workstream)
+export interface Program {
+  id: string;
+  name: string;
+  description: string | null;
+  owner_org: string;
+  start_time: Date | string | null;
+  end_time: Date | string | null;
+  created_at: Date | string;
+  created_by: string | null;
+  created_by_email: string | null;
+}
+
+// Workstream: Logical execution container (site, phase, area, package, discipline)
+export interface Workstream {
+  id: string;
+  program_id: string;
+  name: string;
+  type: string | null; // 'site', 'phase', 'discipline', 'area', etc.
+  ordering: number;
+  overall_status: WorkstreamStatus;
+  last_update_time: Date | string;
+  created_at: Date | string;
+}
+
+// Unit (Deliverable): Concrete item that can be proven complete
+export interface Unit {
+  id: string;
+  workstream_id: string;
+  title: string;
+  owner_party_name: string;
+  required_green_by: Date | string | null;
+  proof_requirements: {
+    required_count: number;
+    required_types: ProofType[];
+  };
+  computed_status: UnitStatus;
+  status_computed_at: Date | string;
+  last_status_change_time: Date | string;
+  current_escalation_level: number; // 0-3
+  last_escalated_at: Date | string | null;
+  escalation_policy: EscalationPolicyStep[];
+  created_at: Date | string;
+}
+
+// Proof: Evidence of completion (unchanged structure, new unit_id reference)
+export interface UnitProof {
+  id: string;
+  unit_id: string;
+  type: ProofType;
+  url: string;
+  captured_at: Date | string | null;
+  uploaded_at: Date | string;
+  uploaded_by: string;
+  uploaded_by_email: string | null;
+  is_valid: boolean;
+  validation_notes: string | null;
+  metadata_exif: Record<string, any>;
+  gps_latitude: number | null;
+  gps_longitude: number | null;
+}
+
+// StatusEvent: Immutable audit log for unit status changes
+export interface StatusEvent {
+  id: string;
+  unit_id: string;
+  old_status: UnitStatus | null;
+  new_status: UnitStatus;
+  changed_at: Date | string;
+  changed_by: string | null;
+  changed_by_email: string | null;
+  reason: StatusChangeReason;
+  proof_id: string | null;
+  notes: string | null;
+}
+
+// UnitEscalation: Track automatic escalations for units
+export interface UnitEscalation {
+  id: string;
+  unit_id: string;
+  workstream_id: string;
+  program_id: string;
+  level: number; // 1, 2, or 3
+  triggered_at: Date | string;
+  recipients: Array<{role?: string; email?: string; name?: string}>;
+  threshold_minutes_past_deadline: number;
+  new_deadline_set_to: Date | string | null;
+  acknowledged: boolean;
+  acknowledged_by: string | null;
+  acknowledged_by_email: string | null;
+  acknowledged_at: Date | string | null;
+  acknowledgment_note: string | null;
+  status: EscalationStatus;
+  created_at: Date | string;
+}
+
+// Extended workstream with computed metrics for UI display
+export interface WorkstreamWithMetrics extends Workstream {
+  total_units: number;
+  red_units: number;
+  green_units: number;
+  stale_units: number; // Units past deadline still RED
+  recent_escalations: number; // Escalations in last 24h
+}
+
+// Extended unit with proof data for UI display
+export interface UnitWithProofs extends Unit {
+  proofs: UnitProof[];
+  proof_count: number;
+  last_proof_time: Date | string | null;
+}
