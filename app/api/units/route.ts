@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
+import { authorize } from '@/lib/auth-utils';
 
 // GET /api/units?workstream_id=xxx - List units for a workstream
 export async function GET(request: NextRequest) {
   try {
+    const authHeader = request.headers.get('authorization');
+    const { authorized, context, error: authError } = await authorize(authHeader);
+
+    if (!authorized) {
+      return NextResponse.json({ error: authError }, { status: 401 });
+    }
+
     const supabase = getSupabaseServer();
     const { searchParams } = new URL(request.url);
     const workstreamId = searchParams.get('workstream_id');
@@ -51,65 +59,35 @@ export async function GET(request: NextRequest) {
 // POST /api/units - Create a new unit
 export async function POST(request: NextRequest) {
   try {
+    const authHeader = request.headers.get('authorization');
+    const { authorized, context, error: authError } = await authorize(authHeader, {
+      requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD', 'FIELD_CONTRIBUTOR'],
+    });
+
+    if (!authorized) {
+      return NextResponse.json({ error: authError }, { status: 403 });
+    }
+
     const supabase = getSupabaseServer();
     const body = await request.json();
-
-    const { data: user } = await supabase.auth.getUser();
-    if (!user.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     const { data: unit, error } = await supabase
       .from('units')
       .insert([
         {
           workstream_id: body.workstream_id,
-          title: body.title,
-          owner_party_name: body.owner_party_name,
-          required_green_by: body.required_green_by,
-          proof_requirements: body.proof_requirements || {
-            required_count: 1,
-            required_types: ['photo'],
-          },
-          escalation_policy: body.escalation_policy || [
-            {
-              level: 1,
-              threshold_minutes_past_deadline: 0,
-              recipients_role: ['site_coordinator'],
-              new_deadline_minutes_from_now: 1440,
-            },
-            {
-              level: 2,
-              threshold_minutes_past_deadline: 480,
-              recipients_role: ['project_manager'],
-              new_deadline_minutes_from_now: 960,
-            },
-            {
-              level: 3,
-              threshold_minutes_past_deadline: 960,
-              recipients_role: ['org_admin'],
-              new_deadline_minutes_from_now: 480,
-            },
-          ],
+          name: body.name,
+          description: body.description,
+          owner: body.owner,
+          deadline: body.deadline,
+          created_by: context!.user_id,
+          created_by_email: context!.email,
         },
       ])
       .select()
       .single();
 
     if (error) throw error;
-
-    // Log status event
-    await supabase.from('status_events').insert([
-      {
-        unit_id: unit.id,
-        old_status: null,
-        new_status: 'RED',
-        changed_by: user.user.id,
-        changed_by_email: user.user.email,
-        reason: 'system_init',
-        notes: 'Unit created',
-      },
-    ]);
 
     return NextResponse.json(unit, { status: 201 });
   } catch (error: any) {

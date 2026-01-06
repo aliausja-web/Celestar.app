@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
+import { authorize } from '@/lib/auth-utils';
 
 // GET /api/workstreams?program_id=xxx - List workstreams for a program
 export async function GET(request: NextRequest) {
   try {
+    const authHeader = request.headers.get('authorization');
+    const { authorized, context, error: authError } = await authorize(authHeader);
+
+    if (!authorized) {
+      return NextResponse.json({ error: authError }, { status: 401 });
+    }
+
     const supabase = getSupabaseServer();
     const { searchParams } = new URL(request.url);
     const programId = searchParams.get('program_id');
@@ -32,13 +40,17 @@ export async function GET(request: NextRequest) {
 // POST /api/workstreams - Create a new workstream
 export async function POST(request: NextRequest) {
   try {
+    const authHeader = request.headers.get('authorization');
+    const { authorized, context, error: authError } = await authorize(authHeader, {
+      requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD'],
+    });
+
+    if (!authorized) {
+      return NextResponse.json({ error: authError }, { status: 403 });
+    }
+
     const supabase = getSupabaseServer();
     const body = await request.json();
-
-    const { data: user } = await supabase.auth.getUser();
-    if (!user.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     const { data: workstream, error } = await supabase
       .from('workstreams')
@@ -47,7 +59,10 @@ export async function POST(request: NextRequest) {
           program_id: body.program_id,
           name: body.name,
           type: body.type,
+          description: body.description,
           ordering: body.ordering ?? 0,
+          created_by: context!.user_id,
+          created_by_email: context!.email,
         },
       ])
       .select()
