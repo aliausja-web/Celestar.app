@@ -17,19 +17,23 @@ import {
   FileText,
   Video,
   Image as ImageIcon,
+  AlertOctagon,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { supabase } from '@/lib/firebase';
 import { toast } from 'sonner';
+import { usePermissions } from '@/hooks/use-permissions';
 
 export default function WorkstreamBoard() {
   const params = useParams();
   const router = useRouter();
   const workstreamId = params.id as string;
+  const permissions = usePermissions();
 
   const [workstream, setWorkstream] = useState<WorkstreamWithMetrics | null>(null);
   const [units, setUnits] = useState<UnitWithProofs[]>([]);
   const [loading, setLoading] = useState(true);
+  const [escalating, setEscalating] = useState<string | null>(null);
 
   useEffect(() => {
     if (workstreamId) {
@@ -100,6 +104,50 @@ export default function WorkstreamBoard() {
       setUnits([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleEscalate(unitId: string) {
+    if (!confirm('Are you sure you want to manually escalate this unit? This will notify higher authorities immediately.')) {
+      return;
+    }
+
+    setEscalating(unitId);
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        throw new Error('Not authenticated. Please log in again.');
+      }
+
+      const token = session.access_token;
+
+      const response = await fetch(`/api/units/${unitId}/escalate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reason: 'Manual escalation by authorized user',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to escalate unit');
+      }
+
+      toast.success(`Unit escalated to level ${data.new_level}`);
+
+      // Refresh units to show updated escalation level
+      await fetchUnits();
+    } catch (error: any) {
+      console.error('Error escalating unit:', error);
+      toast.error(error.message || 'Failed to escalate unit');
+    } finally {
+      setEscalating(null);
     }
   }
 
@@ -238,6 +286,17 @@ export default function WorkstreamBoard() {
               >
                 View Details
               </Button>
+              {(permissions.isPlatformAdmin || permissions.isProgramOwner || permissions.isWorkstreamLead) && !isGreen && (
+                <Button
+                  size="sm"
+                  onClick={() => handleEscalate(unit.id)}
+                  disabled={escalating === unit.id}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  <AlertOctagon className="w-4 h-4 mr-2" />
+                  {escalating === unit.id ? 'Escalating...' : 'Escalate'}
+                </Button>
+              )}
             </div>
           </div>
 
