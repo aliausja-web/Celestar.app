@@ -57,6 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('Loading user data for:', userEmail);
 
     // RBAC: Fetch user from profiles table by user_id
+    console.log('Attempting to fetch profile for user_id:', userId);
+
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -65,7 +67,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) {
       console.error('Error fetching profile data:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
     }
+
+    console.log('Profile query result - data:', data, 'error:', error);
 
     if (data) {
       console.log('Profile data loaded:', { email: data.email, role: data.role });
