@@ -1,57 +1,21 @@
 'use client';
 
-// Root page - redirects based on auth state
+// Root page - redirects to login
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth-context';
-import { supabase } from '@/lib/firebase';
 
 export default function Home() {
   const router = useRouter();
-  const { user, userData, loading } = useAuth();
 
   useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.push('/login');
-      } else if (userData) {
-        // New RBAC system - everyone goes to /programs
-        // Check if user has profile in new RBAC system
-        supabase
-          .from('profiles')
-          .select('role')
-          .eq('user_id', user.uid)
-          .single()
-          .then(({ data: profile }) => {
-            if (profile) {
-              // User exists in new RBAC system
-              router.push('/programs');
-            } else {
-              // User only exists in legacy system - redirect to appropriate legacy page
-              if (userData.role === 'admin') {
-                router.push('/admin');
-              } else if (userData.role === 'supervisor') {
-                router.push('/supervisor');
-              } else if (userData.role === 'client') {
-                router.push('/client');
-              } else {
-                router.push('/programs');
-              }
-            }
-          });
-      } else if (user && !userData) {
-        // User is authenticated but has no user data - sign them out and redirect to login
-        console.error('User authenticated but no user data found. Signing out...');
-        supabase.auth.signOut().then(() => {
-          router.push('/login');
-        });
-      }
-    }
-  }, [user, userData, loading, router]);
+    // Always redirect to login page
+    // Login page will handle routing authenticated users to the appropriate page
+    router.replace('/login');
+  }, [router]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="animate-pulse text-muted-foreground">Loading...</div>
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#0b0f14] via-[#121b26] to-[#0b0f14]">
+      <div className="animate-pulse text-gray-400">Redirecting to login...</div>
     </div>
   );
 }
