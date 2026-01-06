@@ -498,6 +498,15 @@ export default function ProgramDashboard() {
               <h2 className="text-xl font-bold text-white">
                 Workstreams ({workstreams.length})
               </h2>
+              {permissions.canCreateProgram && (
+                <Button
+                  onClick={() => router.push(`/programs/${selectedProgram.id}/workstreams/new`)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Workstream
+                </Button>
+              )}
             </div>
 
             {loadingWorkstreams ? (
