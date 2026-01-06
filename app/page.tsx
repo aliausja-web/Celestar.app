@@ -15,17 +15,17 @@ export default function Home() {
       if (!user) {
         router.push('/login');
       } else if (userData) {
-        // Redirect all authenticated users to new hierarchical model UI
-        router.push('/programs');
-
-        // Legacy redirects (commented out - can be removed later)
-        // if (userData.role === 'admin') {
-        //   router.push('/admin');
-        // } else if (userData.role === 'supervisor') {
-        //   router.push('/supervisor');
-        // } else if (userData.role === 'client') {
-        //   router.push('/client');
-        // }
+        // Use legacy UI for now (new hierarchical model available at /programs)
+        if (userData.role === 'admin') {
+          router.push('/admin');
+        } else if (userData.role === 'supervisor') {
+          router.push('/supervisor');
+        } else if (userData.role === 'client') {
+          router.push('/client');
+        } else {
+          // New roles go to new UI
+          router.push('/programs');
+        }
       } else if (user && !userData) {
         // User is authenticated but has no user data - sign them out and redirect to login
         console.error('User authenticated but no user data found. Signing out...');
