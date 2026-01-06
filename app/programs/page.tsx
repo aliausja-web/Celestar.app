@@ -9,9 +9,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Program, WorkstreamWithMetrics } from '@/lib/types';
 import { AlertTriangle, CheckCircle2, Clock, TrendingUp, FolderOpen, Plus } from 'lucide-react';
 import { format } from 'date-fns';
+import { usePermissions } from '@/hooks/use-permissions';
+import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/lib/firebase';
 
 export default function ProgramDashboard() {
   const router = useRouter();
+  const { user } = useAuth();
+  const permissions = usePermissions();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
@@ -30,7 +35,15 @@ export default function ProgramDashboard() {
 
   async function fetchPrograms() {
     try {
-      const response = await fetch('/api/programs');
+      // Get auth token for API calls
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch('/api/programs', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       const data = await response.json();
       setPrograms(data);
       if (data.length > 0) {
@@ -46,13 +59,24 @@ export default function ProgramDashboard() {
   async function fetchWorkstreams(programId: string) {
     setLoadingWorkstreams(true);
     try {
-      const response = await fetch(`/api/workstreams?program_id=${programId}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch(`/api/workstreams?program_id=${programId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       const data = await response.json();
 
       // Fetch metrics for each workstream
       const withMetrics = await Promise.all(
         data.map(async (ws: any) => {
-          const metricsResponse = await fetch(`/api/workstreams/${ws.id}`);
+          const metricsResponse = await fetch(`/api/workstreams/${ws.id}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
           return await metricsResponse.json();
         })
       );
@@ -187,16 +211,18 @@ export default function ProgramDashboard() {
               Program Dashboard
             </h1>
             <p className="text-gray-500">
-              Execution readiness across all programs
+              Execution readiness across all programs {permissions.role && `(${permissions.role})`}
             </p>
           </div>
-          <Button
-            onClick={() => router.push('/programs/new')}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            New Program
-          </Button>
+          {permissions.canCreateProgram && (
+            <Button
+              onClick={() => router.push('/programs/new')}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              New Program
+            </Button>
+          )}
         </div>
 
         {/* Program Selector */}

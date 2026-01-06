@@ -15,17 +15,30 @@ export default function Home() {
       if (!user) {
         router.push('/login');
       } else if (userData) {
-        // Use legacy UI for now (new hierarchical model available at /programs)
-        if (userData.role === 'admin') {
-          router.push('/admin');
-        } else if (userData.role === 'supervisor') {
-          router.push('/supervisor');
-        } else if (userData.role === 'client') {
-          router.push('/client');
-        } else {
-          // New roles go to new UI
-          router.push('/programs');
-        }
+        // New RBAC system - everyone goes to /programs
+        // Check if user has profile in new RBAC system
+        supabase
+          .from('profiles')
+          .select('role')
+          .eq('user_id', user.uid)
+          .single()
+          .then(({ data: profile }) => {
+            if (profile) {
+              // User exists in new RBAC system
+              router.push('/programs');
+            } else {
+              // User only exists in legacy system - redirect to appropriate legacy page
+              if (userData.role === 'admin') {
+                router.push('/admin');
+              } else if (userData.role === 'supervisor') {
+                router.push('/supervisor');
+              } else if (userData.role === 'client') {
+                router.push('/client');
+              } else {
+                router.push('/programs');
+              }
+            }
+          });
       } else if (user && !userData) {
         // User is authenticated but has no user data - sign them out and redirect to login
         console.error('User authenticated but no user data found. Signing out...');

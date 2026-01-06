@@ -1,4 +1,12 @@
-// Integrity Mode: Extended roles with strict RBAC
+// RBAC Roles for Hierarchical Model
+export type AppRole =
+  | 'PLATFORM_ADMIN'
+  | 'PROGRAM_OWNER'
+  | 'WORKSTREAM_LEAD'
+  | 'FIELD_CONTRIBUTOR'
+  | 'CLIENT_VIEWER';
+
+// Legacy roles for backward compatibility
 export type UserRole =
   | 'system_owner'      // Celestar - full control
   | 'org_admin'         // CEO - org management, cannot manipulate status
@@ -315,4 +323,43 @@ export interface UnitWithProofs extends Unit {
   proofs: UnitProof[];
   proof_count: number;
   last_proof_time: Date | string | null;
+}
+
+// ============================================================================
+// RBAC: Organizations, Profiles, and Membership
+// ============================================================================
+
+export interface Org {
+  id: string;
+  name: string;
+  created_at: Date | string;
+  metadata: Record<string, any>;
+}
+
+export interface Profile {
+  user_id: string;
+  org_id: string;
+  full_name: string;
+  role: AppRole;
+  email: string;
+  created_at: Date | string;
+  updated_at: Date | string;
+}
+
+export interface ProgramMember {
+  id: string;
+  program_id: string;
+  user_id: string;
+  role_override: AppRole;
+  added_at: Date | string;
+  added_by: string | null;
+}
+
+export interface WorkstreamMember {
+  id: string;
+  workstream_id: string;
+  user_id: string;
+  role_override: AppRole;
+  added_at: Date | string;
+  added_by: string | null;
 }
