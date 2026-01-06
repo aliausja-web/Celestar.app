@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Program, WorkstreamWithMetrics } from '@/lib/types';
-import { AlertTriangle, CheckCircle2, Clock, TrendingUp, FolderOpen, Plus } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, TrendingUp, FolderOpen, Plus, LogOut } from 'lucide-react';
 import { format } from 'date-fns';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/lib/auth-context';
@@ -15,13 +15,18 @@ import { supabase } from '@/lib/firebase';
 
 export default function ProgramDashboard() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const permissions = usePermissions();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [workstreams, setWorkstreams] = useState<WorkstreamWithMetrics[]>([]);
   const [loadingWorkstreams, setLoadingWorkstreams] = useState(false);
+
+  async function handleLogout() {
+    await signOut();
+    router.push('/login');
+  }
 
   useEffect(() => {
     fetchPrograms();
@@ -214,15 +219,25 @@ export default function ProgramDashboard() {
               Execution readiness across all programs {permissions.role && `(${permissions.role})`}
             </p>
           </div>
-          {permissions.canCreateProgram && (
+          <div className="flex items-center gap-3">
+            {permissions.canCreateProgram && (
+              <Button
+                onClick={() => router.push('/programs/new')}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                New Program
+              </Button>
+            )}
             <Button
-              onClick={() => router.push('/programs/new')}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={handleLogout}
+              variant="outline"
+              className="bg-black/25 border-gray-700 text-gray-300 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-400"
             >
-              <Plus className="w-4 h-4 mr-2" />
-              New Program
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
             </Button>
-          )}
+          </div>
         </div>
 
         {/* Program Selector */}
