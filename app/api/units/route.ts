@@ -76,9 +76,9 @@ export async function POST(request: NextRequest) {
       .insert([
         {
           workstream_id: body.workstream_id,
-          name: body.name,
-          owner: body.owner,
-          deadline: body.deadline,
+          title: body.name,
+          owner_party_name: body.owner || 'Unassigned',
+          required_green_by: body.deadline || null,
         },
       ])
       .select()
