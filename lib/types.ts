@@ -258,7 +258,9 @@ export interface Unit {
   created_at: Date | string;
 }
 
-// Proof: Evidence of completion (unchanged structure, new unit_id reference)
+// Proof: Evidence of completion with governance (approval lifecycle)
+export type ProofApprovalStatus = 'pending' | 'approved' | 'rejected';
+
 export interface UnitProof {
   id: string;
   unit_id: string;
@@ -273,6 +275,12 @@ export interface UnitProof {
   metadata_exif: Record<string, any>;
   gps_latitude: number | null;
   gps_longitude: number | null;
+  // Proof Governance: Approval lifecycle
+  approval_status: ProofApprovalStatus;
+  approved_by: string | null;
+  approved_by_email: string | null;
+  approved_at: Date | string | null;
+  rejection_reason: string | null;
 }
 
 // StatusEvent: Immutable audit log for unit status changes
@@ -289,16 +297,30 @@ export interface StatusEvent {
   notes: string | null;
 }
 
-// UnitEscalation: Track automatic escalations for units
+// UnitDependency: Dependencies between units (hard/soft)
+export type DependencyType = 'hard' | 'soft';
+
+export interface UnitDependency {
+  id: string;
+  downstream_unit_id: string;
+  upstream_unit_id: string;
+  dependency_type: DependencyType;
+  created_at: Date | string;
+  created_by: string | null;
+  notes: string | null;
+}
+
+// UnitEscalation: Track automatic escalations for units (now role-based)
 export interface UnitEscalation {
   id: string;
   unit_id: string;
   workstream_id: string;
   program_id: string;
-  level: number; // 1, 2, or 3
+  escalation_level: number; // 1, 2, or 3
   triggered_at: Date | string;
-  recipients: Array<{role?: string; email?: string; name?: string}>;
+  recipients: Array<{user_id?: string; role?: string; email?: string; name?: string}>;
   threshold_minutes_past_deadline: number;
+  message: string | null;
   new_deadline_set_to: Date | string | null;
   acknowledged: boolean;
   acknowledged_by: string | null;
