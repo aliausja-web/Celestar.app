@@ -17,7 +17,7 @@ DELETE FROM status_events WHERE unit_id IN (
     )
   )
 );
-DELETE FROM proofs WHERE unit_id IN (
+DELETE FROM unit_proofs WHERE unit_id IN (
   SELECT id FROM units WHERE workstream_id IN (
     SELECT id FROM workstreams WHERE program_id IN (
       SELECT id FROM programs WHERE name LIKE 'SEED:%'

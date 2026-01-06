@@ -10,7 +10,9 @@
       "Bash(nslookup:*)",
       "Bash(npm run build:*)",
       "Bash(node -e:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(clip:*)"
     ]
   }
 }

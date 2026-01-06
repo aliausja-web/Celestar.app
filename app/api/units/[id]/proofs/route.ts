@@ -17,7 +17,7 @@ export async function POST(
 
     // Create proof
     const { data: proof, error: proofError } = await supabase
-      .from('proofs')
+      .from('unit_proofs')
       .insert([
         {
           unit_id: params.id,
@@ -66,7 +66,7 @@ export async function GET(
     const supabase = getSupabaseServer();
 
     const { data: proofs, error } = await supabase
-      .from('proofs')
+      .from('unit_proofs')
       .select('*')
       .eq('unit_id', params.id)
       .order('uploaded_at', { ascending: false });
