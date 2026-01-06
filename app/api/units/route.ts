@@ -77,7 +77,6 @@ export async function POST(request: NextRequest) {
         {
           workstream_id: body.workstream_id,
           name: body.name,
-          description: body.description,
           owner: body.owner,
           deadline: body.deadline,
         },

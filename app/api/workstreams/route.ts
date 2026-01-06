@@ -59,7 +59,6 @@ export async function POST(request: NextRequest) {
           program_id: body.program_id,
           name: body.name,
           type: body.type,
-          description: body.description,
           ordering: body.ordering ?? 0,
         },
       ])
