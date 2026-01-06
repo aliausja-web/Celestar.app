@@ -6,8 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
 import { Program, WorkstreamWithMetrics } from '@/lib/types';
-import { AlertTriangle, CheckCircle2, Clock, TrendingUp, FolderOpen, Plus, LogOut } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, TrendingUp, FolderOpen, Plus, LogOut, Users, Trash2, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/lib/auth-context';
@@ -23,9 +28,177 @@ export default function ProgramDashboard() {
   const [workstreams, setWorkstreams] = useState<WorkstreamWithMetrics[]>([]);
   const [loadingWorkstreams, setLoadingWorkstreams] = useState(false);
 
+  // User management state
+  const [showUserDialog, setShowUserDialog] = useState(false);
+  const [showCreateUserForm, setShowCreateUserForm] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [creatingUser, setCreatingUser] = useState(false);
+
+  // Create user form state
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserFullName, setNewUserFullName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<string>('');
+
   async function handleLogout() {
     await signOut();
     router.push('/login');
+  }
+
+  async function fetchUsers() {
+    if (!permissions.isPlatformAdmin) return;
+
+    setLoadingUsers(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error: any) {
+      console.error('Error fetching users:', error);
+      toast.error('Failed to load users');
+    } finally {
+      setLoadingUsers(false);
+    }
+  }
+
+  async function handleCreateUser() {
+    // Validation
+    if (!newUserEmail || !newUserPassword || !newUserFullName || !newUserRole) {
+      toast.error('All fields are required');
+      return;
+    }
+
+    if (newUserPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    if (!newUserEmail.includes('@')) {
+      toast.error('Invalid email format');
+      return;
+    }
+
+    setCreatingUser(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch('/api/admin/create-rbac-user', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: newUserEmail,
+          password: newUserPassword,
+          full_name: newUserFullName,
+          org_id: 'org_celestar',
+          role: newUserRole,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create user');
+      }
+
+      toast.success('User created successfully');
+
+      // Reset form
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserFullName('');
+      setNewUserRole('');
+      setShowCreateUserForm(false);
+
+      // Refresh user list
+      await fetchUsers();
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      toast.error(error.message || 'Failed to create user');
+    } finally {
+      setCreatingUser(false);
+    }
+  }
+
+  async function handleUpdateUserRole(userId: string, newRole: string) {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role: newRole })
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      toast.success('Role updated successfully');
+      setUsers(users.map(u =>
+        u.user_id === userId ? { ...u, role: newRole } : u
+      ));
+    } catch (error: any) {
+      console.error('Error updating role:', error);
+      toast.error(error.message || 'Failed to update role');
+    }
+  }
+
+  async function handleDeleteUser(userId: string, email: string) {
+    if (!confirm(`Delete user ${email}? This cannot be undone.`)) return;
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      toast.success('User removed from profiles');
+      setUsers(users.filter(u => u.user_id !== userId));
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      toast.error(error.message || 'Failed to delete user');
+    }
+  }
+
+  async function handleDeleteProgram(programId: string, programName: string) {
+    if (!confirm(`Delete program "${programName}"? This will also delete all workstreams and units. This cannot be undone.`)) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch(`/api/programs/${programId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete program');
+      }
+
+      toast.success('Program deleted successfully');
+
+      // Update local state
+      const updatedPrograms = programs.filter(p => p.id !== programId);
+      setPrograms(updatedPrograms);
+
+      // If the deleted program was selected, select the first remaining program
+      if (selectedProgram?.id === programId) {
+        setSelectedProgram(updatedPrograms[0] || null);
+      }
+    } catch (error: any) {
+      console.error('Error deleting program:', error);
+      toast.error(error.message || 'Failed to delete program');
+    }
   }
 
   useEffect(() => {
@@ -37,6 +210,12 @@ export default function ProgramDashboard() {
       fetchWorkstreams(selectedProgram.id);
     }
   }, [selectedProgram]);
+
+  useEffect(() => {
+    if (showUserDialog) {
+      fetchUsers();
+    }
+  }, [showUserDialog]);
 
   async function fetchPrograms() {
     try {
@@ -220,6 +399,15 @@ export default function ProgramDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {permissions.isPlatformAdmin && (
+              <Button
+                onClick={() => setShowUserDialog(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Manage Users
+              </Button>
+            )}
             {permissions.canCreateProgram && (
               <Button
                 onClick={() => router.push('/programs/new')}
@@ -244,18 +432,31 @@ export default function ProgramDashboard() {
         {programs.length > 1 && (
           <div className="flex gap-2 overflow-x-auto pb-2">
             {programs.map((program) => (
-              <Button
-                key={program.id}
-                onClick={() => setSelectedProgram(program)}
-                variant={selectedProgram?.id === program.id ? 'default' : 'outline'}
-                className={
-                  selectedProgram?.id === program.id
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                    : 'bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40'
-                }
-              >
-                {program.name}
-              </Button>
+              <div key={program.id} className="relative group">
+                <Button
+                  onClick={() => setSelectedProgram(program)}
+                  variant={selectedProgram?.id === program.id ? 'default' : 'outline'}
+                  className={`pr-8 ${
+                    selectedProgram?.id === program.id
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                      : 'bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40'
+                  }`}
+                >
+                  {program.name}
+                </Button>
+                {permissions.isPlatformAdmin && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteProgram(program.id, program.name);
+                    }}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Delete program"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         )}
@@ -345,6 +546,179 @@ export default function ProgramDashboard() {
           </Card>
         )}
       </div>
+
+      {/* User Management Dialog */}
+      <Dialog open={showUserDialog} onOpenChange={setShowUserDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-gray-950 border-gray-800">
+          <DialogHeader>
+            <DialogTitle className="text-white text-xl">Manage Users</DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Create, edit, and manage user accounts and roles
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Create User Button */}
+            {!showCreateUserForm && (
+              <Button
+                onClick={() => setShowCreateUserForm(true)}
+                className="bg-green-600 hover:bg-green-700 text-white w-full"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create New User
+              </Button>
+            )}
+
+            {/* Create User Form */}
+            {showCreateUserForm && (
+              <Card className="bg-black/25 border-gray-700">
+                <CardHeader>
+                  <CardTitle className="text-white text-lg">Create New User</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="email" className="text-gray-300">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        placeholder="user@celestar.com"
+                        className="bg-black/40 border-gray-700 text-white"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password" className="text-gray-300">Password</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                        placeholder="Min 6 characters"
+                        className="bg-black/40 border-gray-700 text-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="fullName" className="text-gray-300">Full Name</Label>
+                      <Input
+                        id="fullName"
+                        type="text"
+                        value={newUserFullName}
+                        onChange={(e) => setNewUserFullName(e.target.value)}
+                        placeholder="John Doe"
+                        className="bg-black/40 border-gray-700 text-white"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="role" className="text-gray-300">Role</Label>
+                      <Select value={newUserRole} onValueChange={setNewUserRole}>
+                        <SelectTrigger className="bg-black/40 border-gray-700 text-white">
+                          <SelectValue placeholder="Select role" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-950 border-gray-700">
+                          <SelectItem value="PLATFORM_ADMIN" className="text-white">PLATFORM_ADMIN</SelectItem>
+                          <SelectItem value="PROGRAM_OWNER" className="text-white">PROGRAM_OWNER</SelectItem>
+                          <SelectItem value="WORKSTREAM_LEAD" className="text-white">WORKSTREAM_LEAD</SelectItem>
+                          <SelectItem value="FIELD_CONTRIBUTOR" className="text-white">FIELD_CONTRIBUTOR</SelectItem>
+                          <SelectItem value="CLIENT_VIEWER" className="text-white">CLIENT_VIEWER</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleCreateUser}
+                      disabled={creatingUser}
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {creatingUser ? 'Creating...' : 'Create User'}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setShowCreateUserForm(false);
+                        setNewUserEmail('');
+                        setNewUserPassword('');
+                        setNewUserFullName('');
+                        setNewUserRole('');
+                      }}
+                      variant="outline"
+                      className="bg-black/25 border-gray-700 text-gray-300"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Users Table */}
+            {loadingUsers ? (
+              <div className="space-y-2">
+                <Skeleton className="h-12 bg-gray-800" />
+                <Skeleton className="h-12 bg-gray-800" />
+                <Skeleton className="h-12 bg-gray-800" />
+              </div>
+            ) : users.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No users found</p>
+            ) : (
+              <div className="border border-gray-800 rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-black/40 border-b border-gray-800">
+                    <tr>
+                      <th className="text-left p-3 text-gray-400 text-sm font-medium">Email</th>
+                      <th className="text-left p-3 text-gray-400 text-sm font-medium">Full Name</th>
+                      <th className="text-left p-3 text-gray-400 text-sm font-medium">Role</th>
+                      <th className="text-left p-3 text-gray-400 text-sm font-medium">Organization</th>
+                      <th className="text-center p-3 text-gray-400 text-sm font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((user) => (
+                      <tr key={user.user_id} className="border-b border-gray-800 hover:bg-black/20">
+                        <td className="p-3 text-white text-sm">{user.email}</td>
+                        <td className="p-3 text-white text-sm">{user.full_name}</td>
+                        <td className="p-3">
+                          <Select
+                            value={user.role}
+                            onValueChange={(newRole) => handleUpdateUserRole(user.user_id, newRole)}
+                          >
+                            <SelectTrigger className="bg-black/40 border-gray-700 text-white text-sm h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-gray-950 border-gray-700">
+                              <SelectItem value="PLATFORM_ADMIN" className="text-white">PLATFORM_ADMIN</SelectItem>
+                              <SelectItem value="PROGRAM_OWNER" className="text-white">PROGRAM_OWNER</SelectItem>
+                              <SelectItem value="WORKSTREAM_LEAD" className="text-white">WORKSTREAM_LEAD</SelectItem>
+                              <SelectItem value="FIELD_CONTRIBUTOR" className="text-white">FIELD_CONTRIBUTOR</SelectItem>
+                              <SelectItem value="CLIENT_VIEWER" className="text-white">CLIENT_VIEWER</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="p-3 text-white text-sm">{user.org_id}</td>
+                        <td className="p-3 text-center">
+                          <Button
+                            onClick={() => handleDeleteUser(user.user_id, user.email)}
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
