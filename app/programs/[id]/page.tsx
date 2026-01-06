@@ -10,6 +10,7 @@ import { Plus, ChevronLeft, Calendar, Building2 } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { getWorkstreamTypeLabel } from '@/lib/workstream-types';
 
 interface Program {
   id: string;
@@ -222,11 +223,13 @@ export default function ProgramDetailPage() {
                 >
                   <CardHeader>
                     <CardTitle className="text-white text-lg">{workstream.name}</CardTitle>
-                    <CardDescription className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs border-gray-700 text-gray-400">
-                        {workstream.type}
-                      </Badge>
-                    </CardDescription>
+                    {workstream.type && (
+                      <CardDescription className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs border-gray-700 text-gray-400">
+                          {getWorkstreamTypeLabel(workstream.type)}
+                        </Badge>
+                      </CardDescription>
+                    )}
                   </CardHeader>
                 </Card>
               ))}

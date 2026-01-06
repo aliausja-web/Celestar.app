@@ -117,17 +117,23 @@ export default function NewWorkstreamPage() {
                 <Label htmlFor="type" className="text-gray-300">
                   Type
                 </Label>
+                <p className="text-xs text-gray-500">
+                  Type describes what this workstream represents (e.g. a site, a build scope, or a system).
+                </p>
                 <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
                   <SelectTrigger className="bg-black/40 border-gray-700 text-white">
                     <SelectValue placeholder="Select type (optional)" />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-950 border-gray-700">
-                    <SelectItem value="event" className="text-white">Event</SelectItem>
-                    <SelectItem value="infrastructure" className="text-white">Infrastructure</SelectItem>
-                    <SelectItem value="logistics" className="text-white">Logistics</SelectItem>
-                    <SelectItem value="marketing" className="text-white">Marketing</SelectItem>
-                    <SelectItem value="operations" className="text-white">Operations</SelectItem>
-                    <SelectItem value="technology" className="text-white">Technology</SelectItem>
+                    <SelectItem value="site" className="text-white">Site</SelectItem>
+                    <SelectItem value="build_fitout" className="text-white">Build / Fit-Out</SelectItem>
+                    <SelectItem value="mep_utilities" className="text-white">MEP / Utilities</SelectItem>
+                    <SelectItem value="install_logistics" className="text-white">Install & Logistics</SelectItem>
+                    <SelectItem value="it_systems" className="text-white">IT / Systems</SelectItem>
+                    <SelectItem value="test_commission" className="text-white">Test / Commission</SelectItem>
+                    <SelectItem value="operations_live" className="text-white">Operations (Live)</SelectItem>
+                    <SelectItem value="compliance_permits" className="text-white">Compliance / Permits</SelectItem>
+                    <SelectItem value="branding_creative" className="text-white">Branding / Creative</SelectItem>
                     <SelectItem value="other" className="text-white">Other</SelectItem>
                   </SelectContent>
                 </Select>

@@ -17,6 +17,7 @@ import { format } from 'date-fns';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/firebase';
+import { getWorkstreamTypeLabel } from '@/lib/workstream-types';
 
 export default function ProgramDashboard() {
   const router = useRouter();
@@ -297,7 +298,7 @@ export default function ProgramDashboard() {
               </CardTitle>
               {workstream.type && (
                 <CardDescription className="text-xs text-gray-500">
-                  Type: {workstream.type}
+                  Type: {getWorkstreamTypeLabel(workstream.type)}
                 </CardDescription>
               )}
             </div>

@@ -23,6 +23,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { supabase } from '@/lib/firebase';
 import { toast } from 'sonner';
 import { usePermissions } from '@/hooks/use-permissions';
+import { getWorkstreamTypeLabel } from '@/lib/workstream-types';
 
 export default function WorkstreamBoard() {
   const params = useParams();
@@ -341,7 +342,7 @@ export default function WorkstreamBoard() {
               {workstream?.name || 'Workstream'}
             </h1>
             {workstream?.type && (
-              <p className="text-gray-500 text-sm">Type: {workstream.type}</p>
+              <p className="text-gray-500 text-sm">Type: {getWorkstreamTypeLabel(workstream.type)}</p>
             )}
           </div>
           {workstream && (
