@@ -18,16 +18,30 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (user && userData) {
-      if (userData.role === 'admin') {
-        router.push('/admin');
-      } else if (userData.role === 'supervisor') {
-        router.push('/supervisor');
-      } else if (userData.role === 'client') {
-        router.push('/client');
+      // RBAC: Route based on new role system
+      const role = userData.role?.toLowerCase();
+
+      if (role === 'platform_admin' || role === 'program_owner') {
+        router.push('/programs'); // Main programs page for admins and owners
+      } else if (role === 'workstream_lead') {
+        router.push('/programs'); // Workstream leads also see programs (filtered by RLS)
+      } else if (role === 'field_contributor') {
+        router.push('/programs'); // Field contributors see programs (read-only mostly)
+      } else if (role === 'client_viewer') {
+        router.push('/programs'); // Clients see assigned programs only
+      } else {
+        // Fallback for legacy roles
+        if (role === 'admin') {
+          router.push('/admin');
+        } else if (role === 'supervisor') {
+          router.push('/supervisor');
+        } else if (role === 'client') {
+          router.push('/client');
+        }
       }
     } else if (user && !userData) {
-      // User is authenticated but has no user record in the database
-      console.error('User authenticated but no user data found. Check console for details.');
+      // User is authenticated but has no profile record
+      console.error('User authenticated but no profile data found. Check console for details.');
       toast.error('Account setup incomplete. Please contact administrator.');
     }
   }, [user, userData, router]);

@@ -56,24 +56,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     console.log('Loading user data for:', userEmail);
 
-    // Fetch user by email since UID comparison is failing
+    // RBAC: Fetch user from profiles table by user_id
     const { data, error } = await supabase
-      .from('users')
+      .from('profiles')
       .select('*')
-      .eq('email', userEmail)
+      .eq('user_id', userId)
       .maybeSingle();
 
     if (error) {
-      console.error('Error fetching user data:', error);
+      console.error('Error fetching profile data:', error);
     }
 
     if (data) {
-      console.log('User data loaded:', { email: data.email, role: data.role });
-      setUserData(data as User);
+      console.log('Profile data loaded:', { email: data.email, role: data.role });
+      // Map profile data to User type for backwards compatibility
+      setUserData({
+        uid: data.user_id,
+        email: data.email,
+        role: data.role.toLowerCase(), // Convert PLATFORM_ADMIN -> platform_admin for routing
+        org_id: data.org_id,
+        created_at: data.created_at,
+        full_name: data.full_name,
+      } as any);
     } else {
-      console.error('No user record found in users table for:', userEmail);
-      console.error('This user exists in Supabase Auth but not in the users table.');
-      console.error('Please ensure the user is created through the admin panel or has a corresponding record in the users table.');
+      console.error('No profile record found for user ID:', userId);
+      console.error('This user exists in Supabase Auth but not in the profiles table.');
+      console.error('Please ensure the user has a profile record created.');
     }
     setLoading(false);
   };
@@ -93,14 +101,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (authError) throw authError;
 
     if (authData.user) {
-      const newUser: User = {
-        uid: authData.user.id,
+      // RBAC: Insert into profiles table instead of users table
+      const { error: dbError } = await supabase.from('profiles').insert([{
+        user_id: authData.user.id,
         email,
-        role,
+        role: role.toUpperCase(), // Convert to RBAC format (e.g., admin -> PLATFORM_ADMIN)
         org_id: orgId,
-        created_at: new Date() as any,
-      };
-      const { error: dbError } = await supabase.from('users').insert([newUser]);
+        full_name: email.split('@')[0], // Default full name from email
+      }]);
       if (dbError) throw dbError;
     }
   };
