@@ -49,13 +49,15 @@ export function usePermissions(): Permissions {
         return;
       }
 
-      console.log('[usePermissions] Loading profile for user:', user.uid);
+      // Use user.id (Supabase auth user object) not user.uid
+      const userId = user.id;
+      console.log('[usePermissions] Loading profile for user:', userId);
 
       // Get profile from new RBAC system
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('role, org_id')
-        .eq('user_id', user.uid)
+        .eq('user_id', userId)
         .single();
 
       console.log('[usePermissions] Profile query result:', { profile, error });

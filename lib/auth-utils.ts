@@ -3,9 +3,16 @@ import { AppRole } from './types';
 
 // Create Supabase client for server-side auth checks
 function getSupabaseAdmin() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!serviceRoleKey) {
+    console.error('[getSupabaseAdmin] SUPABASE_SERVICE_ROLE_KEY is not set!');
+    console.error('[getSupabaseAdmin] Available env vars:', Object.keys(process.env).filter(k => k.includes('SUPABASE')));
+  }
+
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    serviceRoleKey!,
     {
       auth: {
         autoRefreshToken: false,
@@ -27,6 +34,7 @@ export interface AuthContext {
  */
 export async function getAuthContext(authHeader: string | null): Promise<AuthContext | null> {
   if (!authHeader) {
+    console.error('[getAuthContext] No auth header provided');
     return null;
   }
 
@@ -37,19 +45,40 @@ export async function getAuthContext(authHeader: string | null): Promise<AuthCon
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
   if (authError || !user) {
+    console.error('[getAuthContext] Auth error:', authError, 'User:', user);
     return null;
   }
 
-  // Get user profile
-  const { data: profile, error: profileError } = await supabase
+  console.log('[getAuthContext] User authenticated:', user.id, user.email);
+
+  // Get user profile - use the admin client which bypasses RLS
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+      db: {
+        schema: 'public',
+      },
+    }
+  );
+
+  const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
     .select('org_id, role, email')
     .eq('user_id', user.id)
     .single();
 
   if (profileError || !profile) {
+    console.error('[getAuthContext] Profile error:', profileError, 'Profile:', profile);
+    console.error('[getAuthContext] User ID:', user.id);
     return null;
   }
+
+  console.log('[getAuthContext] Profile loaded:', { role: profile.role, org_id: profile.org_id });
 
   return {
     user_id: user.id,
