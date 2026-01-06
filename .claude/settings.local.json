@@ -12,7 +12,8 @@
       "Bash(node -e:*)",
       "Bash(curl:*)",
       "Bash(cat:*)",
-      "Bash(clip:*)"
+      "Bash(clip:*)",
+      "Bash(cd:*)"
     ]
   }
 }

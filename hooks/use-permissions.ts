@@ -43,22 +43,29 @@ export function usePermissions(): Permissions {
   useEffect(() => {
     async function loadProfile() {
       if (!user) {
+        console.log('[usePermissions] No user found');
         setRole(null);
         setOrgId(null);
         return;
       }
 
+      console.log('[usePermissions] Loading profile for user:', user.uid);
+
       // Get profile from new RBAC system
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('role, org_id')
         .eq('user_id', user.uid)
         .single();
 
+      console.log('[usePermissions] Profile query result:', { profile, error });
+
       if (profile) {
+        console.log('[usePermissions] Setting role:', profile.role, 'org:', profile.org_id);
         setRole(profile.role as AppRole);
         setOrgId(profile.org_id);
       } else {
+        console.log('[usePermissions] No profile found or error occurred');
         setRole(null);
         setOrgId(null);
       }
