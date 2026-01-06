@@ -19,6 +19,8 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
+import { supabase } from '@/lib/firebase';
+import { toast } from 'sonner';
 
 export default function WorkstreamBoard() {
   const params = useParams();
@@ -38,21 +40,64 @@ export default function WorkstreamBoard() {
 
   async function fetchWorkstream() {
     try {
-      const response = await fetch(`/api/workstreams/${workstreamId}`);
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        throw new Error('Not authenticated. Please log in again.');
+      }
+
+      const token = session.access_token;
+
+      const response = await fetch(`/api/workstreams/${workstreamId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch workstream');
+      }
+
       const data = await response.json();
       setWorkstream(data);
     } catch (error) {
       console.error('Error fetching workstream:', error);
+      toast.error('Failed to load workstream');
     }
   }
 
   async function fetchUnits() {
     try {
-      const response = await fetch(`/api/units?workstream_id=${workstreamId}`);
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        throw new Error('Not authenticated. Please log in again.');
+      }
+
+      const token = session.access_token;
+
+      const response = await fetch(`/api/units?workstream_id=${workstreamId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch units');
+      }
+
       const data = await response.json();
-      setUnits(data);
+
+      if (Array.isArray(data)) {
+        setUnits(data);
+      } else {
+        console.error('Expected array but got:', data);
+        setUnits([]);
+      }
     } catch (error) {
       console.error('Error fetching units:', error);
+      toast.error('Failed to load units');
+      setUnits([]);
     } finally {
       setLoading(false);
     }
