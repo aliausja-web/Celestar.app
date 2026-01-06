@@ -61,8 +61,6 @@ export async function POST(request: NextRequest) {
           type: body.type,
           description: body.description,
           ordering: body.ordering ?? 0,
-          created_by: context!.user_id,
-          created_by_email: context!.email,
         },
       ])
       .select()

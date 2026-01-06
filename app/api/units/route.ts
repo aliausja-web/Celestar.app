@@ -80,8 +80,6 @@ export async function POST(request: NextRequest) {
           description: body.description,
           owner: body.owner,
           deadline: body.deadline,
-          created_by: context!.user_id,
-          created_by_email: context!.email,
         },
       ])
       .select()
