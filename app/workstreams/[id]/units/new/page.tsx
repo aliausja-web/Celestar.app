@@ -71,7 +71,24 @@ export default function NewUnitPage() {
       }
 
       toast.success('Unit created successfully');
-      router.push(`/workstreams/${workstreamId}`);
+
+      // Ask if user wants to create another unit
+      const createAnother = confirm('Unit created successfully! Would you like to create another unit for this workstream?');
+
+      if (createAnother) {
+        // Reset form for new unit
+        setFormData({
+          name: '',
+          description: '',
+          owner: '',
+          deadline: '',
+          acceptance_criteria: '',
+          required_proof_count: 1,
+          required_proof_types: ['photo'] as string[],
+        });
+      } else {
+        router.push(`/workstreams/${workstreamId}`);
+      }
     } catch (error: any) {
       console.error('Error creating unit:', error);
       toast.error(error.message || 'Failed to create unit');
