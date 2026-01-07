@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ArrowLeft, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/firebase';
 
@@ -22,6 +23,8 @@ export default function NewUnitPage() {
     description: '',
     owner: '',
     deadline: '',
+    required_proof_count: 1,
+    required_proof_types: ['photo'] as string[],
   });
 
   async function handleSubmit(e: React.FormEvent) {
@@ -54,6 +57,8 @@ export default function NewUnitPage() {
           description: formData.description || null,
           owner: formData.owner || null,
           deadline: formData.deadline || null,
+          required_proof_count: formData.required_proof_count,
+          required_proof_types: formData.required_proof_types,
         }),
       });
 
@@ -151,6 +156,81 @@ export default function NewUnitPage() {
                   onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
                   className="bg-black/40 border-gray-700 text-white"
                 />
+              </div>
+
+              {/* Proof Requirements Section */}
+              <div className="pt-6 border-t border-gray-800">
+                <div className="flex items-center gap-2 mb-4">
+                  <Info className="w-4 h-4 text-blue-400" />
+                  <h3 className="text-white font-semibold">Proof Requirements</h3>
+                </div>
+                <p className="text-sm text-gray-400 mb-4">
+                  Configure how many proofs are needed and what types are required for this unit to turn GREEN.
+                  Proofs must be approved by a Program Owner or Workstream Lead.
+                </p>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="required_proof_count" className="text-gray-300">
+                      Required Number of Approved Proofs <span className="text-red-400">*</span>
+                    </Label>
+                    <Input
+                      id="required_proof_count"
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={formData.required_proof_count}
+                      onChange={(e) => setFormData({ ...formData, required_proof_count: parseInt(e.target.value) || 1 })}
+                      className="bg-black/40 border-gray-700 text-white"
+                      required
+                    />
+                    <p className="text-xs text-gray-500">
+                      Unit will only turn GREEN after this many proofs are uploaded AND approved
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-gray-300">Required Proof Types</Label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Select which types of proofs are required (at least one of each selected type must be approved)
+                    </p>
+                    <div className="space-y-2">
+                      {['photo', 'video', 'document'].map((type) => (
+                        <div key={type} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`type-${type}`}
+                            checked={formData.required_proof_types.includes(type)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setFormData({
+                                  ...formData,
+                                  required_proof_types: [...formData.required_proof_types, type],
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  required_proof_types: formData.required_proof_types.filter((t) => t !== type),
+                                });
+                              }
+                            }}
+                            className="border-gray-600"
+                          />
+                          <Label
+                            htmlFor={`type-${type}`}
+                            className="text-gray-300 font-normal cursor-pointer capitalize"
+                          >
+                            {type}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                    {formData.required_proof_types.length === 0 && (
+                      <p className="text-xs text-yellow-400 mt-2">
+                        ⚠️ At least one proof type should be selected
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">

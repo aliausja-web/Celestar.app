@@ -71,6 +71,12 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseServer();
     const body = await request.json();
 
+    // Build proof requirements object
+    const proofRequirements = {
+      required_count: body.required_proof_count || 1,
+      required_types: body.required_proof_types || ['photo'],
+    };
+
     const { data: unit, error } = await supabase
       .from('units')
       .insert([
@@ -79,6 +85,7 @@ export async function POST(request: NextRequest) {
           title: body.name,
           owner_party_name: body.owner || 'Unassigned',
           required_green_by: body.deadline || null,
+          proof_requirements: proofRequirements,
         },
       ])
       .select()
