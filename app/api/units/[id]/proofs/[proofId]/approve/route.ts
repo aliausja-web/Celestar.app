@@ -63,12 +63,17 @@ export async function POST(
     }
 
     // Update proof approval status
+    // Note: approved_by column is UUID type, but context.user_id is already a string UUID
     const updateData: any = {
       approval_status: action === 'approve' ? 'approved' : 'rejected',
-      approved_by: context!.user_id,
       approved_by_email: context!.email,
       approved_at: new Date().toISOString(),
     };
+
+    // Only set approved_by if approving (it's a UUID foreign key)
+    if (action === 'approve') {
+      updateData.approved_by = context!.user_id;
+    }
 
     if (action === 'reject') {
       updateData.rejection_reason = rejection_reason;
