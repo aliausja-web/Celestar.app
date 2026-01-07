@@ -18,6 +18,7 @@ import {
   Video,
   Image as ImageIcon,
   AlertOctagon,
+  Plus,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { supabase } from '@/lib/firebase';
@@ -403,9 +404,19 @@ export default function WorkstreamBoard() {
 
         {/* Units List */}
         <div>
-          <h2 className="text-xl font-bold text-white mb-4">
-            Units ({units.length})
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-white">
+              Units ({units.length})
+            </h2>
+            <Button
+              onClick={() => router.push(`/workstreams/${workstreamId}/units/new`)}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              size="sm"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Unit
+            </Button>
+          </div>
           {units.length === 0 ? (
             <Card className="bg-black/25 border-gray-800">
               <CardContent className="py-12 text-center">

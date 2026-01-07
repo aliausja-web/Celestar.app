@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
+import { Shield, Clock, Camera, AlertTriangle } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -111,11 +112,24 @@ export default function LoginPage() {
             </form>
 
             <div className="mt-6 p-4 bg-black/25 rounded-lg border border-gray-800">
-              <p className="text-xs text-gray-400 mb-2 font-semibold">Demo Accounts:</p>
-              <div className="text-xs text-gray-500 space-y-1">
-                <p>Admin: admin@celestar.com</p>
-                <p>Supervisor: supervisor@celestar.com</p>
-                <p>Client: client@celestar.com</p>
+              <p className="text-xs text-gray-400 mb-3 font-semibold">Key Features:</p>
+              <div className="space-y-2">
+                <div className="flex items-start gap-2">
+                  <Camera className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-gray-500">Timestamped photo & video proof capture with approval workflow</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Shield className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-gray-500">Separation of duties enforcement for proof validation</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Clock className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-gray-500">Real-time status tracking with deadline monitoring</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-orange-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-gray-500">Automated escalation system for at-risk deliverables</p>
+                </div>
               </div>
             </div>
           </CardContent>

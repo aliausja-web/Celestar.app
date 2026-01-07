@@ -57,14 +57,20 @@ export default function UploadProofPage() {
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment', // Use back camera on mobile
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
+          // Lower resolution for video to reduce lag
+          width: { ideal: proofType === 'video' ? 1280 : 1920 },
+          height: { ideal: proofType === 'video' ? 720 : 1080 },
+          frameRate: { ideal: proofType === 'video' ? 30 : 60 }
         }
       };
 
-      // Add audio for video recording
+      // Add audio for video recording with noise cancellation
       if (proofType === 'video') {
-        constraints.audio = true;
+        constraints.audio = {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        };
       }
 
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -145,7 +151,27 @@ export default function UploadProofPage() {
     if (!stream) return;
 
     recordedChunksRef.current = [];
-    const options = { mimeType: 'video/webm;codecs=vp8,opus' };
+
+    // Try different codecs for better browser compatibility
+    const mimeTypes = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=h264,opus',
+      'video/webm'
+    ];
+
+    let selectedMimeType = 'video/webm';
+    for (const mimeType of mimeTypes) {
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        selectedMimeType = mimeType;
+        break;
+      }
+    }
+
+    const options = {
+      mimeType: selectedMimeType,
+      videoBitsPerSecond: 2500000 // 2.5 Mbps for good quality without excessive size
+    };
 
     try {
       const mediaRecorder = new MediaRecorder(stream, options);
@@ -158,14 +184,15 @@ export default function UploadProofPage() {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        const blob = new Blob(recordedChunksRef.current, { type: selectedMimeType });
         const videoURL = URL.createObjectURL(blob);
         setCapturedMedia(videoURL);
         stopCamera();
         toast.success('Video recorded');
       };
 
-      mediaRecorder.start();
+      // Request data every 100ms for smoother recording
+      mediaRecorder.start(100);
       setIsRecording(true);
       setRecordingDuration(0);
 

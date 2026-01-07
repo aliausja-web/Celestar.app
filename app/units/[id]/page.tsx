@@ -17,6 +17,8 @@ import {
   Upload,
   Image as ImageIcon,
   AlertCircle,
+  Video,
+  Play,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { supabase } from '@/lib/firebase';
@@ -291,7 +293,7 @@ export default function UnitDetailPage() {
                     }`}
                   >
                     <CardContent className="p-4 space-y-3">
-                      {/* Proof Image - Clickable */}
+                      {/* Proof Image/Video - Clickable */}
                       <div
                         onClick={() => openZoomDialog(proof)}
                         className="relative aspect-video bg-gray-900 rounded overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
@@ -302,6 +304,19 @@ export default function UnitDetailPage() {
                             alt="Proof"
                             className="w-full h-full object-contain"
                           />
+                        ) : proof.type === 'video' ? (
+                          <div className="relative w-full h-full">
+                            <video
+                              src={proof.url}
+                              className="w-full h-full object-contain"
+                              preload="metadata"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                              <div className="bg-white/90 rounded-full p-4">
+                                <Play className="w-8 h-8 text-black fill-black" />
+                              </div>
+                            </div>
+                          </div>
                         ) : (
                           <div className="flex items-center justify-center h-full">
                             <ImageIcon className="w-12 h-12 text-gray-600" />
@@ -386,11 +401,25 @@ export default function UnitDetailPage() {
           </DialogHeader>
           {selectedProof && (
             <div className="space-y-4">
-              <img
-                src={selectedProof.url}
-                alt="Proof full size"
-                className="w-full rounded-lg"
-              />
+              {selectedProof.type === 'photo' ? (
+                <img
+                  src={selectedProof.url}
+                  alt="Proof full size"
+                  className="w-full rounded-lg"
+                />
+              ) : selectedProof.type === 'video' ? (
+                <video
+                  src={selectedProof.url}
+                  controls
+                  autoPlay
+                  className="w-full rounded-lg"
+                  preload="auto"
+                />
+              ) : (
+                <div className="flex items-center justify-center h-64 bg-gray-900 rounded-lg">
+                  <ImageIcon className="w-16 h-16 text-gray-600" />
+                </div>
+              )}
               <div className="text-sm text-gray-400 space-y-1">
                 <p>Status: <Badge className={
                   selectedProof.approval_status === 'approved' ? 'bg-green-600' :
