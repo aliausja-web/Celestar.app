@@ -23,6 +23,7 @@ export default function NewUnitPage() {
     description: '',
     owner: '',
     deadline: '',
+    acceptance_criteria: '',
     required_proof_count: 1,
     required_proof_types: ['photo'] as string[],
   });
@@ -57,6 +58,7 @@ export default function NewUnitPage() {
           description: formData.description || null,
           owner: formData.owner || null,
           deadline: formData.deadline || null,
+          acceptance_criteria: formData.acceptance_criteria || null,
           required_proof_count: formData.required_proof_count,
           required_proof_types: formData.required_proof_types,
         }),
@@ -156,6 +158,22 @@ export default function NewUnitPage() {
                   onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
                   className="bg-black/40 border-gray-700 text-white"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="acceptance_criteria" className="text-gray-300">
+                  Acceptance Criteria
+                </Label>
+                <Textarea
+                  id="acceptance_criteria"
+                  value={formData.acceptance_criteria}
+                  onChange={(e) => setFormData({ ...formData, acceptance_criteria: e.target.value })}
+                  placeholder="Define what needs to be done for this unit to be considered complete..."
+                  className="bg-black/40 border-gray-700 text-white min-h-[100px]"
+                />
+                <p className="text-xs text-gray-500">
+                  List the specific conditions or criteria that must be met for approval
+                </p>
               </div>
 
               {/* Proof Requirements Section */}

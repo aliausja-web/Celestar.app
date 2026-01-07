@@ -85,6 +85,7 @@ export async function POST(request: NextRequest) {
           title: body.name,
           owner_party_name: body.owner || 'Unassigned',
           required_green_by: body.deadline || null,
+          acceptance_criteria: body.acceptance_criteria || null,
           proof_requirements: proofRequirements,
         },
       ])
