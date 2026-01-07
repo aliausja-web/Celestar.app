@@ -49,7 +49,13 @@ export async function POST(
     }
 
     // Enforce separation of duties: approver cannot be the uploader
-    if (proof.uploaded_by === context!.user_id) {
+    // Compare using both user_id (as string) and email for safety
+    const uploaderMatches =
+      proof.uploaded_by === context!.user_id ||
+      proof.uploaded_by === context!.user_id.toString() ||
+      proof.uploaded_by_email === context!.email;
+
+    if (uploaderMatches) {
       return NextResponse.json(
         { error: 'Separation of duties violation: You cannot approve your own proof' },
         { status: 403 }
