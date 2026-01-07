@@ -6,9 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Camera, RotateCcw } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowLeft, Camera, Video as VideoIcon, RotateCcw, Square, Circle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/firebase';
+
+type ProofType = 'photo' | 'video';
 
 export default function UploadProofPage() {
   const router = useRouter();
@@ -16,12 +19,18 @@ export default function UploadProofPage() {
   const unitId = params.id as string;
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState('');
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [proofType, setProofType] = useState<ProofType>('photo');
+  const [capturedMedia, setCapturedMedia] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update timestamp every second
   useEffect(() => {
@@ -32,23 +41,33 @@ export default function UploadProofPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Start camera on mount
+  // Start camera when proof type changes or on mount
   useEffect(() => {
-    startCamera();
+    if (!capturedMedia) {
+      startCamera();
+    }
     return () => {
       stopCamera();
+      stopRecording();
     };
-  }, []);
+  }, [proofType]);
 
   async function startCamera() {
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
+      const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment', // Use back camera on mobile
           width: { ideal: 1920 },
           height: { ideal: 1080 }
         }
-      });
+      };
+
+      // Add audio for video recording
+      if (proofType === 'video') {
+        constraints.audio = true;
+      }
+
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
 
       setStream(mediaStream);
 
@@ -114,7 +133,7 @@ export default function UploadProofPage() {
 
     // Convert to base64
     const imageData = canvas.toDataURL('image/jpeg', 0.95);
-    setCapturedImage(imageData);
+    setCapturedMedia(imageData);
 
     // Stop camera after capture
     stopCamera();
@@ -122,16 +141,73 @@ export default function UploadProofPage() {
     toast.success('Photo captured with timestamp');
   }
 
-  function retakePhoto() {
-    setCapturedImage(null);
+  function startVideoRecording() {
+    if (!stream) return;
+
+    recordedChunksRef.current = [];
+    const options = { mimeType: 'video/webm;codecs=vp8,opus' };
+
+    try {
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        const videoURL = URL.createObjectURL(blob);
+        setCapturedMedia(videoURL);
+        stopCamera();
+        toast.success('Video recorded');
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+
+      // Start duration timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      toast.error('Failed to start video recording');
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    }
+  }
+
+  function retakeMedia() {
+    setCapturedMedia(null);
+    setRecordingDuration(0);
     startCamera();
+  }
+
+  function formatDuration(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!capturedImage) {
-      toast.error('Please capture a photo first');
+    if (!capturedMedia) {
+      toast.error(`Please capture a ${proofType} first`);
       return;
     }
 
@@ -145,14 +221,21 @@ export default function UploadProofPage() {
 
       const token = session.access_token;
 
-      // Convert base64 to blob
-      const response = await fetch(capturedImage);
-      const blob = await response.blob();
-
-      // Create file from blob
+      let file: File;
       const timestamp = Date.now();
-      const fileName = `${unitId}/${timestamp}.jpg`;
-      const file = new File([blob], fileName, { type: 'image/jpeg' });
+      const fileName = `${unitId}/${timestamp}.${proofType === 'photo' ? 'jpg' : 'webm'}`;
+
+      if (proofType === 'photo') {
+        // Convert base64 to blob for photo
+        const response = await fetch(capturedMedia);
+        const blob = await response.blob();
+        file = new File([blob], fileName, { type: 'image/jpeg' });
+      } else {
+        // Convert blob URL to file for video
+        const response = await fetch(capturedMedia);
+        const blob = await response.blob();
+        file = new File([blob], fileName, { type: 'video/webm' });
+      }
 
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -169,6 +252,7 @@ export default function UploadProofPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          type: proofType,
           file_path: uploadData.path,
           notes: notes || null,
           captured_at: currentTime.toISOString(),
@@ -198,6 +282,7 @@ export default function UploadProofPage() {
           <Button
             onClick={() => {
               stopCamera();
+              stopRecording();
               router.back();
             }}
             variant="outline"
@@ -208,79 +293,148 @@ export default function UploadProofPage() {
           </Button>
           <div>
             <h1 className="text-3xl font-black text-white">Capture Proof</h1>
-            <p className="text-gray-500">Take a timestamped photo as proof of completion</p>
+            <p className="text-gray-500">Take a timestamped photo or video as proof of completion</p>
           </div>
         </div>
 
         <Card className="bg-black/25 border-gray-800">
           <CardHeader>
-            <CardTitle className="text-white">Camera Capture</CardTitle>
+            <CardTitle className="text-white">Proof Capture</CardTitle>
             <CardDescription className="text-gray-400">
-              Photo will be automatically timestamped for verification
+              {proofType === 'photo' ? 'Photo will be automatically timestamped for verification' : 'Video will be recorded with audio'}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Proof Type Selection */}
+              {!capturedMedia && (
+                <div className="space-y-2">
+                  <Label htmlFor="proofType" className="text-gray-300">
+                    Proof Type <span className="text-red-400">*</span>
+                  </Label>
+                  <Select value={proofType} onValueChange={(value) => setProofType(value as ProofType)}>
+                    <SelectTrigger className="bg-black/40 border-gray-700 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-950 border-gray-700">
+                      <SelectItem value="photo" className="text-white">
+                        <div className="flex items-center gap-2">
+                          <Camera className="w-4 h-4" />
+                          Photo
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="video" className="text-white">
+                        <div className="flex items-center gap-2">
+                          <VideoIcon className="w-4 h-4" />
+                          Video
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               {/* Camera/Preview Area */}
               <div className="space-y-2">
                 <Label className="text-gray-300">
-                  Photo <span className="text-red-400">*</span>
+                  {proofType === 'photo' ? 'Photo' : 'Video'} <span className="text-red-400">*</span>
                 </Label>
                 <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
-                  {!capturedImage ? (
+                  {!capturedMedia ? (
                     <>
                       <video
                         ref={videoRef}
                         autoPlay
                         playsInline
+                        muted
                         className="w-full h-full object-cover"
                       />
-                      {/* Live timestamp overlay */}
-                      <div className="absolute bottom-4 right-4 bg-black/70 text-white px-3 py-2 rounded font-mono text-sm">
-                        {currentTime.toLocaleString('en-US', {
-                          year: 'numeric',
-                          month: '2-digit',
-                          day: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                          hour12: false
-                        })}
-                      </div>
+                      {/* Live timestamp overlay for photo */}
+                      {proofType === 'photo' && (
+                        <div className="absolute bottom-4 right-4 bg-black/70 text-white px-3 py-2 rounded font-mono text-sm">
+                          {currentTime.toLocaleString('en-US', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: false
+                          })}
+                        </div>
+                      )}
+                      {/* Recording indicator for video */}
+                      {isRecording && (
+                        <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 text-white px-3 py-2 rounded-full">
+                          <Circle className="w-3 h-3 fill-white animate-pulse" />
+                          <span className="font-mono text-sm">REC {formatDuration(recordingDuration)}</span>
+                        </div>
+                      )}
                     </>
                   ) : (
-                    <img
-                      src={capturedImage}
-                      alt="Captured proof"
-                      className="w-full h-full object-contain"
-                    />
+                    proofType === 'photo' ? (
+                      <img
+                        src={capturedMedia}
+                        alt="Captured proof"
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <video
+                        src={capturedMedia}
+                        controls
+                        className="w-full h-full object-contain"
+                      />
+                    )
                   )}
                 </div>
 
                 {/* Hidden canvas for image processing */}
                 <canvas ref={canvasRef} className="hidden" />
 
-                {/* Capture/Retake Button */}
+                {/* Capture/Recording Buttons */}
                 <div className="flex gap-2">
-                  {!capturedImage ? (
-                    <Button
-                      type="button"
-                      onClick={capturePhoto}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                      disabled={!stream}
-                    >
-                      <Camera className="w-4 h-4 mr-2" />
-                      Capture Photo
-                    </Button>
+                  {!capturedMedia ? (
+                    proofType === 'photo' ? (
+                      <Button
+                        type="button"
+                        onClick={capturePhoto}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                        disabled={!stream}
+                      >
+                        <Camera className="w-4 h-4 mr-2" />
+                        Capture Photo
+                      </Button>
+                    ) : (
+                      !isRecording ? (
+                        <Button
+                          type="button"
+                          onClick={startVideoRecording}
+                          className="w-full bg-red-600 hover:bg-red-700 text-white"
+                          disabled={!stream}
+                        >
+                          <Circle className="w-4 h-4 mr-2" />
+                          Start Recording
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          onClick={stopRecording}
+                          className="w-full bg-gray-600 hover:bg-gray-700 text-white"
+                        >
+                          <Square className="w-4 h-4 mr-2" />
+                          Stop Recording
+                        </Button>
+                      )
+                    )
                   ) : (
                     <Button
                       type="button"
-                      onClick={retakePhoto}
+                      onClick={retakeMedia}
                       variant="outline"
                       className="w-full bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                     >
                       <RotateCcw className="w-4 h-4 mr-2" />
-                      Retake Photo
+                      Retake {proofType === 'photo' ? 'Photo' : 'Video'}
                     </Button>
                   )}
                 </div>
@@ -304,7 +458,7 @@ export default function UploadProofPage() {
               <div className="flex gap-3 pt-4">
                 <Button
                   type="submit"
-                  disabled={loading || !capturedImage}
+                  disabled={loading || !capturedMedia}
                   className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
                 >
                   {loading ? 'Uploading...' : 'Submit Proof'}
@@ -313,6 +467,7 @@ export default function UploadProofPage() {
                   type="button"
                   onClick={() => {
                     stopCamera();
+                    stopRecording();
                     router.back();
                   }}
                   variant="outline"
