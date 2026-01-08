@@ -65,7 +65,7 @@ export async function POST(
           escalation_reason: reason,
           escalated_by: context!.user_id,
           visible_to_roles: targetRoles,
-          message: \`Manual escalation (Level \${nextLevel}): \${reason}\`,
+          message: `Manual escalation (Level ${nextLevel}): ${reason}`,
           status: 'active',
         },
       ])
@@ -84,13 +84,13 @@ export async function POST(
     if (usersToNotify && usersToNotify.length > 0) {
       const notifications = usersToNotify.map((user) => ({
         user_id: user.user_id,
-        title: \`Level \${nextLevel} Manual Escalation\`,
-        message: \`Unit "\${unit.title}" has been manually escalated. Reason: \${reason}\`,
+        title: `Level ${nextLevel} Manual Escalation`,
+        message: `Unit "${unit.title}" has been manually escalated. Reason: ${reason}`,
         type: 'manual_escalation',
         priority: nextLevel === 3 ? 'critical' : nextLevel === 2 ? 'high' : 'normal',
         related_unit_id: unitId,
         related_escalation_id: escalation.id,
-        action_url: \`/units/\${unitId}\`,
+        action_url: `/units/${unitId}`,
         metadata: { unit_title: unit.title, escalation_level: nextLevel, reason },
       }));
 
