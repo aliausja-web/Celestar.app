@@ -41,9 +41,9 @@ export async function DELETE(
     );
 
     // Delete from auth (this will cascade to profiles via database trigger/policy)
-    const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
 
-    if (authError) throw authError;
+    if (deleteError) throw deleteError;
 
     // Also explicitly delete profile (in case cascade doesn't work)
     await supabaseAdmin.from('profiles').delete().eq('user_id', userId);

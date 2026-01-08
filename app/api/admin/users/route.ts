@@ -93,13 +93,13 @@ export async function POST(request: NextRequest) {
     );
 
     // Create auth user
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authData, error: createAuthError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true, // Auto-confirm email
     });
 
-    if (authError) throw authError;
+    if (createAuthError) throw createAuthError;
 
     // Create profile
     const { error: profileError } = await supabaseAdmin
