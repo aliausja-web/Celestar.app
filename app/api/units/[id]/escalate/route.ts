@@ -95,6 +95,27 @@ export async function POST(
       }));
 
       await supabase.from('in_app_notifications').insert(notifications);
+
+      // Create email notifications (queue for Edge Function to process)
+      const emailNotifications = usersToNotify.map((user) => ({
+        escalation_id: escalation.id,
+        recipient_user_id: user.user_id,
+        recipient_email: user.email,
+        recipient_name: user.full_name,
+        channel: 'email',
+        subject: `🚨 URGENT: Manual Escalation - "${unit.title}"`,
+        message: `Critical issue reported by ${context?.user_id}:\n\n"${reason}"\n\nUnit: ${unit.title}\nEscalation Level: ${nextLevel}\n\nImmediate action required.`,
+        template_data: {
+          unit_title: unit.title,
+          escalation_level: nextLevel,
+          reason: reason,
+          escalated_by: context?.user_id,
+          priority: nextLevel === 3 ? 'critical' : 'high',
+        },
+        status: 'pending',
+      }));
+
+      await supabase.from('escalation_notifications').insert(emailNotifications);
     }
 
     // Update unit escalation level
