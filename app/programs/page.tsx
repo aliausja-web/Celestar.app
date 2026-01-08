@@ -404,11 +404,11 @@ export default function ProgramDashboard() {
             <NotificationBell />
             {permissions.isPlatformAdmin && (
               <Button
-                onClick={() => setShowUserDialog(true)}
+                onClick={() => router.push('/admin')}
                 className="bg-purple-600 hover:bg-purple-700 text-white"
               >
                 <Users className="w-4 h-4 mr-2" />
-                Manage Users
+                Admin Dashboard
               </Button>
             )}
             {permissions.canCreateProgram && (
