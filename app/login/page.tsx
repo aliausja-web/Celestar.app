@@ -63,11 +63,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#0b0f14] via-[#121b26] to-[#0b0f14]">
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
       <div className="w-full max-w-md px-4">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
-            <span className="text-2xl font-black text-black">C</span>
+          {/* Celestar Logo */}
+          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center shadow-lg border border-slate-700">
+            <div className="grid grid-cols-2 gap-0.5 w-8 h-8">
+              <div className="bg-red-500 rounded-tl-lg"></div>
+              <div className="bg-orange-500 rounded-tr-lg"></div>
+              <div className="bg-green-500 rounded-bl-lg"></div>
+              <div className="bg-blue-500 rounded-br-lg"></div>
+            </div>
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white">CELESTAR PORTAL</h1>

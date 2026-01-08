@@ -59,14 +59,25 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
       {/* Header */}
-      <div className="border-b border-gray-700 bg-gray-800/50 backdrop-blur-sm">
+      <div className="border-b border-slate-700 bg-slate-800/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Admin Dashboard</h1>
-              <p className="text-gray-400">Platform administration and client management</p>
+            <div className="flex items-center gap-3">
+              {/* Celestar Logo */}
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center shadow-lg border border-slate-700">
+                <div className="grid grid-cols-2 gap-0.5 w-6 h-6">
+                  <div className="bg-red-500 rounded-tl"></div>
+                  <div className="bg-orange-500 rounded-tr"></div>
+                  <div className="bg-green-500 rounded-bl"></div>
+                  <div className="bg-blue-500 rounded-br"></div>
+                </div>
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-1">Admin Dashboard</h1>
+                <p className="text-gray-400">Platform administration and client management</p>
+              </div>
             </div>
             <button
               onClick={() => router.push('/programs')}

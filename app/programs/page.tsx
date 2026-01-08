@@ -388,17 +388,30 @@ export default function ProgramDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-black text-white mb-2">
-              Program Dashboard
-            </h1>
-            <p className="text-gray-500">
-              Execution readiness across all programs {permissions.role && `(${permissions.role})`}
-            </p>
+          <div className="flex items-center gap-4">
+            {/* Celestar Logo */}
+            <div className="relative">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center shadow-lg border border-slate-700">
+                <div className="grid grid-cols-2 gap-0.5 w-7 h-7">
+                  <div className="bg-red-500 rounded-tl-lg"></div>
+                  <div className="bg-orange-500 rounded-tr-lg"></div>
+                  <div className="bg-green-500 rounded-bl-lg"></div>
+                  <div className="bg-blue-500 rounded-br-lg"></div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h1 className="text-3xl font-black text-white mb-1">
+                Program Dashboard
+              </h1>
+              <p className="text-gray-400">
+                Execution readiness across all programs {permissions.role && `(${permissions.role})`}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <NotificationBell />

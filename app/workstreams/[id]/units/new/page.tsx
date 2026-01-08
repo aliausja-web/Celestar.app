@@ -259,7 +259,7 @@ export default function NewUnitPage() {
                       Select which types of proofs are required (at least one of each selected type must be approved)
                     </p>
                     <div className="space-y-2">
-                      {['photo', 'video', 'document'].map((type) => (
+                      {['photo', 'video'].map((type) => (
                         <div key={type} className="flex items-center gap-2">
                           <Checkbox
                             id={`type-${type}`}
