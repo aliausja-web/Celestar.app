@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Info } from 'lucide-react';
+import { ArrowLeft, Info, Bell, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/firebase';
 
@@ -26,6 +26,10 @@ export default function NewUnitPage() {
     acceptance_criteria: '',
     required_proof_count: 1,
     required_proof_types: ['photo'] as string[],
+    urgency_alerts_enabled: true,
+    urgency_level_1: 50,  // Alert at 50% of time elapsed
+    urgency_level_2: 75,  // Alert at 75% of time elapsed
+    urgency_level_3: 90,  // Alert at 90% of time elapsed
   });
 
   async function handleSubmit(e: React.FormEvent) {
@@ -61,6 +65,26 @@ export default function NewUnitPage() {
           acceptance_criteria: formData.acceptance_criteria || null,
           required_proof_count: formData.required_proof_count,
           required_proof_types: formData.required_proof_types,
+          escalation_config: {
+            enabled: formData.urgency_alerts_enabled,
+            thresholds: [
+              {
+                level: 1,
+                percentage_elapsed: formData.urgency_level_1,
+                target_roles: ['WORKSTREAM_LEAD']
+              },
+              {
+                level: 2,
+                percentage_elapsed: formData.urgency_level_2,
+                target_roles: ['PROGRAM_OWNER', 'WORKSTREAM_LEAD']
+              },
+              {
+                level: 3,
+                percentage_elapsed: formData.urgency_level_3,
+                target_roles: ['PLATFORM_ADMIN', 'PROGRAM_OWNER']
+              }
+            ]
+          },
         }),
       });
 
@@ -85,6 +109,10 @@ export default function NewUnitPage() {
           acceptance_criteria: '',
           required_proof_count: 1,
           required_proof_types: ['photo'] as string[],
+          urgency_alerts_enabled: true,
+          urgency_level_1: 50,
+          urgency_level_2: 75,
+          urgency_level_3: 90,
         });
       } else {
         router.push(`/workstreams/${workstreamId}`);
@@ -266,6 +294,118 @@ export default function NewUnitPage() {
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Urgency Alert Settings Section */}
+              <div className="pt-6 border-t border-gray-800">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-orange-400" />
+                    <h3 className="text-white font-semibold">Urgency Alert Settings</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="urgency_alerts_enabled"
+                      checked={formData.urgency_alerts_enabled}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, urgency_alerts_enabled: checked as boolean })
+                      }
+                      className="border-gray-600"
+                    />
+                    <Label
+                      htmlFor="urgency_alerts_enabled"
+                      className="text-gray-300 font-normal cursor-pointer"
+                    >
+                      Enable Alerts
+                    </Label>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-400 mb-4">
+                  Automatic notifications will be sent to team leads and managers as the deadline approaches.
+                  Set when alerts should trigger based on percentage of time elapsed.
+                </p>
+
+                {formData.urgency_alerts_enabled && (
+                  <div className="space-y-4 bg-black/20 p-4 rounded-lg border border-gray-700">
+                    <div className="space-y-2">
+                      <Label htmlFor="urgency_level_1" className="text-gray-300 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-yellow-500/20 text-yellow-400 text-xs flex items-center justify-center font-bold">1</span>
+                        First Alert (Workstream Lead)
+                      </Label>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          id="urgency_level_1"
+                          type="number"
+                          min="10"
+                          max="90"
+                          step="5"
+                          value={formData.urgency_level_1}
+                          onChange={(e) => setFormData({ ...formData, urgency_level_1: parseInt(e.target.value) || 50 })}
+                          className="bg-black/40 border-gray-700 text-white w-24"
+                        />
+                        <span className="text-gray-400 text-sm">% of time elapsed</span>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Alert when {formData.urgency_level_1}% of the time between creation and deadline has passed
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="urgency_level_2" className="text-gray-300 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 text-xs flex items-center justify-center font-bold">2</span>
+                        Second Alert (Program Owner + Lead)
+                      </Label>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          id="urgency_level_2"
+                          type="number"
+                          min="10"
+                          max="95"
+                          step="5"
+                          value={formData.urgency_level_2}
+                          onChange={(e) => setFormData({ ...formData, urgency_level_2: parseInt(e.target.value) || 75 })}
+                          className="bg-black/40 border-gray-700 text-white w-24"
+                        />
+                        <span className="text-gray-400 text-sm">% of time elapsed</span>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Alert when {formData.urgency_level_2}% of the time between creation and deadline has passed
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="urgency_level_3" className="text-gray-300 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-red-500/20 text-red-400 text-xs flex items-center justify-center font-bold">3</span>
+                        Critical Alert (Platform Admin + Owner)
+                      </Label>
+                      <div className="flex items-center gap-3">
+                        <Input
+                          id="urgency_level_3"
+                          type="number"
+                          min="10"
+                          max="100"
+                          step="5"
+                          value={formData.urgency_level_3}
+                          onChange={(e) => setFormData({ ...formData, urgency_level_3: parseInt(e.target.value) || 90 })}
+                          className="bg-black/40 border-gray-700 text-white w-24"
+                        />
+                        <span className="text-gray-400 text-sm">% of time elapsed</span>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Alert when {formData.urgency_level_3}% of the time between creation and deadline has passed
+                      </p>
+                    </div>
+
+                    <div className="bg-blue-500/10 border border-blue-500/30 rounded p-3 mt-4">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-blue-300">
+                          Alerts are sent via email and in-app notifications. Each level notifies progressively higher authority to ensure timely attention.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-4">

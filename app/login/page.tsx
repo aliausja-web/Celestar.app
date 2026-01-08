@@ -114,9 +114,9 @@ export default function LoginPage() {
             <div className="mt-6 p-4 bg-black/25 rounded-lg border border-gray-800">
               <p className="text-xs text-gray-400 mb-3 font-semibold">Key Features:</p>
               <div className="space-y-2">
-                <div className="flex items-start gap-2">
-                  <Camera className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-gray-500">Timestamped photo & video proof capture with approval workflow</p>
+                <div className="flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                  <p className="text-xs text-gray-500 whitespace-nowrap">Timestamped proof capture with approval workflow</p>
                 </div>
                 <div className="flex items-start gap-2">
                   <Shield className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />

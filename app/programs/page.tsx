@@ -18,6 +18,7 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/firebase';
 import { getWorkstreamTypeLabel } from '@/lib/workstream-types';
+import { NotificationBell } from '@/components/notification-bell';
 
 export default function ProgramDashboard() {
   const router = useRouter();
@@ -400,6 +401,7 @@ export default function ProgramDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <NotificationBell />
             {permissions.isPlatformAdmin && (
               <Button
                 onClick={() => setShowUserDialog(true)}

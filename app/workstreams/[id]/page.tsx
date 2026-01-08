@@ -6,6 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { UnitWithProofs, WorkstreamWithMetrics } from '@/lib/types';
 import {
   AlertTriangle,
@@ -36,6 +39,9 @@ export default function WorkstreamBoard() {
   const [units, setUnits] = useState<UnitWithProofs[]>([]);
   const [loading, setLoading] = useState(true);
   const [escalating, setEscalating] = useState<string | null>(null);
+  const [showEscalationDialog, setShowEscalationDialog] = useState(false);
+  const [selectedUnitForEscalation, setSelectedUnitForEscalation] = useState<UnitWithProofs | null>(null);
+  const [escalationReason, setEscalationReason] = useState('');
 
   useEffect(() => {
     if (workstreamId) {
@@ -109,12 +115,21 @@ export default function WorkstreamBoard() {
     }
   }
 
-  async function handleEscalate(unitId: string) {
-    if (!confirm('Are you sure you want to manually escalate this unit? This will notify higher authorities immediately.')) {
+  function openEscalationDialog(unit: UnitWithProofs) {
+    setSelectedUnitForEscalation(unit);
+    setEscalationReason('');
+    setShowEscalationDialog(true);
+  }
+
+  async function handleEscalate() {
+    if (!selectedUnitForEscalation) return;
+
+    if (!escalationReason.trim()) {
+      toast.error('Please provide a reason for escalation');
       return;
     }
 
-    setEscalating(unitId);
+    setEscalating(selectedUnitForEscalation.id);
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
@@ -124,14 +139,14 @@ export default function WorkstreamBoard() {
 
       const token = session.access_token;
 
-      const response = await fetch(`/api/units/${unitId}/escalate`, {
+      const response = await fetch(`/api/units/${selectedUnitForEscalation.id}/escalate`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          reason: 'Manual escalation by authorized user',
+          reason: escalationReason,
         }),
       });
 
@@ -142,6 +157,7 @@ export default function WorkstreamBoard() {
       }
 
       toast.success(`Unit escalated to level ${data.new_level}`);
+      setShowEscalationDialog(false);
 
       // Refresh units to show updated escalation level
       await fetchUnits();
@@ -291,7 +307,7 @@ export default function WorkstreamBoard() {
               {(permissions.isPlatformAdmin || permissions.role === 'PROGRAM_OWNER' || permissions.role === 'WORKSTREAM_LEAD') && !isGreen && (
                 <Button
                   size="sm"
-                  onClick={() => handleEscalate(unit.id)}
+                  onClick={() => openEscalationDialog(unit)}
                   disabled={escalating === unit.id}
                   className="bg-orange-600 hover:bg-orange-700 text-white"
                 >
@@ -438,6 +454,66 @@ export default function WorkstreamBoard() {
           )}
         </div>
       </div>
+
+      {/* Escalation Dialog */}
+      <Dialog open={showEscalationDialog} onOpenChange={setShowEscalationDialog}>
+        <DialogContent className="bg-gray-950 border-gray-800 max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-white">Manual Escalation</DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Manually escalate "{selectedUnitForEscalation?.title}" to notify higher authorities
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded p-3">
+              <div className="flex items-start gap-2">
+                <AlertOctagon className="w-5 h-5 text-orange-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm text-orange-300 font-medium mb-1">
+                    This will immediately notify Program Owners and Platform Administrators
+                  </p>
+                  <p className="text-xs text-orange-400/80">
+                    Use this only when immediate attention is required for a critical issue or blocker
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="escalation_reason" className="text-gray-300">
+                Reason for Escalation <span className="text-red-400">*</span>
+              </Label>
+              <Textarea
+                id="escalation_reason"
+                value={escalationReason}
+                onChange={(e) => setEscalationReason(e.target.value)}
+                placeholder="Describe the issue or blocker that requires escalation..."
+                className="bg-black/40 border-gray-700 text-white min-h-[120px]"
+                required
+              />
+              <p className="text-xs text-gray-500">
+                Be specific about what needs immediate attention and why
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setShowEscalationDialog(false)}
+              className="bg-black/25 border-gray-700 text-gray-300"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEscalate}
+              disabled={!escalationReason.trim() || escalating === selectedUnitForEscalation?.id}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {escalating === selectedUnitForEscalation?.id ? 'Escalating...' : 'Escalate Now'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

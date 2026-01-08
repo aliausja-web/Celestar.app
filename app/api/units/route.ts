@@ -77,6 +77,16 @@ export async function POST(request: NextRequest) {
       required_types: body.required_proof_types || ['photo'],
     };
 
+    // Use provided escalation_config or set default
+    const escalationConfig = body.escalation_config || {
+      enabled: true,
+      thresholds: [
+        { level: 1, percentage_elapsed: 50, target_roles: ['WORKSTREAM_LEAD'] },
+        { level: 2, percentage_elapsed: 75, target_roles: ['PROGRAM_OWNER', 'WORKSTREAM_LEAD'] },
+        { level: 3, percentage_elapsed: 90, target_roles: ['PLATFORM_ADMIN', 'PROGRAM_OWNER'] }
+      ]
+    };
+
     const { data: unit, error } = await supabase
       .from('units')
       .insert([
@@ -87,6 +97,7 @@ export async function POST(request: NextRequest) {
           required_green_by: body.deadline || null,
           acceptance_criteria: body.acceptance_criteria || null,
           proof_requirements: proofRequirements,
+          escalation_config: escalationConfig,
         },
       ])
       .select()
