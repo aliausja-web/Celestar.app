@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Info, Bell, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Info, Bell, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/firebase';
 
@@ -17,6 +17,7 @@ export default function NewUnitPage() {
   const params = useParams();
   const workstreamId = params.id as string;
   const [loading, setLoading] = useState(false);
+  const [showAdvancedAlerts, setShowAdvancedAlerts] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -298,34 +299,54 @@ export default function NewUnitPage() {
 
               {/* Urgency Alert Settings Section */}
               <div className="pt-6 border-t border-gray-800">
-                <div className="flex items-center justify-between mb-4">
+                <div
+                  className="flex items-center justify-between mb-4 cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => setShowAdvancedAlerts(!showAdvancedAlerts)}
+                >
                   <div className="flex items-center gap-2">
                     <Bell className="w-4 h-4 text-orange-400" />
                     <h3 className="text-white font-semibold">Urgency Alert Settings</h3>
+                    <span className="text-xs text-gray-500">(Optional - Click to customize)</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="urgency_alerts_enabled"
-                      checked={formData.urgency_alerts_enabled}
-                      onCheckedChange={(checked) =>
-                        setFormData({ ...formData, urgency_alerts_enabled: checked as boolean })
-                      }
-                      className="border-gray-600"
-                    />
-                    <Label
-                      htmlFor="urgency_alerts_enabled"
-                      className="text-gray-300 font-normal cursor-pointer"
-                    >
-                      Enable Alerts
-                    </Label>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">
+                      {formData.urgency_alerts_enabled ? 'Enabled (50%, 75%, 90%)' : 'Disabled'}
+                    </span>
+                    {showAdvancedAlerts ? (
+                      <ChevronUp className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    )}
                   </div>
                 </div>
-                <p className="text-sm text-gray-400 mb-4">
-                  Automatic notifications will be sent to team leads and managers as the deadline approaches.
-                  Set when alerts should trigger based on percentage of time elapsed.
-                </p>
 
-                {formData.urgency_alerts_enabled && (
+                {showAdvancedAlerts && (
+                  <>
+                    <p className="text-sm text-gray-400 mb-4">
+                      Automatic notifications will be sent to team leads and managers as the deadline approaches.
+                      Set when alerts should trigger based on percentage of time elapsed.
+                    </p>
+
+                    <div className="flex items-center gap-2 mb-4">
+                      <Checkbox
+                        id="urgency_alerts_enabled"
+                        checked={formData.urgency_alerts_enabled}
+                        onCheckedChange={(checked) =>
+                          setFormData({ ...formData, urgency_alerts_enabled: checked as boolean })
+                        }
+                        className="border-gray-600"
+                      />
+                      <Label
+                        htmlFor="urgency_alerts_enabled"
+                        className="text-gray-300 font-normal cursor-pointer"
+                      >
+                        Enable Alerts
+                      </Label>
+                    </div>
+                  </>
+                )}
+
+                {showAdvancedAlerts && formData.urgency_alerts_enabled && (
                   <div className="space-y-4 bg-black/20 p-4 rounded-lg border border-gray-700">
                     <div className="space-y-2">
                       <Label htmlFor="urgency_level_1" className="text-gray-300 flex items-center gap-2">
