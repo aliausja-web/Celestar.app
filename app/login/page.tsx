@@ -63,33 +63,33 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
+    <div className="flex items-center justify-center min-h-screen bg-[#0E1116]">
       <div className="w-full max-w-md px-4">
         <div className="flex items-center justify-center gap-3 mb-8">
-          {/* Celestar Logo */}
-          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center shadow-lg border border-slate-700">
+          {/* Celestar Logo - muted */}
+          <div className="w-14 h-14 rounded bg-[#1a1f26] flex items-center justify-center border border-[#21262d]">
             <div className="grid grid-cols-2 gap-0.5 w-8 h-8">
-              <div className="bg-red-500 rounded-tl-lg"></div>
-              <div className="bg-orange-500 rounded-tr-lg"></div>
-              <div className="bg-green-500 rounded-bl-lg"></div>
-              <div className="bg-blue-500 rounded-br-lg"></div>
+              <div className="bg-red-500/70 rounded-tl"></div>
+              <div className="bg-orange-500/70 rounded-tr"></div>
+              <div className="bg-green-500/70 rounded-bl"></div>
+              <div className="bg-blue-500/70 rounded-br"></div>
             </div>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white">CELESTAR PORTAL</h1>
-            <p className="text-sm text-gray-400">Execution Readiness Verification</p>
+            <h1 className="text-2xl font-semibold text-[#e6edf3]">CELESTAR PORTAL</h1>
+            <p className="text-sm text-[#7d8590]">Execution Readiness Verification</p>
           </div>
         </div>
 
-        <Card className="border-gray-800 bg-[#0f1620]/90 backdrop-blur">
+        <Card className="border-[#30363d] bg-[#161b22]">
           <CardHeader>
-            <CardTitle className="text-white">Login</CardTitle>
-            <CardDescription>Enter your credentials to access the portal</CardDescription>
+            <CardTitle className="text-[#e6edf3] font-medium">Login</CardTitle>
+            <CardDescription className="text-[#7d8590]">Enter your credentials to access the portal</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-[#e6edf3] text-sm">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -97,11 +97,11 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="bg-black/25 border-gray-700"
+                  className="bg-[#0d1117] border-[#30363d] text-[#e6edf3] placeholder:text-[#7d8590]"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-[#e6edf3] text-sm">Password</Label>
                 <Input
                   id="password"
                   type="password"
@@ -109,32 +109,32 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="bg-black/25 border-gray-700"
+                  className="bg-[#0d1117] border-[#30363d] text-[#e6edf3] placeholder:text-[#7d8590]"
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]" disabled={loading}>
                 {loading ? 'Logging in...' : 'Login'}
               </Button>
             </form>
 
-            <div className="mt-6 p-4 bg-black/25 rounded-lg border border-gray-800">
-              <p className="text-xs text-gray-400 mb-3 font-semibold">Key Features:</p>
+            <div className="mt-6 p-4 bg-[#0d1117] rounded border border-[#30363d]">
+              <p className="text-xs text-[#7d8590] mb-3">Key Features:</p>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <Camera className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                  <p className="text-xs text-gray-500 whitespace-nowrap">Timestamped proof capture with approval workflow</p>
+                  <Camera className="w-4 h-4 text-[#58a6ff]/70 flex-shrink-0" />
+                  <p className="text-xs text-[#7d8590] whitespace-nowrap">Timestamped proof capture with approval workflow</p>
                 </div>
                 <div className="flex items-start gap-2">
-                  <Shield className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-gray-500">Separation of duties enforcement for proof validation</p>
+                  <Shield className="w-4 h-4 text-[#3fb950]/70 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-[#7d8590]">Separation of duties enforcement for proof validation</p>
                 </div>
                 <div className="flex items-start gap-2">
-                  <Clock className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-gray-500">Real-time status tracking with deadline monitoring</p>
+                  <Clock className="w-4 h-4 text-[#d29922]/70 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-[#7d8590]">Real-time status tracking with deadline monitoring</p>
                 </div>
                 <div className="flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-orange-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-gray-500">Automated escalation system for at-risk deliverables</p>
+                  <AlertTriangle className="w-4 h-4 text-[#db6d28]/70 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-[#7d8590]">Automated escalation system for at-risk deliverables</p>
                 </div>
               </div>
             </div>
@@ -142,7 +142,7 @@ export default function LoginPage() {
         </Card>
 
         <div className="mt-6 text-center">
-          <p className="text-xs text-gray-500">Proof-first • Append-only audit • Rule-based escalation</p>
+          <p className="text-xs text-[#7d8590]">Proof-first • Append-only audit • Rule-based escalation</p>
         </div>
       </div>
     </div>

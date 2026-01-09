@@ -277,9 +277,10 @@ export default function ProgramDashboard() {
 
   function WorkstreamCard({ workstream }: { workstream: WorkstreamWithMetrics }) {
     const isGreen = workstream.overall_status === 'GREEN';
+    // Control room aesthetic: RED is aggressive, GREEN is calm, background disappears
     const statusColor = isGreen
-      ? 'border-green-500/40 bg-green-500/5'
-      : 'border-red-500/40 bg-red-500/5';
+      ? 'border-[#30363d] bg-[#161b22]' // Neutral, barely visible when green
+      : 'border-red-600/60 bg-red-950/30 shadow-red-900/20 shadow-lg'; // RED is LOUD
 
     const progress = workstream.total_units > 0
       ? Math.round((workstream.green_units / workstream.total_units) * 100)
@@ -287,18 +288,18 @@ export default function ProgramDashboard() {
 
     return (
       <Card
-        className={`${statusColor} border cursor-pointer hover:border-opacity-60 transition-all`}
+        className={`${statusColor} border cursor-pointer hover:border-[#3d444d] transition-colors`}
         onClick={() => router.push(`/workstreams/${workstream.id}`)}
       >
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
-                <FolderOpen className="w-4 h-4" />
+              <CardTitle className="text-base font-medium text-[#e6edf3] flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-[#7d8590]" />
                 {workstream.name}
               </CardTitle>
               {workstream.type && (
-                <CardDescription className="text-xs text-gray-500">
+                <CardDescription className="text-xs text-[#7d8590]">
                   Type: {getWorkstreamTypeLabel(workstream.type)}
                 </CardDescription>
               )}
@@ -306,11 +307,11 @@ export default function ProgramDashboard() {
             <Badge
               className={`${
                 isGreen
-                  ? 'border-green-500/40 bg-green-500/12 text-green-200'
-                  : 'border-red-500/40 bg-red-500/12 text-red-200'
-              } font-black text-xs px-3 py-1.5 flex items-center gap-1.5`}
+                  ? 'border-[#238636]/50 bg-[#238636]/10 text-[#3fb950]' // Calm green
+                  : 'border-red-600 bg-red-900/40 text-red-400 font-semibold' // Aggressive RED
+              } text-xs px-2.5 py-1 flex items-center gap-1.5`}
             >
-              {isGreen ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+              {isGreen ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3.5 h-3.5" />}
               {workstream.overall_status}
             </Badge>
           </div>
@@ -319,13 +320,13 @@ export default function ProgramDashboard() {
           {/* Progress Bar */}
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs">
-              <span className="text-gray-400">Completion</span>
-              <span className="text-white font-bold">{progress}%</span>
+              <span className="text-[#7d8590]">Completion</span>
+              <span className="text-[#e6edf3] font-medium">{progress}%</span>
             </div>
-            <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-[#21262d] rounded overflow-hidden">
               <div
                 className={`h-full transition-all ${
-                  isGreen ? 'bg-green-500' : 'bg-red-500'
+                  isGreen ? 'bg-[#238636]' : 'bg-red-600'
                 }`}
                 style={{ width: `${progress}%` }}
               />
@@ -334,31 +335,31 @@ export default function ProgramDashboard() {
 
           {/* Unit Counts */}
           <div className="grid grid-cols-3 gap-2">
-            <div className="text-center p-2 bg-black/20 rounded border border-gray-800">
-              <div className="text-xs text-gray-500">Total</div>
-              <div className="text-lg font-bold text-white">{workstream.total_units}</div>
+            <div className="text-center p-2 bg-[#161b22] rounded border border-[#30363d]">
+              <div className="text-xs text-[#7d8590]">Total</div>
+              <div className="text-base font-medium text-[#e6edf3]">{workstream.total_units}</div>
             </div>
-            <div className="text-center p-2 bg-green-500/5 rounded border border-green-500/20">
-              <div className="text-xs text-green-500">Green</div>
-              <div className="text-lg font-bold text-green-400">{workstream.green_units}</div>
+            <div className="text-center p-2 bg-[#238636]/5 rounded border border-[#238636]/20">
+              <div className="text-xs text-[#3fb950]/80">Green</div>
+              <div className="text-base font-medium text-[#3fb950]">{workstream.green_units}</div>
             </div>
-            <div className="text-center p-2 bg-red-500/5 rounded border border-red-500/20">
-              <div className="text-xs text-red-500">Red</div>
-              <div className="text-lg font-bold text-red-400">{workstream.red_units}</div>
+            <div className="text-center p-2 bg-red-900/20 rounded border border-red-600/30">
+              <div className="text-xs text-red-400/80">Red</div>
+              <div className="text-base font-semibold text-red-400">{workstream.red_units}</div>
             </div>
           </div>
 
-          {/* Alerts */}
+          {/* Alerts - RED is most important */}
           {workstream.stale_units > 0 && (
-            <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-2 py-1.5">
-              <Clock className="w-3 h-3" />
+            <div className="flex items-center gap-2 text-xs text-red-300 bg-red-900/30 border border-red-600/40 rounded px-2.5 py-1.5 font-medium">
+              <Clock className="w-3.5 h-3.5" />
               <span>{workstream.stale_units} units past deadline</span>
             </div>
           )}
 
           {workstream.recent_escalations > 0 && (
-            <div className="flex items-center gap-2 text-xs text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded px-2 py-1.5">
-              <TrendingUp className="w-3 h-3" />
+            <div className="flex items-center gap-2 text-xs text-orange-300/90 bg-orange-900/20 border border-orange-600/30 rounded px-2.5 py-1.5">
+              <TrendingUp className="w-3.5 h-3.5" />
               <span>{workstream.recent_escalations} escalations (24h)</span>
             </div>
           )}
@@ -374,7 +375,7 @@ export default function ProgramDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 p-6">
+      <div className="min-h-screen bg-[#0E1116] p-6">
         <div className="max-w-7xl mx-auto space-y-6">
           <Skeleton className="h-12 w-64 bg-gray-800" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -388,27 +389,27 @@ export default function ProgramDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-6">
+    <div className="min-h-screen bg-[#0E1116] p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            {/* Celestar Logo */}
+            {/* Celestar Logo - muted */}
             <div className="relative">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center shadow-lg border border-slate-700">
+              <div className="w-12 h-12 rounded bg-[#1a1f26] flex items-center justify-center border border-[#21262d]">
                 <div className="grid grid-cols-2 gap-0.5 w-7 h-7">
-                  <div className="bg-red-500 rounded-tl-lg"></div>
-                  <div className="bg-orange-500 rounded-tr-lg"></div>
-                  <div className="bg-green-500 rounded-bl-lg"></div>
-                  <div className="bg-blue-500 rounded-br-lg"></div>
+                  <div className="bg-red-500/70 rounded-tl"></div>
+                  <div className="bg-orange-500/70 rounded-tr"></div>
+                  <div className="bg-green-500/70 rounded-bl"></div>
+                  <div className="bg-blue-500/70 rounded-br"></div>
                 </div>
               </div>
             </div>
             <div>
-              <h1 className="text-3xl font-black text-white mb-1">
+              <h1 className="text-2xl font-semibold text-[#e6edf3]">
                 Program Dashboard
               </h1>
-              <p className="text-gray-400">
+              <p className="text-[#7d8590] text-sm">
                 Execution readiness across all programs {permissions.role && `(${permissions.role})`}
               </p>
             </div>
@@ -418,7 +419,7 @@ export default function ProgramDashboard() {
             {permissions.isPlatformAdmin && (
               <Button
                 onClick={() => router.push('/admin')}
-                className="bg-purple-600 hover:bg-purple-700 text-white"
+                className="bg-[#1f2937] hover:bg-[#374151] text-[#e6edf3] border border-[#374151]"
               >
                 <Users className="w-4 h-4 mr-2" />
                 Admin Dashboard
@@ -427,7 +428,7 @@ export default function ProgramDashboard() {
             {permissions.canCreateProgram && (
               <Button
                 onClick={() => router.push('/programs/new')}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-[#1f6feb]/80 hover:bg-[#1f6feb] text-white border border-[#1f6feb]/50"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 New Program
@@ -436,7 +437,7 @@ export default function ProgramDashboard() {
             <Button
               onClick={handleLogout}
               variant="outline"
-              className="bg-black/25 border-gray-700 text-gray-300 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-400"
+              className="bg-[#1a1f26] border-[#30363d] text-[#7d8590] hover:bg-[#21262d] hover:border-[#8b949e] hover:text-[#e6edf3]"
             >
               <LogOut className="w-4 h-4 mr-2" />
               Logout
