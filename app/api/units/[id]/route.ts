@@ -20,7 +20,7 @@ export async function GET(
 
     // Get proofs
     const { data: proofs } = await supabase
-      .from('unit_proofs')
+      .from('proofs')
       .select('*')
       .eq('unit_id', params.id)
       .order('uploaded_at', { ascending: false });

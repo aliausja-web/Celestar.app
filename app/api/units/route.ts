@@ -35,11 +35,11 @@ export async function GET(request: NextRequest) {
     const unitsWithProofs = await Promise.all(
       units.map(async (unit) => {
         const { data: proofs } = await supabase
-          .from('unit_proofs')
+          .from('proofs')
           .select('*')
           .eq('unit_id', unit.id)
           .eq('is_valid', true)
-          .order('uploaded_at', { ascending: false });
+          .order('uploaded_at', { ascending: false});
 
         return {
           ...unit,

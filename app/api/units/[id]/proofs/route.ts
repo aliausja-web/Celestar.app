@@ -36,7 +36,7 @@ export async function POST(
 
     // Create proof
     const { data: proof, error: proofError } = await supabase
-      .from('unit_proofs')
+      .from('proofs')
       .insert([
         {
           unit_id: params.id,

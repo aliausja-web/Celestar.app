@@ -39,7 +39,7 @@ export async function POST(
 
     // Get the proof to check uploader
     const { data: proof, error: proofFetchError } = await supabase
-      .from('unit_proofs')
+      .from('proofs')
       .select('*')
       .eq('id', params.proofId)
       .single();
@@ -80,7 +80,7 @@ export async function POST(
     }
 
     const { error: updateError } = await supabase
-      .from('unit_proofs')
+      .from('proofs')
       .update(updateData)
       .eq('id', params.proofId);
 
