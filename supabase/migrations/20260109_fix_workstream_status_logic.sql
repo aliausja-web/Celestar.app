@@ -7,10 +7,10 @@
 -- SYMPTOM: Empty workstream shows GREEN even though it has no verified units
 -- IMPACT: Critical for commercial use - false sense of readiness
 --
--- SOLUTION: Workstream is only GREEN if:
---   1. It has at least one unit (not empty)
---   2. ALL units are GREEN (fully verified)
--- Otherwise, workstream is RED
+-- SOLUTION: Workstream status logic:
+--   - PENDING (NULL): Workstream has no units yet (neutral state)
+--   - GREEN: Workstream has units AND all units are GREEN (fully verified)
+--   - RED: Workstream has units but not all are GREEN
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION compute_workstream_status(workstream_id_param uuid)
@@ -25,9 +25,9 @@ BEGIN
   FROM units
   WHERE workstream_id = workstream_id_param;
 
-  -- If workstream has NO units, it's RED (not ready)
+  -- If workstream has NO units, it's PENDING (neutral - not started yet)
   IF v_total_units = 0 THEN
-    RETURN 'RED';
+    RETURN NULL;  -- NULL represents pending/neutral state
   END IF;
 
   -- Count GREEN units
@@ -46,7 +46,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-COMMENT ON FUNCTION compute_workstream_status IS 'Computes workstream overall_status. Returns GREEN only if workstream has units AND all units are verified (GREEN). Empty workstreams return RED.';
+COMMENT ON FUNCTION compute_workstream_status IS 'Computes workstream overall_status. Returns NULL (pending) for empty workstreams, GREEN if all units are verified, RED if any units are not verified.';
 
 -- Update all existing workstream statuses to reflect correct logic
 UPDATE workstreams

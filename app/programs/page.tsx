@@ -277,12 +277,11 @@ export default function ProgramDashboard() {
 
   function WorkstreamCard({ workstream }: { workstream: WorkstreamWithMetrics }) {
     const isGreen = workstream.overall_status === 'GREEN';
-    // Neutral card - RED appears only in badge and progress indicator
-    const cardStyle = 'border-[#30363d] bg-[#161b22]';
+    const isPending = !workstream.overall_status || workstream.total_units === 0;
+    const isRed = !isGreen && !isPending;
 
-    const progress = workstream.total_units > 0
-      ? Math.round((workstream.green_units / workstream.total_units) * 100)
-      : 0;
+    // All cards neutral - urgency comes from information, not visuals
+    const cardStyle = 'border-[#30363d] bg-[#161b22]';
 
     return (
       <Card
@@ -302,51 +301,70 @@ export default function ProgramDashboard() {
                 </CardDescription>
               )}
             </div>
-            <Badge
-              className={`${
-                isGreen
-                  ? 'border-[#238636]/50 bg-[#238636]/10 text-[#3fb950]' // Calm green
-                  : 'border-red-600 bg-red-900/40 text-red-400 font-semibold' // Aggressive RED
-              } text-xs px-2.5 py-1 flex items-center gap-1.5`}
-            >
-              {isGreen ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3.5 h-3.5" />}
-              {workstream.overall_status}
-            </Badge>
+            {/* Status badge - only visual indicator */}
+            {isPending ? (
+              <Badge className="border-[#7d8590]/30 bg-[#7d8590]/10 text-[#7d8590] text-xs px-2.5 py-1 flex items-center gap-1.5">
+                <Clock className="w-3 h-3" />
+                PENDING
+              </Badge>
+            ) : (
+              <Badge
+                className={`${
+                  isGreen
+                    ? 'border-[#238636]/50 bg-[#238636]/10 text-[#3fb950]'
+                    : 'border-red-600/40 bg-red-900/20 text-red-400'
+                } text-xs px-2.5 py-1 flex items-center gap-1.5`}
+              >
+                {isGreen ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                {workstream.overall_status}
+              </Badge>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {/* Unit Counts */}
+          {/* URGENCY THROUGH INFORMATION - Top priority: time pressure */}
+          {isRed && workstream.stale_units > 0 && (
+            <div className="space-y-1 pb-3 border-b border-[#30363d]">
+              <div className="flex items-center gap-2 text-sm text-red-300">
+                <Clock className="w-4 h-4" />
+                <span className="font-medium">{workstream.stale_units} unit{workstream.stale_units > 1 ? 's' : ''} past deadline</span>
+              </div>
+              <div className="text-xs text-[#7d8590] pl-6">
+                Action required to meet program timeline
+              </div>
+            </div>
+          )}
+
+          {/* Escalation state - creates urgency through visibility */}
+          {isRed && workstream.recent_escalations > 0 && (
+            <div className="space-y-1 pb-3 border-b border-[#30363d]">
+              <div className="flex items-center gap-2 text-sm text-orange-300">
+                <TrendingUp className="w-4 h-4" />
+                <span className="font-medium">{workstream.recent_escalations} escalation{workstream.recent_escalations > 1 ? 's' : ''} in last 24h</span>
+              </div>
+              <div className="text-xs text-[#7d8590] pl-6">
+                Pending leadership review
+              </div>
+            </div>
+          )}
+
+          {/* Unit counts - informational, not urgent */}
           <div className="grid grid-cols-3 gap-2">
             <div className="text-center p-2 bg-[#161b22] rounded border border-[#30363d]">
               <div className="text-xs text-[#7d8590]">Total</div>
               <div className="text-base font-medium text-[#e6edf3]">{workstream.total_units}</div>
             </div>
             <div className="text-center p-2 bg-[#238636]/5 rounded border border-[#238636]/20">
-              <div className="text-xs text-[#3fb950]/80">Green</div>
+              <div className="text-xs text-[#3fb950]/80">Verified</div>
               <div className="text-base font-medium text-[#3fb950]">{workstream.green_units}</div>
             </div>
-            <div className="text-center p-2 bg-red-900/20 rounded border border-red-600/30">
-              <div className="text-xs text-red-400/80">Red</div>
-              <div className="text-base font-semibold text-red-400">{workstream.red_units}</div>
+            <div className="text-center p-2 bg-[#161b22] rounded border border-[#30363d]">
+              <div className="text-xs text-[#7d8590]">Pending</div>
+              <div className="text-base font-medium text-[#e6edf3]">{workstream.red_units}</div>
             </div>
           </div>
 
-          {/* Alerts - RED is most important */}
-          {workstream.stale_units > 0 && (
-            <div className="flex items-center gap-2 text-xs text-red-300 bg-red-900/30 border border-red-600/40 rounded px-2.5 py-1.5 font-medium">
-              <Clock className="w-3.5 h-3.5" />
-              <span>{workstream.stale_units} units past deadline</span>
-            </div>
-          )}
-
-          {workstream.recent_escalations > 0 && (
-            <div className="flex items-center gap-2 text-xs text-orange-300/90 bg-orange-900/20 border border-orange-600/30 rounded px-2.5 py-1.5">
-              <TrendingUp className="w-3.5 h-3.5" />
-              <span>{workstream.recent_escalations} escalations (24h)</span>
-            </div>
-          )}
-
-          {/* Last Update */}
+          {/* Accountability: Last verified timestamp */}
           <div className="text-xs text-[#7d8590] pt-2 border-t border-[#30363d]">
             Last verified: {format(new Date(workstream.last_update_time), 'MMM d, HH:mm')}
           </div>
