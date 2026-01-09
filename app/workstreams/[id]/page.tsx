@@ -194,7 +194,7 @@ export default function WorkstreamBoard() {
     const requiredTypes = unit.proof_requirements.required_types;
 
     return (
-      <Card className={`transition-all ${isGreen ? 'border-[#30363d] bg-[#161b22]' : 'border-red-600/60 bg-red-950/30 shadow-red-900/20 shadow-lg'}`}>
+      <Card className="border-[#30363d] bg-[#161b22] transition-all">
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-4">
             {/* Left: Unit Info */}

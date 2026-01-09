@@ -277,10 +277,8 @@ export default function ProgramDashboard() {
 
   function WorkstreamCard({ workstream }: { workstream: WorkstreamWithMetrics }) {
     const isGreen = workstream.overall_status === 'GREEN';
-    // Control room aesthetic: RED is aggressive, GREEN is calm, background disappears
-    const statusColor = isGreen
-      ? 'border-[#30363d] bg-[#161b22]' // Neutral, barely visible when green
-      : 'border-red-600/60 bg-red-950/30 shadow-red-900/20 shadow-lg'; // RED is LOUD
+    // Neutral card - RED appears only in badge and progress indicator
+    const cardStyle = 'border-[#30363d] bg-[#161b22]';
 
     const progress = workstream.total_units > 0
       ? Math.round((workstream.green_units / workstream.total_units) * 100)
@@ -288,7 +286,7 @@ export default function ProgramDashboard() {
 
     return (
       <Card
-        className={`${statusColor} border cursor-pointer hover:border-[#3d444d] transition-colors`}
+        className={`${cardStyle} border cursor-pointer hover:border-[#3d444d] transition-colors`}
         onClick={() => router.push(`/workstreams/${workstream.id}`)}
       >
         <CardHeader className="pb-3">
@@ -317,22 +315,6 @@ export default function ProgramDashboard() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {/* Progress Bar */}
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs">
-              <span className="text-[#7d8590]">Completion</span>
-              <span className="text-[#e6edf3] font-medium">{progress}%</span>
-            </div>
-            <div className="w-full h-1.5 bg-[#21262d] rounded overflow-hidden">
-              <div
-                className={`h-full transition-all ${
-                  isGreen ? 'bg-[#238636]' : 'bg-red-600'
-                }`}
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-          </div>
-
           {/* Unit Counts */}
           <div className="grid grid-cols-3 gap-2">
             <div className="text-center p-2 bg-[#161b22] rounded border border-[#30363d]">
@@ -365,8 +347,8 @@ export default function ProgramDashboard() {
           )}
 
           {/* Last Update */}
-          <div className="text-xs text-gray-500 pt-2 border-t border-gray-800">
-            Last updated: {format(new Date(workstream.last_update_time), 'MMM d, HH:mm')}
+          <div className="text-xs text-[#7d8590] pt-2 border-t border-[#30363d]">
+            Last verified: {format(new Date(workstream.last_update_time), 'MMM d, HH:mm')}
           </div>
         </CardContent>
       </Card>
@@ -428,7 +410,7 @@ export default function ProgramDashboard() {
             {permissions.canCreateProgram && (
               <Button
                 onClick={() => router.push('/programs/new')}
-                className="bg-[#1f6feb]/80 hover:bg-[#1f6feb] text-white border border-[#1f6feb]/50"
+                className="bg-[#1c5fc7]/90 hover:bg-[#1c5fc7] text-white border border-[#1c5fc7]/50"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 New Program
@@ -512,13 +494,13 @@ export default function ProgramDashboard() {
         {selectedProgram && (
           <>
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">
+              <h2 className="text-xl font-medium text-[#e6edf3]">
                 Workstreams ({workstreams.length})
               </h2>
               {permissions.canCreateProgram && (
                 <Button
                   onClick={() => router.push(`/programs/${selectedProgram.id}/workstreams/new`)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className="bg-[#1c5fc7]/90 hover:bg-[#1c5fc7] text-white border border-[#1c5fc7]/50"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Workstream
