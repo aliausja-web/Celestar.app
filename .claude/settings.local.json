@@ -20,7 +20,8 @@
       "Bash(rm:*)",
       "Bash(supabase functions list:*)",
       "Bash(psql:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(npx supabase:*)"
     ]
   }
 }

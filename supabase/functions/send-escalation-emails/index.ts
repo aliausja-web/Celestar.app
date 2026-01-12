@@ -45,10 +45,36 @@ serve(async (req) => {
 
     let sentCount = 0;
     let failedCount = 0;
+    let cancelledCount = 0;
 
     // Process each email
     for (const email of pendingEmails) {
       try {
+        // Check if escalation is still active (not resolved)
+        const { data: escalation } = await supabase
+          .from('unit_escalations')
+          .select('status')
+          .eq('id', email.escalation_id)
+          .single();
+
+        // Skip sending if escalation has been resolved
+        if (escalation?.status === 'resolved') {
+          console.log(`Skipping email for resolved escalation: ${email.escalation_id}`);
+
+          // Mark notification as cancelled
+          await supabase
+            .from('escalation_notifications')
+            .update({
+              status: 'failed',
+              error_message: 'Escalation resolved before email sent',
+              sent_at: new Date().toISOString(),
+            })
+            .eq('id', email.id);
+
+          cancelledCount++;
+          continue;
+        }
+
         // Send email via Resend
         const response = await fetch('https://api.resend.com/emails', {
           method: 'POST',
@@ -109,12 +135,15 @@ serve(async (req) => {
       }
     }
 
+    console.log(`✅ Sent: ${sentCount}, ❌ Failed: ${failedCount}, ⏭️ Cancelled: ${cancelledCount}`);
+
     return new Response(
       JSON.stringify({
         success: true,
         processed: pendingEmails.length,
         sent: sentCount,
         failed: failedCount,
+        cancelled: cancelledCount,
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
