@@ -40,11 +40,9 @@ export default function LoginPage() {
           router.push('/client');
         }
       }
-    } else if (user && !userData && !authLoading) {
-      // Only show error if we're done loading and still no profile
-      console.error('User authenticated but no profile data found. Check console for details.');
-      toast.error('Account setup incomplete. Please contact administrator.');
     }
+    // Note: Removed "account setup incomplete" notification
+    // Profile loading is async and redirects automatically when ready
   }, [user, userData, authLoading, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
