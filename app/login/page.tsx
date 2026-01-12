@@ -15,7 +15,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { signIn, user, userData } = useAuth();
+  const { signIn, user, userData, loading: authLoading } = useAuth();
 
   useEffect(() => {
     if (user && userData) {
@@ -40,12 +40,12 @@ export default function LoginPage() {
           router.push('/client');
         }
       }
-    } else if (user && !userData) {
-      // User is authenticated but has no profile record
+    } else if (user && !userData && !authLoading) {
+      // Only show error if we're done loading and still no profile
       console.error('User authenticated but no profile data found. Check console for details.');
       toast.error('Account setup incomplete. Please contact administrator.');
     }
-  }, [user, userData, router]);
+  }, [user, userData, authLoading, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
