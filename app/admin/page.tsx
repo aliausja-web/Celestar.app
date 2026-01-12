@@ -12,16 +12,27 @@ export default function AdminDashboard() {
     totalPrograms: 0,
     pendingNotifications: 0,
   });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: Fetch actual stats from API
-    setStats({
-      totalClients: 2,
-      totalUsers: 6,
-      totalPrograms: 4,
-      pendingNotifications: 0,
-    });
+    fetchStats();
   }, []);
+
+  const fetchStats = async () => {
+    try {
+      const response = await fetch('/api/admin/stats');
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data.stats);
+      } else {
+        console.error('Failed to fetch stats');
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const cards = [
     {
@@ -61,6 +72,14 @@ export default function AdminDashboard() {
       description: 'System notifications',
     },
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0E1116] flex items-center justify-center">
+        <div className="text-[#e6edf3]">Loading dashboard...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0E1116]">
