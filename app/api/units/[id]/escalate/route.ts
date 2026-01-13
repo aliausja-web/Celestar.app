@@ -20,7 +20,7 @@ export async function POST(
     const supabase = getSupabaseServer();
     const unitId = params.id;
     const body = await request.json();
-    const { reason } = body;
+    const { reason, mark_as_blocked } = body;
 
     if (!reason || !reason.trim()) {
       return NextResponse.json(
@@ -118,19 +118,31 @@ export async function POST(
       await supabase.from('escalation_notifications').insert(emailNotifications);
     }
 
-    // Update unit escalation level
+    // Update unit escalation level and blocked status if requested
+    const updateData: any = {
+      current_escalation_level: nextLevel,
+      last_escalated_at: new Date().toISOString(),
+    };
+
+    // If marking as blocked, set blocked fields
+    if (mark_as_blocked === true) {
+      updateData.is_blocked = true;
+      updateData.blocked_reason = reason;
+      updateData.blocked_at = new Date().toISOString();
+      updateData.blocked_by = context!.user_id;
+      updateData.computed_status = 'BLOCKED';
+    }
+
     await supabase
       .from('units')
-      .update({
-        current_escalation_level: nextLevel,
-        last_escalated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', unitId);
 
     return NextResponse.json({
       success: true,
       new_level: nextLevel,
       notifications_sent: usersToNotify?.length || 0,
+      blocked: mark_as_blocked === true,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
