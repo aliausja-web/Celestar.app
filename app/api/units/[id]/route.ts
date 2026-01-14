@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
+import { authorize } from '@/lib/auth-utils';
 
 // GET /api/units/[id] - Get a specific unit with proofs
 export async function GET(
@@ -7,20 +8,49 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    // TENANT SAFETY: Authenticate user
+    const authHeader = request.headers.get('authorization');
+    const { authorized, context, error: authError } = await authorize(authHeader);
+
+    if (!authorized) {
+      return NextResponse.json({ error: authError }, { status: 401 });
+    }
+
     const supabase = getSupabaseServer();
 
-    // Get unit
+    // TENANT SAFETY: Get unit with organization hierarchy
     const { data: unit, error } = await supabase
       .from('units')
-      .select('*')
+      .select(`
+        *,
+        workstreams!inner(
+          id,
+          name,
+          programs!inner(
+            id,
+            name,
+            organization_id
+          )
+        )
+      `)
       .eq('id', params.id)
       .single();
 
-    if (error) throw error;
+    if (error || !unit) {
+      return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
+    }
+
+    // TENANT SAFETY: Verify unit belongs to user's organization
+    const unitOrgId = unit.workstreams.programs.organization_id;
+    const userOrgId = context!.org_id;
+
+    if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== userOrgId) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
+    }
 
     // Get proofs
     const { data: proofs } = await supabase
-      .from('proofs')
+      .from('unit_proofs')
       .select('*')
       .eq('unit_id', params.id)
       .order('uploaded_at', { ascending: false });
@@ -42,7 +72,36 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    // TENANT SAFETY: Authenticate user
+    const authHeader = request.headers.get('authorization');
+    const { authorized, context, error: authError } = await authorize(authHeader, {
+      requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD'],
+    });
+
+    if (!authorized) {
+      return NextResponse.json({ error: authError }, { status: 403 });
+    }
+
     const supabase = getSupabaseServer();
+
+    // TENANT SAFETY: Verify unit belongs to user's organization before updating
+    const { data: unitCheck } = await supabase
+      .from('units')
+      .select('workstreams!inner(programs!inner(organization_id))')
+      .eq('id', params.id)
+      .single();
+
+    if (!unitCheck) {
+      return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
+    }
+
+    const unitOrgId = unitCheck.workstreams[0].programs[0].organization_id;
+    const userOrgId = context!.org_id;
+
+    if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== userOrgId) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
+    }
+
     const body = await request.json();
 
     const { data: unit, error } = await supabase
@@ -66,7 +125,35 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    // TENANT SAFETY: Authenticate user
+    const authHeader = request.headers.get('authorization');
+    const { authorized, context, error: authError } = await authorize(authHeader, {
+      requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER'],
+    });
+
+    if (!authorized) {
+      return NextResponse.json({ error: authError }, { status: 403 });
+    }
+
     const supabase = getSupabaseServer();
+
+    // TENANT SAFETY: Verify unit belongs to user's organization before deleting
+    const { data: unitCheck } = await supabase
+      .from('units')
+      .select('workstreams!inner(programs!inner(organization_id))')
+      .eq('id', params.id)
+      .single();
+
+    if (!unitCheck) {
+      return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
+    }
+
+    const unitOrgId = unitCheck.workstreams[0].programs[0].organization_id;
+    const userOrgId = context!.org_id;
+
+    if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== userOrgId) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
+    }
 
     const { error } = await supabase
       .from('units')

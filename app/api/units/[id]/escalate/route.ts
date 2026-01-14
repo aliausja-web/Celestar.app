@@ -10,7 +10,7 @@ export async function POST(
   try {
     const authHeader = request.headers.get('authorization');
     const { authorized, context, error: authError } = await authorize(authHeader, {
-      requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD'],
+      requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD', 'CLIENT_VIEWER'],
     });
 
     if (!authorized) {
@@ -28,6 +28,21 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    // Get user profile to check role
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('user_id', context!.user_id)
+      .single();
+
+    const userRole = userProfile?.role;
+
+    // Role-based BLOCKED authority check
+    // Only WORKSTREAM_LEAD, PROGRAM_OWNER, or PLATFORM_ADMIN can confirm BLOCKED
+    // CLIENT can propose blockage but cannot set it directly
+    const canConfirmBlocked = ['WORKSTREAM_LEAD', 'PROGRAM_OWNER', 'PLATFORM_ADMIN'].includes(userRole);
+    const actuallyMarkBlocked = mark_as_blocked && canConfirmBlocked;
 
     // Get current unit details
     const { data: unit, error: unitError } = await supabase
@@ -53,7 +68,7 @@ export async function POST(
 
     const targetRoles = targetRolesMap[nextLevel] || ['PROGRAM_OWNER'];
 
-    // Create escalation record
+    // Create escalation record with proposed_blocked tracking
     const { data: escalation, error: escalationError } = await supabase
       .from('unit_escalations')
       .insert([
@@ -67,6 +82,8 @@ export async function POST(
           visible_to_roles: targetRoles,
           message: `Manual escalation (Level ${nextLevel}): ${reason}`,
           status: 'active',
+          proposed_blocked: mark_as_blocked && !canConfirmBlocked, // Track if CLIENT proposed blockage
+          proposed_by_role: userRole,
         },
       ])
       .select()
@@ -118,14 +135,14 @@ export async function POST(
       await supabase.from('escalation_notifications').insert(emailNotifications);
     }
 
-    // Update unit escalation level and blocked status if requested
+    // Update unit escalation level and blocked status if requested AND authorized
     const updateData: any = {
       current_escalation_level: nextLevel,
       last_escalated_at: new Date().toISOString(),
     };
 
-    // If marking as blocked, set blocked fields
-    if (mark_as_blocked === true) {
+    // If marking as blocked AND user has authority, set blocked fields
+    if (actuallyMarkBlocked === true) {
       updateData.is_blocked = true;
       updateData.blocked_reason = reason;
       updateData.blocked_at = new Date().toISOString();
@@ -142,7 +159,13 @@ export async function POST(
       success: true,
       new_level: nextLevel,
       notifications_sent: usersToNotify?.length || 0,
-      blocked: mark_as_blocked === true,
+      blocked: actuallyMarkBlocked === true,
+      blocked_proposed: mark_as_blocked && !canConfirmBlocked, // CLIENT proposed but lacks authority
+      message: mark_as_blocked && !canConfirmBlocked
+        ? 'Escalation created with proposed blockage. WORKSTREAM_LEAD or PROGRAM_OWNER must confirm.'
+        : actuallyMarkBlocked
+        ? 'Unit marked as BLOCKED.'
+        : 'Escalation created.',
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
