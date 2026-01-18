@@ -287,7 +287,7 @@ Typical User: Site inspector, field technician, data collector
 | | READ | View workstreams in own org |
 | | UPDATE | ❌ Cannot modify |
 | | DELETE | ❌ Cannot delete |
-| **Units** | CREATE | Create units in own org |
+| **Units** | CREATE | ✅ Create units in own org |
 | | READ | View units in own org |
 | | UPDATE | ❌ Cannot modify |
 | | DELETE | ❌ Cannot delete |
