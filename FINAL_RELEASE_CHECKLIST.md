@@ -21,18 +21,8 @@
 
 #### Migration 3: Close Governance Loopholes
 **File:** `supabase/migrations/20260113_close_governance_loopholes.sql`
-**Status:** ⏳ NEEDS TO RUN
+**Status:** ✅ ALREADY RUN
 **Purpose:** Role-based BLOCKED authority, proof superseding, CUSTOM alert validation
-
-**How to Run:**
-```bash
-# In Supabase SQL Editor
-# Copy entire file content from:
-supabase/migrations/20260113_close_governance_loopholes.sql
-
-# Paste and execute
-# Verify success messages appear
-```
 
 ---
 
