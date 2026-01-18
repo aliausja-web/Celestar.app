@@ -19,13 +19,461 @@ Celestar is a multi-tenant execution readiness platform that tracks programs, wo
 
 ## USER ROLES & PERMISSIONS
 
-| Role | Description | Key Permissions |
-|------|-------------|-----------------|
-| **PLATFORM_ADMIN** | System administrator | Full access, manage users, view all orgs |
-| **PROGRAM_OWNER** | Program manager | Create programs, approve high-criticality, unblock units |
-| **WORKSTREAM_LEAD** | Workstream supervisor | Create workstreams/units, approve proofs, escalate |
-| **FIELD_CONTRIBUTOR** | Field worker | Create units, upload proofs (cannot approve) |
-| **CLIENT_VIEWER** | External client | Read-only, can request escalations |
+### Role Hierarchy (Highest to Lowest Authority)
+
+```
+PLATFORM_ADMIN (God Mode)
+    ↓
+PROGRAM_OWNER (Program-Level Authority)
+    ↓
+WORKSTREAM_LEAD (Workstream-Level Authority)
+    ↓
+FIELD_CONTRIBUTOR (Data Entry Only)
+    ↓
+CLIENT_VIEWER (Read-Only Observer)
+```
+
+---
+
+### ROLE 1: PLATFORM_ADMIN
+
+**Description:** System-wide administrator with unrestricted access across all organizations.
+
+**Login Context:**
+```
+Email: admin@celestar.app (example)
+Organization: N/A (sees all organizations)
+Typical User: Platform operator, system administrator
+```
+
+**Full Authority Matrix:**
+
+| Area | Permission | Details |
+|------|------------|---------|
+| **Organizations** | CREATE | Create new client organizations |
+| | READ | View all organizations |
+| | UPDATE | Modify any organization |
+| | DELETE | Remove organizations |
+| **Users** | CREATE | Create users in any org with any role |
+| | READ | View all users across platform |
+| | UPDATE | Change any user's role or org |
+| | DELETE | Remove any user |
+| **Programs** | CREATE | Create programs in any org |
+| | READ | View all programs (bypasses RLS) |
+| | UPDATE | Modify any program |
+| | DELETE | Delete any program (cascades) |
+| **Workstreams** | CREATE | Create in any program |
+| | READ | View all workstreams |
+| | UPDATE | Modify any workstream |
+| | DELETE | Delete any workstream |
+| **Units** | CREATE | Create in any workstream |
+| | READ | View all units |
+| | UPDATE | Modify any unit |
+| | DELETE | Delete any unit |
+| | BLOCK | Mark any unit as BLOCKED |
+| | UNBLOCK | Remove BLOCKED status |
+| **Proofs** | UPLOAD | Upload to any unit |
+| | APPROVE | Approve any proof (except own) |
+| | REJECT | Reject any proof |
+| **Escalations** | CREATE | Escalate any unit |
+| | RESOLVE | Resolve any escalation |
+| **Admin Dashboard** | ACCESS | Full access to /admin |
+| | STATS | View system-wide statistics |
+| **Attention Queue** | VIEW | See items from ALL organizations |
+
+**Special Powers:**
+- Bypasses Row Level Security (RLS) - sees all data
+- Can approve HIGH CRITICALITY units
+- Receives Level 3 escalation notifications
+- Can impersonate other roles (if implemented)
+
+**Test Scenarios for PLATFORM_ADMIN:**
+```
+Test A1: Cross-Org Access
+  ACTION: View program from Organization B
+  EXPECTED: Access granted (RLS bypass)
+
+Test A2: Create User in Any Org
+  ACTION: Create WORKSTREAM_LEAD in "Acme Corp"
+  EXPECTED: User created, assigned to Acme Corp
+
+Test A3: Unblock Unit
+  ACTION: Unblock a BLOCKED unit
+  EXPECTED: Unit unblocked, status recomputed
+
+Test A4: High-Criticality Approval
+  ACTION: Approve proof on high_criticality unit
+  EXPECTED: Approval succeeds
+```
+
+---
+
+### ROLE 2: PROGRAM_OWNER
+
+**Description:** Senior manager responsible for one or more programs within their organization.
+
+**Login Context:**
+```
+Email: owner@acmecorp.com (example)
+Organization: Acme Corporation (org_id: uuid)
+Typical User: Project director, program manager, department head
+```
+
+**Authority Matrix:**
+
+| Area | Permission | Details |
+|------|------------|---------|
+| **Organizations** | - | No access |
+| **Users** | - | No access (cannot manage users) |
+| **Programs** | CREATE | Create programs in OWN org only |
+| | READ | View programs in OWN org (RLS enforced) |
+| | UPDATE | Modify programs in OWN org |
+| | DELETE | Delete programs in OWN org |
+| **Workstreams** | CREATE | Create in own org's programs |
+| | READ | View workstreams in own org |
+| | UPDATE | Modify workstreams in own org |
+| | DELETE | Delete workstreams in own org |
+| **Units** | CREATE | Create in own org's workstreams |
+| | READ | View units in own org |
+| | UPDATE | Modify units in own org |
+| | DELETE | Delete units in own org |
+| | BLOCK | Mark units as BLOCKED (confirmed) |
+| | UNBLOCK | Remove BLOCKED status |
+| **Proofs** | UPLOAD | Upload to own org's units |
+| | APPROVE | Approve proofs (except own uploads) |
+| | REJECT | Reject proofs with reason |
+| **Escalations** | CREATE | Escalate units in own org |
+| | RESOLVE | Resolve escalations in own org |
+| **Admin Dashboard** | - | No access |
+| **Attention Queue** | VIEW | See items from OWN org only |
+
+**Special Powers:**
+- Can approve HIGH CRITICALITY unit proofs
+- Can confirm BLOCKED status (when proposed by CLIENT)
+- Receives Level 2 and Level 3 escalation notifications
+- Can unblock units that were blocked by WORKSTREAM_LEAD
+
+**Restrictions:**
+- Cannot see other organizations' data
+- Cannot manage users or create accounts
+- Cannot access /admin dashboard
+
+**Test Scenarios for PROGRAM_OWNER:**
+```
+Test O1: Create Program
+  ACTION: Navigate to /programs/new, fill form
+  EXPECTED: Program created in own org
+
+Test O2: Cross-Tenant Blocked
+  ACTION: Try to access /api/programs/[other-org-id]
+  EXPECTED: 403 Forbidden
+
+Test O3: Approve High-Criticality
+  ACTION: Approve proof on high_criticality=true unit
+  EXPECTED: Approval succeeds
+
+Test O4: Confirm CLIENT Block Proposal
+  ACTION: View escalation with proposed_blocked=true
+  EXPECTED: Can confirm and set is_blocked=true
+
+Test O5: Unblock Unit
+  ACTION: Unblock a BLOCKED unit
+  EXPECTED: Unit unblocked, status = RED or GREEN
+```
+
+---
+
+### ROLE 3: WORKSTREAM_LEAD
+
+**Description:** Team leader responsible for managing workstreams and their deliverables (units).
+
+**Login Context:**
+```
+Email: lead@acmecorp.com (example)
+Organization: Acme Corporation (org_id: uuid)
+Typical User: Team lead, workstream manager, supervisor
+```
+
+**Authority Matrix:**
+
+| Area | Permission | Details |
+|------|------------|---------|
+| **Organizations** | - | No access |
+| **Users** | - | No access |
+| **Programs** | CREATE | ❌ Cannot create programs |
+| | READ | View programs in OWN org |
+| | UPDATE | ❌ Cannot modify programs |
+| | DELETE | ❌ Cannot delete programs |
+| **Workstreams** | CREATE | Create in own org's programs |
+| | READ | View workstreams in own org |
+| | UPDATE | Modify workstreams in own org |
+| | DELETE | Delete workstreams (if authorized) |
+| **Units** | CREATE | Create in own org's workstreams |
+| | READ | View units in own org |
+| | UPDATE | Modify units in own org |
+| | DELETE | Delete units in own org |
+| | BLOCK | Mark units as BLOCKED (confirmed) |
+| | UNBLOCK | ❌ Cannot unblock (needs OWNER) |
+| **Proofs** | UPLOAD | Upload to own org's units |
+| | APPROVE | Approve proofs (NORMAL criticality only) |
+| | REJECT | Reject proofs with reason |
+| **Escalations** | CREATE | Escalate units with BLOCKED authority |
+| | RESOLVE | ❌ Cannot resolve (auto-resolves on GREEN) |
+| **Admin Dashboard** | - | No access |
+| **Attention Queue** | VIEW | See items from OWN org only |
+
+**Special Powers:**
+- Can directly mark units as BLOCKED (no proposal needed)
+- Can approve proofs (except high_criticality units)
+- Receives Level 1, 2, and 3 escalation notifications for own workstreams
+
+**Restrictions:**
+- Cannot approve HIGH CRITICALITY proofs (needs PROGRAM_OWNER)
+- Cannot unblock units (only PROGRAM_OWNER/ADMIN)
+- Cannot approve own uploaded proofs (separation of duties)
+- Cannot self-approve (uploader ≠ approver)
+
+**Test Scenarios for WORKSTREAM_LEAD:**
+```
+Test L1: Create Workstream
+  ACTION: Add workstream to existing program
+  EXPECTED: Workstream created
+
+Test L2: Approve Normal Proof
+  ACTION: Approve proof on normal criticality unit
+  EXPECTED: Approval succeeds, unit may turn GREEN
+
+Test L3: Approve High-Criticality BLOCKED
+  ACTION: Try to approve proof on high_criticality unit
+  EXPECTED: 403 Forbidden - requires PROGRAM_OWNER
+
+Test L4: Self-Approval BLOCKED
+  ACTION: Upload proof, then try to approve same proof
+  EXPECTED: 403 Forbidden - separation of duties
+
+Test L5: Block Unit
+  ACTION: Escalate with mark_as_blocked=true
+  EXPECTED: Unit immediately BLOCKED (is_blocked=true)
+
+Test L6: Unblock BLOCKED
+  ACTION: Try to call /api/units/[id]/unblock
+  EXPECTED: 403 Forbidden - requires PROGRAM_OWNER
+```
+
+---
+
+### ROLE 4: FIELD_CONTRIBUTOR
+
+**Description:** Field worker who collects and uploads proof evidence but cannot approve.
+
+**Login Context:**
+```
+Email: field@acmecorp.com (example)
+Organization: Acme Corporation (org_id: uuid)
+Typical User: Site inspector, field technician, data collector
+```
+
+**Authority Matrix:**
+
+| Area | Permission | Details |
+|------|------------|---------|
+| **Organizations** | - | No access |
+| **Users** | - | No access |
+| **Programs** | CREATE | ❌ Cannot create |
+| | READ | View programs in OWN org |
+| | UPDATE | ❌ Cannot modify |
+| | DELETE | ❌ Cannot delete |
+| **Workstreams** | CREATE | ❌ Cannot create |
+| | READ | View workstreams in own org |
+| | UPDATE | ❌ Cannot modify |
+| | DELETE | ❌ Cannot delete |
+| **Units** | CREATE | Create units in own org |
+| | READ | View units in own org |
+| | UPDATE | ❌ Cannot modify |
+| | DELETE | ❌ Cannot delete |
+| | BLOCK | ❌ Cannot block |
+| | UNBLOCK | ❌ Cannot unblock |
+| **Proofs** | UPLOAD | ✅ Upload to own org's units |
+| | APPROVE | ❌ Cannot approve any proofs |
+| | REJECT | ❌ Cannot reject |
+| **Escalations** | CREATE | ❌ Cannot escalate |
+| | RESOLVE | ❌ Cannot resolve |
+| **Admin Dashboard** | - | No access |
+| **Attention Queue** | VIEW | ❌ No actionable items shown |
+
+**Special Powers:**
+- Primary proof uploader role
+- Can create units (deliverable definitions)
+- Receives notifications when their proofs are approved/rejected
+
+**Restrictions:**
+- Cannot approve ANY proofs (even from other users)
+- Cannot escalate units
+- Cannot block/unblock units
+- Attention queue shows no items (nothing actionable)
+
+**Test Scenarios for FIELD_CONTRIBUTOR:**
+```
+Test F1: Upload Proof
+  ACTION: Navigate to /units/[id]/upload, submit photo
+  EXPECTED: Proof uploaded, status=pending
+
+Test F2: Approve BLOCKED
+  ACTION: Try to click approve button on any proof
+  EXPECTED: Button hidden or 403 Forbidden
+
+Test F3: Escalate BLOCKED
+  ACTION: Try to click escalate on RED unit
+  EXPECTED: Button hidden or 403 Forbidden
+
+Test F4: View Attention Queue
+  ACTION: Navigate to /attention-queue
+  EXPECTED: Empty list, no actionable items
+
+Test F5: Create Unit
+  ACTION: Create new unit in workstream
+  EXPECTED: Unit created with status RED
+```
+
+---
+
+### ROLE 5: CLIENT_VIEWER
+
+**Description:** External client stakeholder with read-only access to monitor progress.
+
+**Login Context:**
+```
+Email: client@external.com (example)
+Organization: Acme Corporation (org_id: uuid)
+Typical User: Client representative, external stakeholder, auditor
+```
+
+**Authority Matrix:**
+
+| Area | Permission | Details |
+|------|------------|---------|
+| **Organizations** | - | No access |
+| **Users** | - | No access |
+| **Programs** | CREATE | ❌ Cannot create |
+| | READ | View programs in OWN org |
+| | UPDATE | ❌ Cannot modify |
+| | DELETE | ❌ Cannot delete |
+| **Workstreams** | CREATE | ❌ Cannot create |
+| | READ | View workstreams in own org |
+| | UPDATE | ❌ Cannot modify |
+| | DELETE | ❌ Cannot delete |
+| **Units** | CREATE | ❌ Cannot create |
+| | READ | View units in own org |
+| | UPDATE | ❌ Cannot modify |
+| | DELETE | ❌ Cannot delete |
+| | BLOCK | ⚠️ Can PROPOSE only (needs confirmation) |
+| | UNBLOCK | ❌ Cannot unblock |
+| **Proofs** | UPLOAD | ❌ Cannot upload |
+| | APPROVE | ❌ Cannot approve |
+| | REJECT | ❌ Cannot reject |
+| **Escalations** | CREATE | ⚠️ Can request escalation (with proposed_blocked) |
+| | RESOLVE | ❌ Cannot resolve |
+| **Admin Dashboard** | - | No access |
+| **Attention Queue** | VIEW | ❌ Empty (read-only role) |
+
+**Special Powers:**
+- Can REQUEST escalations (creates escalation record)
+- Can PROPOSE blockage (proposed_blocked=true) but cannot confirm
+
+**Restrictions:**
+- Truly read-only for most operations
+- Cannot upload proofs
+- Cannot approve/reject anything
+- Blockage proposals require WORKSTREAM_LEAD or PROGRAM_OWNER confirmation
+- Attention queue is empty (nothing to action)
+
+**Test Scenarios for CLIENT_VIEWER:**
+```
+Test C1: View Program
+  ACTION: Navigate to /programs
+  EXPECTED: Can see programs, workstreams, units (read-only)
+
+Test C2: Upload Proof BLOCKED
+  ACTION: Try to navigate to /units/[id]/upload
+  EXPECTED: Access denied or upload button hidden
+
+Test C3: Approve Proof BLOCKED
+  ACTION: Try to approve any proof
+  EXPECTED: 403 Forbidden
+
+Test C4: Request Escalation
+  ACTION: Click escalate on RED unit, enter reason
+  EXPECTED: Escalation created, notification sent
+
+Test C5: Propose Block (Not Confirmed)
+  ACTION: Escalate with mark_as_blocked=true
+  EXPECTED:
+    - Escalation created with proposed_blocked=true
+    - Unit is_blocked remains FALSE
+    - Response: "Proposed blockage, needs LEAD/OWNER confirmation"
+
+Test C6: Attention Queue Empty
+  ACTION: Navigate to /attention-queue
+  EXPECTED: Empty list, summary shows all zeros
+```
+
+---
+
+## COMPLETE PERMISSION MATRIX
+
+| Action | ADMIN | OWNER | LEAD | CONTRIB | CLIENT |
+|--------|:-----:|:-----:|:----:|:-------:|:------:|
+| **View all orgs** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Manage users** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Access /admin** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Create program** | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **Delete program** | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **Create workstream** | ✅ | ✅ | ✅ | ❌ | ❌ |
+| **Create unit** | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **Upload proof** | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **Approve proof (normal)** | ✅ | ✅ | ✅ | ❌ | ❌ |
+| **Approve proof (high-crit)** | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **Reject proof** | ✅ | ✅ | ✅ | ❌ | ❌ |
+| **Escalate unit** | ✅ | ✅ | ✅ | ❌ | ⚠️ |
+| **Confirm BLOCKED** | ✅ | ✅ | ✅ | ❌ | ❌ |
+| **Propose BLOCKED** | ✅ | ✅ | ✅ | ❌ | ⚠️ |
+| **Unblock unit** | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **View attention queue** | ✅ | ✅ | ✅ | ❌ | ❌ |
+| **Receive escalation emails** | L3 | L2,L3 | L1,L2,L3 | ❌ | ❌ |
+
+Legend: ✅ = Yes | ❌ = No | ⚠️ = Limited/Proposed only | L1/L2/L3 = Escalation levels
+
+---
+
+## SEPARATION OF DUTIES RULES
+
+### Rule 1: Self-Approval Prevention
+```
+INVARIANT: uploaded_by ≠ approved_by
+ENFORCED AT: API layer (/api/units/[id]/proofs/[pid]/approve)
+ERROR: "Cannot approve your own proof"
+```
+
+### Rule 2: High-Criticality Approval
+```
+INVARIANT: high_criticality proofs require PROGRAM_OWNER or PLATFORM_ADMIN
+ENFORCED AT: API layer
+ERROR: "High criticality units require PROGRAM_OWNER approval"
+```
+
+### Rule 3: BLOCKED Authority
+```
+INVARIANT: Only WORKSTREAM_LEAD+ can confirm BLOCKED status
+ENFORCED AT: API layer (/api/units/[id]/escalate)
+BEHAVIOR: CLIENT_VIEWER creates proposed_blocked, not actual blocked
+```
+
+### Rule 4: Unblock Authority
+```
+INVARIANT: Only PROGRAM_OWNER or PLATFORM_ADMIN can unblock
+ENFORCED AT: API layer (/api/units/[id]/unblock)
+ERROR: "Insufficient permissions to unblock"
+```
 
 ---
 
