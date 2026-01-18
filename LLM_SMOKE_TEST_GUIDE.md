@@ -1,0 +1,801 @@
+# CELESTAR LLM SMOKE TEST GUIDE
+
+**Purpose:** Comprehensive testing guide for an LLM to validate all Celestar platform functionality
+**Platform:** Execution Readiness Tracking System
+**Version:** Production Release (9.5/10 Governance)
+
+---
+
+## PLATFORM OVERVIEW
+
+Celestar is a multi-tenant execution readiness platform that tracks programs, workstreams, units (deliverables), and proofs. It features:
+- Role-based access control (5 roles)
+- Multi-level escalation system
+- Proof approval workflow with separation of duties
+- Attention queue for prioritized action items
+- Email notifications for escalations
+
+---
+
+## USER ROLES & PERMISSIONS
+
+| Role | Description | Key Permissions |
+|------|-------------|-----------------|
+| **PLATFORM_ADMIN** | System administrator | Full access, manage users, view all orgs |
+| **PROGRAM_OWNER** | Program manager | Create programs, approve high-criticality, unblock units |
+| **WORKSTREAM_LEAD** | Workstream supervisor | Create workstreams/units, approve proofs, escalate |
+| **FIELD_CONTRIBUTOR** | Field worker | Create units, upload proofs (cannot approve) |
+| **CLIENT_VIEWER** | External client | Read-only, can request escalations |
+
+---
+
+## TEST SCENARIOS BY FEATURE
+
+### 1. AUTHENTICATION
+
+#### Test 1.1: Valid Login
+```
+ACTION: Navigate to /login
+INPUT:
+  - Email: [valid user email]
+  - Password: [valid password]
+EXPECTED:
+  - Redirect to /programs
+  - User session established
+  - Role-appropriate navigation shown
+```
+
+#### Test 1.2: Invalid Login
+```
+ACTION: Navigate to /login
+INPUT:
+  - Email: [valid email]
+  - Password: [wrong password]
+EXPECTED:
+  - Error message displayed
+  - Remain on login page
+  - No session created
+```
+
+#### Test 1.3: Logout
+```
+ACTION: Click logout button in header
+EXPECTED:
+  - Session terminated
+  - Redirect to /login
+  - Protected routes inaccessible
+```
+
+---
+
+### 2. PROGRAM MANAGEMENT
+
+#### Test 2.1: Create Program (as PROGRAM_OWNER)
+```
+ACTION: Navigate to /programs/new
+INPUT:
+  - Name: "Test Program Alpha"
+  - Description: "Testing program creation"
+  - Start Date: [today]
+  - End Date: [30 days from now]
+EXPECTED:
+  - Program created successfully
+  - Appears in program list
+  - Created_by tracks current user
+  - org_id matches user's organization
+```
+
+#### Test 2.2: View Program List
+```
+ACTION: Navigate to /programs
+EXPECTED:
+  - Only programs from user's organization shown (RLS)
+  - Each program shows: name, description, workstream count
+  - Status indicators visible
+```
+
+#### Test 2.3: Edit Program
+```
+ACTION: Click edit on existing program
+INPUT: Change description to "Updated description"
+EXPECTED:
+  - Changes saved
+  - Updated description displayed
+  - Audit trail updated
+```
+
+#### Test 2.4: Delete Program (Cascade)
+```
+ACTION: Delete program with workstreams and units
+EXPECTED:
+  - Confirmation dialog shown
+  - Program deleted
+  - All child workstreams deleted
+  - All child units deleted
+  - All child proofs deleted
+```
+
+#### Test 2.5: Cross-Tenant Access Blocked
+```
+ACTION: Try to access /api/programs/[other-org-program-id]
+EXPECTED:
+  - 403 Forbidden response
+  - "cross-tenant access denied" message
+```
+
+---
+
+### 3. WORKSTREAM MANAGEMENT
+
+#### Test 3.1: Create Workstream
+```
+ACTION: From program detail, click "Add Workstream"
+INPUT:
+  - Name: "Site Preparation"
+  - Type: "site" (from dropdown)
+EXPECTED:
+  - Workstream created under program
+  - Appears in workstream grid
+  - Status initially shows no units
+```
+
+#### Test 3.2: View Workstream Board
+```
+ACTION: Navigate to /workstreams/[id]
+EXPECTED:
+  - Grid layout showing all units
+  - Unit cards show: title, status, deadline, escalation level
+  - Color coding: GREEN/RED/BLOCKED
+  - Metrics bar: total units, green count, red count
+```
+
+#### Test 3.3: Workstream Types
+```
+VALID TYPES:
+  - site
+  - build_fitout
+  - mep_utilities
+  - install_logistics
+  - it_systems
+  - test_commission
+  - operations_live
+  - compliance_permits
+  - branding_creative
+  - other
+```
+
+---
+
+### 4. UNIT (DELIVERABLE) MANAGEMENT
+
+#### Test 4.1: Create Unit with Full Config
+```
+ACTION: Navigate to /workstreams/[id]/units/new
+INPUT:
+  - Title: "Foundation Inspection"
+  - Description: "Complete foundation inspection and documentation"
+  - Owner Party: "ABC Contractors"
+  - Deadline (required_green_by): [7 days from now]
+  - Acceptance Criteria: "Photo evidence of completed foundation"
+  - Proof Requirements:
+    - Required Count: 2
+    - Required Types: ["photo", "document"]
+  - Alert Profile: STANDARD (50%, 75%, 90%)
+  - Escalation Enabled: true
+EXPECTED:
+  - Unit created with status RED (no proofs yet)
+  - Appears in workstream board
+  - Deadline tracking active
+```
+
+#### Test 4.2: Unit Status Computation
+```
+SCENARIO A - RED (Default):
+  - No approved proofs → RED
+  - Past deadline → RED
+  - Insufficient proof count → RED
+
+SCENARIO B - GREEN:
+  - Required proof count met AND
+  - Required proof types present AND
+  - All proofs approved AND
+  - Within deadline
+  → GREEN
+
+SCENARIO C - BLOCKED:
+  - is_blocked = true → BLOCKED (overrides all)
+```
+
+#### Test 4.3: Alert Profiles
+```
+STANDARD Profile:
+  - Level 1 at 50% time elapsed
+  - Level 2 at 75% time elapsed
+  - Level 3 at 90% time elapsed
+
+CRITICAL Profile:
+  - Level 1 at 30% time elapsed
+  - Level 2 at 60% time elapsed
+  - Level 3 at 90% time elapsed
+
+CUSTOM Profile (validated):
+  - 1-5 threshold levels
+  - Percentages 0-100
+  - Strictly increasing order
+```
+
+---
+
+### 5. PROOF UPLOAD & APPROVAL
+
+#### Test 5.1: Upload Proof
+```
+ACTION: Navigate to /units/[id]/upload
+INPUT:
+  - File: [photo/video/document]
+  - Type: "photo"
+  - Captured At: [timestamp]
+EXPECTED:
+  - File uploaded to Supabase storage
+  - Proof record created with status "pending"
+  - uploaded_by tracks current user
+  - Unit status recomputed (may still be RED)
+```
+
+#### Test 5.2: Approve Proof (Valid)
+```
+PRECONDITION: Logged in as WORKSTREAM_LEAD (different from uploader)
+ACTION: Click "Approve" on pending proof
+EXPECTED:
+  - approval_status → "approved"
+  - approved_by, approved_at populated
+  - Unit status recomputed
+  - status_event logged
+```
+
+#### Test 5.3: Reject Proof
+```
+ACTION: Click "Reject" on pending proof
+INPUT: Rejection reason: "Image quality insufficient"
+EXPECTED:
+  - approval_status → "rejected"
+  - rejection_reason saved
+  - Uploader notified
+  - Unit remains RED
+```
+
+#### Test 5.4: Self-Approval Blocked (Separation of Duties)
+```
+PRECONDITION: User uploaded a proof
+ACTION: Same user tries to approve own proof
+EXPECTED:
+  - 403 Forbidden
+  - "Cannot approve own proof" error
+  - Proof remains pending
+```
+
+#### Test 5.5: CLIENT Cannot Approve
+```
+PRECONDITION: Logged in as CLIENT_VIEWER
+ACTION: Try to approve any proof
+EXPECTED:
+  - 403 Forbidden
+  - "Insufficient permissions" error
+```
+
+#### Test 5.6: Proof Superseding
+```
+PRECONDITION: Unit has approved proof
+ACTION: Upload and approve new proof for same unit
+EXPECTED:
+  - Previous proof marked is_superseded = true
+  - superseded_at, superseded_by populated
+  - New proof is the "active" approved proof
+  - status_event logged with supersede count
+```
+
+---
+
+### 6. ESCALATION SYSTEM
+
+#### Test 6.1: Manual Escalation
+```
+ACTION: On RED unit, click "Escalate"
+INPUT:
+  - Reason: "Critical delay - contractor issue"
+  - Level: 2
+  - Mark as Blocked: false
+EXPECTED:
+  - unit_escalations record created
+  - current_escalation_level updated to 2
+  - Notifications sent to WORKSTREAM_LEAD + PROGRAM_OWNER
+  - Email queued in escalation_notifications
+```
+
+#### Test 6.2: Escalate with BLOCKED (Authorized)
+```
+PRECONDITION: Logged in as WORKSTREAM_LEAD
+ACTION: Escalate with mark_as_blocked = true
+INPUT:
+  - Reason: "Waiting for permit approval"
+  - Mark as Blocked: true
+EXPECTED:
+  - is_blocked = true
+  - blocked_reason saved
+  - blocked_by = current user
+  - computed_status = "BLOCKED"
+  - status_event logged
+```
+
+#### Test 6.3: CLIENT Proposes Block (Needs Confirmation)
+```
+PRECONDITION: Logged in as CLIENT_VIEWER
+ACTION: Escalate with mark_as_blocked = true
+EXPECTED:
+  - Escalation created with proposed_blocked = true
+  - Unit NOT actually blocked (is_blocked = false)
+  - Response: "proposed blockage, needs LEAD/OWNER confirmation"
+  - WORKSTREAM_LEAD sees pending block proposal
+```
+
+#### Test 6.4: Unblock Unit
+```
+PRECONDITION: Unit is BLOCKED, logged in as PROGRAM_OWNER
+ACTION: Call /api/units/[id]/unblock
+EXPECTED:
+  - is_blocked = false
+  - blocked_reason, blocked_by, blocked_at cleared
+  - computed_status recomputed (RED or GREEN)
+  - status_event logged
+```
+
+#### Test 6.5: Automatic Escalation (Cron)
+```
+SETUP:
+  - Unit with deadline 10 days away
+  - Alert profile: STANDARD (50%, 75%, 90%)
+  - Current time: 5 days elapsed (50%)
+ACTION: Cron triggers /api/cron/check-escalations
+EXPECTED:
+  - Level 1 escalation created
+  - WORKSTREAM_LEAD notified
+  - Email queued
+  - current_escalation_level = 1
+```
+
+#### Test 6.6: BLOCKED Units Skip Alerts
+```
+PRECONDITION: Unit is BLOCKED
+ACTION: Cron runs escalation check
+EXPECTED:
+  - Unit skipped (no escalation created)
+  - Log shows "skipping blocked unit"
+```
+
+---
+
+### 7. ATTENTION QUEUE
+
+#### Test 7.1: View Attention Queue
+```
+ACTION: Navigate to /attention-queue
+EXPECTED (for WORKSTREAM_LEAD):
+  - Items from own organization only
+  - Sorted by priority (descending)
+  - Summary counts: pending_proofs, units_at_risk, units_blocked, manual_escalations
+```
+
+#### Test 7.2: Priority Calculation
+```
+PRIORITY FORMULA:
+  Base scores:
+    - manual_escalation: 1000
+    - unit_blocked: 900
+    - proof_pending: 700
+    - unit_at_risk: 500
+
+  Bonuses:
+    - +100 per escalation level (max 300)
+    - +200 for high_criticality
+    - +50-200 based on deadline urgency
+    - +up to 100 for escalation age (hours)
+
+EXPECTED: Items sorted highest priority first
+```
+
+#### Test 7.3: CLIENT_VIEWER Sees Empty Queue
+```
+PRECONDITION: Logged in as CLIENT_VIEWER
+ACTION: Navigate to /attention-queue
+EXPECTED:
+  - Empty items list
+  - Summary shows all zeros
+  - "No action items" message
+```
+
+#### Test 7.4: Tenant Isolation in Queue
+```
+PRECONDITION: Two organizations with active items
+ACTION: WORKSTREAM_LEAD from Org A views queue
+EXPECTED:
+  - Only Org A items shown
+  - Org B items not visible
+  - RLS enforced at database level
+```
+
+---
+
+### 8. ADMIN FEATURES
+
+#### Test 8.1: View Admin Dashboard
+```
+PRECONDITION: Logged in as PLATFORM_ADMIN
+ACTION: Navigate to /admin
+EXPECTED:
+  - Stats displayed: totalClients, totalUsers, totalPrograms, pendingNotifications
+  - Quick action buttons visible
+  - User management section
+```
+
+#### Test 8.2: Create User (RBAC)
+```
+ACTION: Click "Add User" in admin
+INPUT:
+  - Email: "newuser@example.com"
+  - Password: "secure123"
+  - Full Name: "Test User"
+  - Role: WORKSTREAM_LEAD
+  - Organization: [select org]
+EXPECTED:
+  - User created in Supabase Auth
+  - Profile created with role and org_id
+  - User can log in immediately
+```
+
+#### Test 8.3: Update User Role
+```
+ACTION: Edit existing user's role
+INPUT: Change from FIELD_CONTRIBUTOR to WORKSTREAM_LEAD
+EXPECTED:
+  - Role updated in profiles table
+  - User's permissions change immediately
+  - No logout required
+```
+
+#### Test 8.4: Delete User
+```
+ACTION: Delete user from admin panel
+EXPECTED:
+  - Confirmation dialog shown
+  - Profile deleted
+  - Auth user remains (soft delete) or cascades
+  - User cannot log in
+```
+
+#### Test 8.5: Create Organization
+```
+ACTION: POST /api/admin/organizations
+INPUT:
+  - Name: "Acme Corporation"
+EXPECTED:
+  - Organization created
+  - Can assign users to org
+  - Can create programs under org
+```
+
+---
+
+### 9. EMAIL NOTIFICATIONS
+
+#### Test 9.1: Escalation Email (Manual)
+```
+TRIGGER: Manual escalation created
+EXPECTED EMAIL:
+  - Subject: "[MANUAL] Escalation Alert - [Unit Title]"
+  - Recipients: Target roles based on escalation level
+  - Content: Unit details, escalation reason, action link
+```
+
+#### Test 9.2: Escalation Email (Automatic)
+```
+TRIGGER: Cron creates automatic escalation
+EXPECTED EMAIL:
+  - Subject: "[ALERT] Automatic Escalation - [Unit Title]"
+  - Recipients: Target roles based on level
+  - Content: Deadline info, time elapsed, action link
+```
+
+#### Test 9.3: Resolved Escalation - No Email
+```
+TRIGGER: Escalation already resolved (status='resolved')
+EXPECTED:
+  - No email sent
+  - Log shows "skipping resolved escalation"
+```
+
+---
+
+### 10. TENANT SAFETY (CRITICAL)
+
+#### Test 10.1: GET /api/units/[id] - Cross-Tenant
+```
+PRECONDITION: User from Org A
+ACTION: GET /api/units/[org-b-unit-id]
+EXPECTED:
+  - 403 Forbidden
+  - "cross-tenant access denied"
+```
+
+#### Test 10.2: GET /api/programs/[id] - Cross-Tenant
+```
+PRECONDITION: User from Org A
+ACTION: GET /api/programs/[org-b-program-id]
+EXPECTED:
+  - 403 Forbidden
+  - "cross-tenant access denied"
+```
+
+#### Test 10.3: PATCH /api/units/[id] - Cross-Tenant
+```
+PRECONDITION: User from Org A
+ACTION: PATCH /api/units/[org-b-unit-id]
+EXPECTED:
+  - 403 Forbidden (auth check before update)
+```
+
+#### Test 10.4: RLS Policy Verification
+```
+ACTION: Query programs table as Org A user
+SQL: SELECT * FROM programs;
+EXPECTED:
+  - Only Org A programs returned
+  - RLS automatically filters
+  - No WHERE clause needed in app
+```
+
+---
+
+### 11. AUDIT TRAIL
+
+#### Test 11.1: Status Event Logging
+```
+ACTION: Block a unit
+EXPECTED in unit_status_events:
+  - event_type: "blocked"
+  - old_status: "RED"
+  - new_status: "BLOCKED"
+  - triggered_by: [user_id]
+  - triggered_by_role: "WORKSTREAM_LEAD"
+  - reason: [blocked_reason]
+  - created_at: [timestamp]
+```
+
+#### Test 11.2: Proof Approval Event
+```
+ACTION: Approve a proof
+EXPECTED in unit_status_events:
+  - event_type: "proof_approved"
+  - triggered_by: [approver_id]
+  - metadata: { proof_id, proofs_superseded }
+```
+
+#### Test 11.3: Events Are Immutable
+```
+ACTION: Try to UPDATE or DELETE from unit_status_events
+EXPECTED:
+  - Operation fails (no UPDATE/DELETE permissions)
+  - Table is append-only
+```
+
+---
+
+### 12. EDGE CASES & ERROR HANDLING
+
+#### Test 12.1: Invalid CUSTOM Alert Config
+```
+ACTION: Create unit with invalid escalation_config
+INPUT:
+  - thresholds: [90, 75, 50] (not strictly increasing)
+EXPECTED:
+  - Database trigger rejects
+  - Error: "Thresholds must be strictly increasing"
+```
+
+#### Test 12.2: BLOCKED Without Reason
+```
+ACTION: Try to set is_blocked=true with empty reason
+EXPECTED:
+  - Database constraint rejects
+  - Error: "BLOCKED units must have non-empty reason"
+```
+
+#### Test 12.3: Empty Workstream Status
+```
+ACTION: Create workstream with no units
+EXPECTED:
+  - Workstream status: null or "EMPTY"
+  - Metrics show 0 units
+  - No errors
+```
+
+#### Test 12.4: Unit Past Deadline
+```
+SETUP: Unit with required_green_by in the past
+EXPECTED:
+  - computed_status: RED (regardless of proofs)
+  - Escalation level may be 3 (max)
+  - Shows as "overdue" in UI
+```
+
+---
+
+## API ENDPOINT REFERENCE
+
+### Programs
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | /api/programs | Yes | List all programs (RLS filtered) |
+| POST | /api/programs | Yes (OWNER+) | Create program |
+| GET | /api/programs/[id] | Yes | Get program details |
+| PUT | /api/programs/[id] | Yes (OWNER+) | Update program |
+| DELETE | /api/programs/[id] | Yes (OWNER+) | Delete program (cascade) |
+
+### Workstreams
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | /api/workstreams?program_id=X | Yes | List workstreams |
+| POST | /api/workstreams | Yes (LEAD+) | Create workstream |
+| GET | /api/workstreams/[id] | Yes | Get workstream with metrics |
+| PUT | /api/workstreams/[id] | Yes (LEAD+) | Update workstream |
+
+### Units
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | /api/units?workstream_id=X | Yes | List units with proofs |
+| POST | /api/units | Yes (CONTRIB+) | Create unit |
+| GET | /api/units/[id] | Yes | Get unit details |
+| PUT | /api/units/[id] | Yes (LEAD+) | Update unit |
+| DELETE | /api/units/[id] | Yes (LEAD+) | Delete unit |
+| POST | /api/units/[id]/escalate | Yes | Manual escalation |
+| POST | /api/units/[id]/unblock | Yes (OWNER+) | Remove BLOCKED |
+
+### Proofs
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| POST | /api/units/[id]/proofs | Yes (CONTRIB+) | Upload proof |
+| GET | /api/units/[id]/proofs | Yes | List proofs |
+| POST | /api/units/[id]/proofs/[pid]/approve | Yes (LEAD+) | Approve/reject |
+
+### Admin
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | /api/admin/stats | Yes (ADMIN) | System statistics |
+| GET | /api/admin/users | Yes (ADMIN) | List all users |
+| POST | /api/admin/create-rbac-user | Yes (ADMIN) | Create user |
+| PUT | /api/admin/users/[id] | Yes (ADMIN) | Update user |
+| DELETE | /api/admin/users/[id] | Yes (ADMIN) | Delete user |
+| GET | /api/admin/organizations | Yes (ADMIN) | List organizations |
+| POST | /api/admin/organizations | Yes (ADMIN) | Create organization |
+
+### Attention Queue
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | /api/attention-queue | Yes | Get prioritized items |
+
+### Notifications
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| POST | /api/notifications/[id]/read | Yes | Mark as read |
+
+### Cron
+| Method | Endpoint | Auth Required | Description |
+|--------|----------|---------------|-------------|
+| GET | /api/cron/check-escalations | Cron Secret | Trigger auto-escalations |
+
+---
+
+## TEST EXECUTION CHECKLIST
+
+### Pre-Test Setup
+- [ ] Test database seeded with sample data
+- [ ] Multiple organizations created
+- [ ] Users in each role created
+- [ ] Sample programs/workstreams/units exist
+
+### Authentication Tests (5)
+- [ ] 1.1 Valid login
+- [ ] 1.2 Invalid login
+- [ ] 1.3 Logout
+- [ ] 1.4 Session persistence
+- [ ] 1.5 Role-based redirect
+
+### Program Tests (5)
+- [ ] 2.1 Create program
+- [ ] 2.2 View program list
+- [ ] 2.3 Edit program
+- [ ] 2.4 Delete program (cascade)
+- [ ] 2.5 Cross-tenant access blocked
+
+### Workstream Tests (3)
+- [ ] 3.1 Create workstream
+- [ ] 3.2 View workstream board
+- [ ] 3.3 Workstream type validation
+
+### Unit Tests (4)
+- [ ] 4.1 Create unit with full config
+- [ ] 4.2 Status computation (RED/GREEN/BLOCKED)
+- [ ] 4.3 Alert profile validation
+- [ ] 4.4 Deadline tracking
+
+### Proof Tests (6)
+- [ ] 5.1 Upload proof
+- [ ] 5.2 Approve proof (valid)
+- [ ] 5.3 Reject proof
+- [ ] 5.4 Self-approval blocked
+- [ ] 5.5 CLIENT cannot approve
+- [ ] 5.6 Proof superseding
+
+### Escalation Tests (6)
+- [ ] 6.1 Manual escalation
+- [ ] 6.2 Escalate with BLOCKED (authorized)
+- [ ] 6.3 CLIENT proposes block
+- [ ] 6.4 Unblock unit
+- [ ] 6.5 Automatic escalation
+- [ ] 6.6 BLOCKED units skip alerts
+
+### Attention Queue Tests (4)
+- [ ] 7.1 View attention queue
+- [ ] 7.2 Priority calculation
+- [ ] 7.3 CLIENT sees empty queue
+- [ ] 7.4 Tenant isolation
+
+### Admin Tests (5)
+- [ ] 8.1 View admin dashboard
+- [ ] 8.2 Create user
+- [ ] 8.3 Update user role
+- [ ] 8.4 Delete user
+- [ ] 8.5 Create organization
+
+### Email Tests (3)
+- [ ] 9.1 Manual escalation email
+- [ ] 9.2 Automatic escalation email
+- [ ] 9.3 Resolved escalation - no email
+
+### Tenant Safety Tests (4)
+- [ ] 10.1 Units cross-tenant blocked
+- [ ] 10.2 Programs cross-tenant blocked
+- [ ] 10.3 PATCH cross-tenant blocked
+- [ ] 10.4 RLS policy verification
+
+### Audit Trail Tests (3)
+- [ ] 11.1 Status event logging
+- [ ] 11.2 Proof approval event
+- [ ] 11.3 Events immutable
+
+### Edge Case Tests (4)
+- [ ] 12.1 Invalid CUSTOM config
+- [ ] 12.2 BLOCKED without reason
+- [ ] 12.3 Empty workstream
+- [ ] 12.4 Past deadline handling
+
+---
+
+## TOTAL: 52 TEST CASES
+
+**Pass Criteria:** All 52 tests pass
+**Critical Tests:** 10.1-10.4 (Tenant Safety), 5.4 (Self-Approval), 6.3 (BLOCKED Authority)
+
+---
+
+## NOTES FOR LLM TESTER
+
+1. **Always verify role context** before each test - permissions vary by role
+2. **Check both UI and API** - some behaviors differ
+3. **Verify database state** after mutations - use Supabase dashboard
+4. **Test edge cases** - empty states, max values, invalid inputs
+5. **Document any failures** with: expected vs actual, steps to reproduce
+6. **Tenant isolation is critical** - always test cross-org access attempts
+
+---
+
+*Generated for Celestar Production Release - January 2026*
