@@ -13,12 +13,20 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabaseServer();
+    const { searchParams } = new URL(request.url);
+    const includeArchived = searchParams.get('include_archived') === 'true';
 
-    // RLS will automatically filter programs based on user permissions
-    const { data: programs, error } = await supabase
+    // Build query - exclude archived by default
+    let query = supabase
       .from('programs')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
+
+    // Only include archived if explicitly requested and user is PLATFORM_ADMIN or PROGRAM_OWNER
+    if (!includeArchived || !['PLATFORM_ADMIN', 'PROGRAM_OWNER'].includes(context!.role)) {
+      query = query.eq('is_archived', false);
+    }
+
+    const { data: programs, error } = await query.order('created_at', { ascending: false });
 
     if (error) throw error;
 

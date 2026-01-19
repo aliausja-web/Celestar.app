@@ -89,7 +89,7 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/programs/[id] - Delete a program
+// DELETE /api/programs/[id] - Archive a program (soft delete for audit safety)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -107,10 +107,10 @@ export async function DELETE(
 
     const supabase = getSupabaseServer();
 
-    // TENANT SAFETY: Verify program belongs to user's organization before deleting
+    // TENANT SAFETY: Verify program belongs to user's organization before archiving
     const { data: programCheck } = await supabase
       .from('programs')
-      .select('organization_id')
+      .select('organization_id, is_archived')
       .eq('id', params.id)
       .single();
 
@@ -118,18 +118,81 @@ export async function DELETE(
       return NextResponse.json({ error: 'Program not found' }, { status: 404 });
     }
 
+    if (programCheck.is_archived) {
+      return NextResponse.json({ error: 'Program is already archived' }, { status: 400 });
+    }
+
     if (context!.role !== 'PLATFORM_ADMIN' && programCheck.organization_id !== context!.org_id) {
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
-    const { error } = await supabase
+    // GOVERNANCE: Soft delete (archive) instead of hard delete
+    // Archive the program
+    const { error: programError } = await supabase
       .from('programs')
-      .delete()
+      .update({
+        is_archived: true,
+        archived_at: new Date().toISOString(),
+        archived_by: context!.user_id,
+      })
       .eq('id', params.id);
 
-    if (error) throw error;
+    if (programError) throw programError;
 
-    return NextResponse.json({ success: true });
+    // Cascade archive to child workstreams
+    const { data: workstreams } = await supabase
+      .from('workstreams')
+      .select('id')
+      .eq('program_id', params.id)
+      .eq('is_archived', false);
+
+    if (workstreams && workstreams.length > 0) {
+      await supabase
+        .from('workstreams')
+        .update({
+          is_archived: true,
+          archived_at: new Date().toISOString(),
+          archived_by: context!.user_id,
+        })
+        .eq('program_id', params.id);
+
+      // Cascade archive to child units
+      const workstreamIds = workstreams.map(w => w.id);
+      const { data: units } = await supabase
+        .from('units')
+        .select('id')
+        .in('workstream_id', workstreamIds)
+        .eq('is_archived', false);
+
+      if (units && units.length > 0) {
+        await supabase
+          .from('units')
+          .update({
+            is_archived: true,
+            archived_at: new Date().toISOString(),
+            archived_by: context!.user_id,
+          })
+          .in('workstream_id', workstreamIds);
+
+        // Log audit events for archived units
+        const unitEvents = units.map(u => ({
+          unit_id: u.id,
+          event_type: 'unit_archived',
+          triggered_by: context!.user_id,
+          triggered_by_role: context!.role,
+          reason: 'Parent program archived',
+          metadata: { program_id: params.id },
+        }));
+
+        await supabase.from('unit_status_events').insert(unitEvents);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      archived: true,
+      message: 'Program and all child workstreams/units archived. Proofs and audit trail preserved.',
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

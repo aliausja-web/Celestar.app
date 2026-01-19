@@ -184,22 +184,26 @@ export default function WorkstreamBoard() {
 
   function UnitRow({ unit }: { unit: UnitWithProofs }) {
     const isGreen = unit.computed_status === 'GREEN';
+    const isBlocked = unit.computed_status === 'BLOCKED';
+    const isUnconfirmed = unit.is_confirmed === false;
     const isPastDeadline =
       unit.required_green_by && new Date(unit.required_green_by) < new Date();
-    const statusColor = isGreen
+    const statusColor = isBlocked
+      ? 'border-yellow-600 bg-yellow-900/40 text-yellow-400 font-semibold'
+      : isGreen
       ? 'border-[#238636]/50 bg-[#238636]/10 text-[#3fb950]'
       : 'border-red-600 bg-red-900/40 text-red-400 font-semibold';
 
-    const requiredCount = unit.proof_requirements.required_count;
-    const requiredTypes = unit.proof_requirements.required_types;
+    const requiredCount = unit.proof_requirements?.required_count || 1;
+    const requiredTypes = unit.proof_requirements?.required_types || ['photo'];
 
     return (
-      <Card className="border-[#30363d] bg-[#161b22] transition-all">
+      <Card className={`border-[#30363d] bg-[#161b22] transition-all ${isUnconfirmed ? 'opacity-75 border-dashed' : ''}`}>
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-4">
             {/* Left: Unit Info */}
             <div className="flex-1 space-y-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge
                   className={`${statusColor} font-black text-xs px-3 py-1.5 flex items-center gap-1.5`}
                 >
@@ -210,6 +214,11 @@ export default function WorkstreamBoard() {
                   )}
                   {unit.computed_status}
                 </Badge>
+                {isUnconfirmed && (
+                  <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40 text-xs px-2 py-1">
+                    Unconfirmed
+                  </Badge>
+                )}
                 {unit.current_escalation_level > 0 && (
                   <Badge className="bg-orange-500/12 text-orange-400 border-orange-500/40 text-xs px-2 py-1">
                     L{unit.current_escalation_level}
@@ -415,6 +424,16 @@ export default function WorkstreamBoard() {
                 <div className="text-xs text-[#d29922]/70">Escalations (24h)</div>
               </CardContent>
             </Card>
+            {workstream.unconfirmed_count > 0 && (
+              <Card className="bg-gray-500/10 border-gray-500/30">
+                <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-medium text-gray-400">
+                    {workstream.unconfirmed_count}
+                  </div>
+                  <div className="text-xs text-gray-500">Unconfirmed</div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 

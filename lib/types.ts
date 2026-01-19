@@ -249,13 +249,24 @@ export interface Unit {
     required_count: number;
     required_types: ProofType[];
   };
-  computed_status: UnitStatus;
+  computed_status: UnitStatus | 'BLOCKED';
   status_computed_at: Date | string;
   last_status_change_time: Date | string;
   current_escalation_level: number; // 0-3
   last_escalated_at: Date | string | null;
   escalation_policy: EscalationPolicyStep[];
   created_at: Date | string;
+  // Governance: Confirmation tracking
+  is_confirmed: boolean;
+  confirmed_at: Date | string | null;
+  confirmed_by: string | null;
+  // Governance: Archive tracking
+  is_archived: boolean;
+  archived_at: Date | string | null;
+  archived_by: string | null;
+  // Blocked status
+  is_blocked: boolean;
+  blocked_reason: string | null;
 }
 
 // Proof: Evidence of completion with governance (approval lifecycle)
@@ -336,7 +347,9 @@ export interface WorkstreamWithMetrics extends Workstream {
   total_units: number;
   red_units: number;
   green_units: number;
+  blocked_units: number;
   stale_units: number; // Units past deadline still RED
+  unconfirmed_count: number; // Units awaiting confirmation
   recent_escalations: number; // Escalations in last 24h
 }
 

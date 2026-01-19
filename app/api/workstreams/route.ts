@@ -23,11 +23,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: workstreams, error } = await supabase
+    const includeArchived = searchParams.get('include_archived') === 'true';
+
+    // Build query - exclude archived by default
+    let query = supabase
       .from('workstreams')
       .select('*')
-      .eq('program_id', programId)
-      .order('ordering', { ascending: true });
+      .eq('program_id', programId);
+
+    // Only include archived if explicitly requested and user is PLATFORM_ADMIN or PROGRAM_OWNER
+    if (!includeArchived || !['PLATFORM_ADMIN', 'PROGRAM_OWNER'].includes(context!.role)) {
+      query = query.eq('is_archived', false);
+    }
+
+    const { data: workstreams, error } = await query.order('ordering', { ascending: true });
 
     if (error) throw error;
 

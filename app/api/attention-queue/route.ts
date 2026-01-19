@@ -168,7 +168,44 @@ export async function GET() {
     const { data: activeEscalations } = await activeEscalationsQuery;
 
     // ========================================================================
-    // 4. CALCULATE PRIORITIES AND SORT
+    // 4. UNCONFIRMED UNITS (FIELD_CONTRIBUTOR-created, awaiting confirmation)
+    // ========================================================================
+
+    let unconfirmedUnitsQuery = supabase
+      .from('units')
+      .select(`
+        id,
+        title,
+        created_at,
+        created_by,
+        required_green_by,
+        workstreams!inner(
+          id,
+          name,
+          programs!inner(
+            id,
+            name,
+            organization_id
+          )
+        )
+      `)
+      .eq('is_confirmed', false)
+      .eq('is_archived', false)
+      .order('created_at', { ascending: true });
+
+    // Role-based filtering - only WORKSTREAM_LEAD, PROGRAM_OWNER, PLATFORM_ADMIN see unconfirmed
+    if (userRole === 'CLIENT_VIEWER' || userRole === 'FIELD_CONTRIBUTOR') {
+      // These roles don't see unconfirmed units in attention queue
+      unconfirmedUnitsQuery = unconfirmedUnitsQuery.eq('id', '00000000-0000-0000-0000-000000000000'); // No results
+    } else if (userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
+      unconfirmedUnitsQuery = unconfirmedUnitsQuery.eq('workstreams.programs.organization_id', userOrgId);
+    }
+    // PLATFORM_ADMIN sees all
+
+    const { data: unconfirmedUnits } = await unconfirmedUnitsQuery;
+
+    // ========================================================================
+    // 5. CALCULATE PRIORITIES AND SORT
     // ========================================================================
 
     const now = new Date();
@@ -254,8 +291,29 @@ export async function GET() {
       };
     });
 
+    // Transform unconfirmed units
+    const unconfirmedItems = (unconfirmedUnits || []).map((unit: any) => {
+      const ageHours = (now.getTime() - new Date(unit.created_at).getTime()) / (1000 * 60 * 60);
+
+      return {
+        type: 'unit_unconfirmed',
+        priority: calculatePriority('unconfirmed', null, false, 0, ageHours),
+        id: unit.id,
+        unit_id: unit.id,
+        unit_title: unit.title,
+        program_name: unit.workstreams.programs.name,
+        workstream_name: unit.workstreams.name,
+        details: {
+          created_at: unit.created_at,
+          age_hours: Math.round(ageHours * 10) / 10,
+          deadline: unit.required_green_by,
+        },
+        action_url: `/units/${unit.id}`,
+      };
+    });
+
     // Combine and sort by priority (higher = more urgent)
-    const allItems = [...proofItems, ...unitItems, ...escalationItems].sort(
+    const allItems = [...proofItems, ...unitItems, ...escalationItems, ...unconfirmedItems].sort(
       (a, b) => b.priority - a.priority
     );
 
@@ -271,6 +329,7 @@ export async function GET() {
         units_at_risk: unitItems.filter(u => u.type === 'unit_at_risk').length,
         units_blocked: unitItems.filter(u => u.type === 'unit_blocked').length,
         manual_escalations: escalationItems.length,
+        units_unconfirmed: unconfirmedItems.length,
       },
       items: allItems,
       user_role: userRole,
@@ -289,7 +348,7 @@ export async function GET() {
  * Higher score = more urgent
  */
 function calculatePriority(
-  itemType: 'proof' | 'unit' | 'blocked' | 'escalation',
+  itemType: 'proof' | 'unit' | 'blocked' | 'escalation' | 'unconfirmed',
   hoursUntilDeadline: number | null,
   highCriticality: boolean,
   escalationLevel: number = 0,
@@ -302,6 +361,8 @@ function calculatePriority(
     priority = 1000; // Manual escalations are highest priority
   } else if (itemType === 'blocked') {
     priority = 900; // Blocked units are very high priority
+  } else if (itemType === 'unconfirmed') {
+    priority = 800; // Unconfirmed units are high priority (scope governance)
   } else if (itemType === 'proof') {
     priority = 700; // Pending proofs are high priority
   } else {
@@ -333,8 +394,8 @@ function calculatePriority(
     }
   }
 
-  // Age bonus for escalations (older = more urgent)
-  if (itemType === 'escalation' && ageHours > 0) {
+  // Age bonus for escalations and unconfirmed units (older = more urgent)
+  if ((itemType === 'escalation' || itemType === 'unconfirmed') && ageHours > 0) {
     priority += Math.min(ageHours, 100);
   }
 

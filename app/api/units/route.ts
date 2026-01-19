@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseServer();
     const { searchParams } = new URL(request.url);
     const workstreamId = searchParams.get('workstream_id');
+    const includeArchived = searchParams.get('include_archived') === 'true';
 
     if (!workstreamId) {
       return NextResponse.json(
@@ -23,11 +24,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: units, error } = await supabase
+    // Build query - exclude archived by default
+    let query = supabase
       .from('units')
       .select('*')
-      .eq('workstream_id', workstreamId)
-      .order('created_at', { ascending: true });
+      .eq('workstream_id', workstreamId);
+
+    // Only include archived if explicitly requested and user is PLATFORM_ADMIN or PROGRAM_OWNER
+    if (!includeArchived || !['PLATFORM_ADMIN', 'PROGRAM_OWNER'].includes(context!.role)) {
+      query = query.eq('is_archived', false);
+    }
+
+    const { data: units, error } = await query.order('created_at', { ascending: true });
 
     if (error) throw error;
 
@@ -87,6 +95,11 @@ export async function POST(request: NextRequest) {
       ]
     };
 
+    // GOVERNANCE: FIELD_CONTRIBUTOR-created units require confirmation
+    const userRole = context!.role;
+    const isFieldContributor = userRole === 'FIELD_CONTRIBUTOR';
+    const isConfirmed = !isFieldContributor; // Auto-confirm if not FIELD_CONTRIBUTOR
+
     const { data: unit, error } = await supabase
       .from('units')
       .insert([
@@ -98,6 +111,11 @@ export async function POST(request: NextRequest) {
           acceptance_criteria: body.acceptance_criteria || null,
           proof_requirements: proofRequirements,
           escalation_config: escalationConfig,
+          // Confirmation tracking
+          is_confirmed: isConfirmed,
+          confirmed_at: isConfirmed ? new Date().toISOString() : null,
+          confirmed_by: isConfirmed ? context!.user_id : null,
+          created_by: context!.user_id,
         },
       ])
       .select()
@@ -105,7 +123,15 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json(unit, { status: 201 });
+    return NextResponse.json({
+      ...unit,
+      _governance: {
+        requires_confirmation: !isConfirmed,
+        message: isFieldContributor
+          ? 'Unit created but requires confirmation from WORKSTREAM_LEAD or PROGRAM_OWNER before counting toward metrics.'
+          : null,
+      }
+    }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
