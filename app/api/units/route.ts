@@ -31,17 +31,28 @@ export async function GET(request: NextRequest) {
       .eq('workstream_id', workstreamId);
 
     // Only include archived if explicitly requested and user is PLATFORM_ADMIN or PROGRAM_OWNER
-    if (!includeArchived || !['PLATFORM_ADMIN', 'PROGRAM_OWNER'].includes(context!.role)) {
-      query = query.eq('is_archived', false);
-    }
+    const shouldFilterArchived = !includeArchived || !['PLATFORM_ADMIN', 'PROGRAM_OWNER'].includes(context!.role);
 
-    const { data: units, error } = await query.order('created_at', { ascending: true });
+    let { data: units, error } = await (shouldFilterArchived
+      ? query.eq('is_archived', false).order('created_at', { ascending: true })
+      : query.order('created_at', { ascending: true }));
+
+    // If is_archived column doesn't exist yet (migration not run), query without filter
+    if (error && error.message.includes('is_archived')) {
+      const fallbackResult = await supabase
+        .from('units')
+        .select('*')
+        .eq('workstream_id', workstreamId)
+        .order('created_at', { ascending: true });
+      units = fallbackResult.data;
+      error = fallbackResult.error;
+    }
 
     if (error) throw error;
 
     // Get proofs for each unit
     const unitsWithProofs = await Promise.all(
-      units.map(async (unit) => {
+      (units || []).map(async (unit) => {
         const { data: proofs } = await supabase
           .from('proofs')
           .select('*')
@@ -100,26 +111,48 @@ export async function POST(request: NextRequest) {
     const isFieldContributor = userRole === 'FIELD_CONTRIBUTOR';
     const isConfirmed = !isFieldContributor; // Auto-confirm if not FIELD_CONTRIBUTOR
 
-    const { data: unit, error } = await supabase
+    // Build insert object - only include confirmation fields if migration is applied
+    const insertData: any = {
+      workstream_id: body.workstream_id,
+      title: body.name,
+      owner_party_name: body.owner || 'Unassigned',
+      required_green_by: body.deadline || null,
+      acceptance_criteria: body.acceptance_criteria || null,
+      proof_requirements: proofRequirements,
+      escalation_config: escalationConfig,
+      // Confirmation tracking (will be ignored if columns don't exist)
+      is_confirmed: isConfirmed,
+      confirmed_at: isConfirmed ? new Date().toISOString() : null,
+      confirmed_by: isConfirmed ? context!.user_id : null,
+      created_by: context!.user_id,
+    };
+
+    let { data: unit, error } = await supabase
       .from('units')
-      .insert([
-        {
-          workstream_id: body.workstream_id,
-          title: body.name,
-          owner_party_name: body.owner || 'Unassigned',
-          required_green_by: body.deadline || null,
-          acceptance_criteria: body.acceptance_criteria || null,
-          proof_requirements: proofRequirements,
-          escalation_config: escalationConfig,
-          // Confirmation tracking
-          is_confirmed: isConfirmed,
-          confirmed_at: isConfirmed ? new Date().toISOString() : null,
-          confirmed_by: isConfirmed ? context!.user_id : null,
-          created_by: context!.user_id,
-        },
-      ])
+      .insert([insertData])
       .select()
       .single();
+
+    // If is_confirmed column doesn't exist yet, retry without confirmation fields
+    if (error && (error.message.includes('is_confirmed') || error.message.includes('confirmed_'))) {
+      const fallbackInsert = {
+        workstream_id: body.workstream_id,
+        title: body.name,
+        owner_party_name: body.owner || 'Unassigned',
+        required_green_by: body.deadline || null,
+        acceptance_criteria: body.acceptance_criteria || null,
+        proof_requirements: proofRequirements,
+        escalation_config: escalationConfig,
+        created_by: context!.user_id,
+      };
+      const fallbackResult = await supabase
+        .from('units')
+        .insert([fallbackInsert])
+        .select()
+        .single();
+      unit = fallbackResult.data;
+      error = fallbackResult.error;
+    }
 
     if (error) throw error;
 

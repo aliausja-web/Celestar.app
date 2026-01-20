@@ -17,20 +17,31 @@ export async function GET(request: NextRequest) {
     const includeArchived = searchParams.get('include_archived') === 'true';
 
     // Build query - exclude archived by default
+    // First try with is_archived filter, fallback to no filter if column doesn't exist
     let query = supabase
       .from('programs')
       .select('*');
 
     // Only include archived if explicitly requested and user is PLATFORM_ADMIN or PROGRAM_OWNER
-    if (!includeArchived || !['PLATFORM_ADMIN', 'PROGRAM_OWNER'].includes(context!.role)) {
-      query = query.eq('is_archived', false);
-    }
+    const shouldFilterArchived = !includeArchived || !['PLATFORM_ADMIN', 'PROGRAM_OWNER'].includes(context!.role);
 
-    const { data: programs, error } = await query.order('created_at', { ascending: false });
+    let { data: programs, error } = await (shouldFilterArchived
+      ? query.eq('is_archived', false).order('created_at', { ascending: false })
+      : query.order('created_at', { ascending: false }));
+
+    // If is_archived column doesn't exist yet (migration not run), query without filter
+    if (error && error.message.includes('is_archived')) {
+      const fallbackResult = await supabase
+        .from('programs')
+        .select('*')
+        .order('created_at', { ascending: false });
+      programs = fallbackResult.data;
+      error = fallbackResult.error;
+    }
 
     if (error) throw error;
 
-    return NextResponse.json(programs);
+    return NextResponse.json(programs || []);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

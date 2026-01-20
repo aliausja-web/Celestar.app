@@ -32,15 +32,26 @@ export async function GET(request: NextRequest) {
       .eq('program_id', programId);
 
     // Only include archived if explicitly requested and user is PLATFORM_ADMIN or PROGRAM_OWNER
-    if (!includeArchived || !['PLATFORM_ADMIN', 'PROGRAM_OWNER'].includes(context!.role)) {
-      query = query.eq('is_archived', false);
-    }
+    const shouldFilterArchived = !includeArchived || !['PLATFORM_ADMIN', 'PROGRAM_OWNER'].includes(context!.role);
 
-    const { data: workstreams, error } = await query.order('ordering', { ascending: true });
+    let { data: workstreams, error } = await (shouldFilterArchived
+      ? query.eq('is_archived', false).order('ordering', { ascending: true })
+      : query.order('ordering', { ascending: true }));
+
+    // If is_archived column doesn't exist yet (migration not run), query without filter
+    if (error && error.message.includes('is_archived')) {
+      const fallbackResult = await supabase
+        .from('workstreams')
+        .select('*')
+        .eq('program_id', programId)
+        .order('ordering', { ascending: true });
+      workstreams = fallbackResult.data;
+      error = fallbackResult.error;
+    }
 
     if (error) throw error;
 
-    return NextResponse.json(workstreams);
+    return NextResponse.json(workstreams || []);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
