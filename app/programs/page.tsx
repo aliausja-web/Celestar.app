@@ -366,7 +366,7 @@ export default function ProgramDashboard() {
 
           {/* Accountability: Last verified timestamp */}
           <div className="text-xs text-[#7d8590] pt-2 border-t border-[#30363d]">
-            Last verified: {format(new Date(workstream.last_update_time), 'MMM d, HH:mm')}
+            Last verified: {workstream.last_update_time ? format(new Date(workstream.last_update_time), 'MMM d, HH:mm') : 'Never'}
           </div>
         </CardContent>
       </Card>
