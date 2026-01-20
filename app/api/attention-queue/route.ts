@@ -171,38 +171,49 @@ export async function GET() {
     // 4. UNCONFIRMED UNITS (FIELD_CONTRIBUTOR-created, awaiting confirmation)
     // ========================================================================
 
-    let unconfirmedUnitsQuery = supabase
-      .from('units')
-      .select(`
-        id,
-        title,
-        created_at,
-        created_by,
-        required_green_by,
-        workstreams!inner(
-          id,
-          name,
-          programs!inner(
+    let unconfirmedUnits: any[] = [];
+
+    // Only try to query unconfirmed units if user has permission to see them
+    if (userRole !== 'CLIENT_VIEWER' && userRole !== 'FIELD_CONTRIBUTOR') {
+      try {
+        let unconfirmedUnitsQuery = supabase
+          .from('units')
+          .select(`
             id,
-            name,
-            organization_id
-          )
-        )
-      `)
-      .eq('is_confirmed', false)
-      .eq('is_archived', false)
-      .order('created_at', { ascending: true });
+            title,
+            created_at,
+            created_by,
+            required_green_by,
+            workstreams!inner(
+              id,
+              name,
+              programs!inner(
+                id,
+                name,
+                organization_id
+              )
+            )
+          `)
+          .eq('is_confirmed', false)
+          .eq('is_archived', false)
+          .order('created_at', { ascending: true });
 
-    // Role-based filtering - only WORKSTREAM_LEAD, PROGRAM_OWNER, PLATFORM_ADMIN see unconfirmed
-    if (userRole === 'CLIENT_VIEWER' || userRole === 'FIELD_CONTRIBUTOR') {
-      // These roles don't see unconfirmed units in attention queue
-      unconfirmedUnitsQuery = unconfirmedUnitsQuery.eq('id', '00000000-0000-0000-0000-000000000000'); // No results
-    } else if (userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
-      unconfirmedUnitsQuery = unconfirmedUnitsQuery.eq('workstreams.programs.organization_id', userOrgId);
+        // Role-based filtering
+        if (userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
+          unconfirmedUnitsQuery = unconfirmedUnitsQuery.eq('workstreams.programs.organization_id', userOrgId);
+        }
+
+        const { data, error } = await unconfirmedUnitsQuery;
+
+        // If columns don't exist, just skip this section (empty array)
+        if (!error) {
+          unconfirmedUnits = data || [];
+        }
+      } catch {
+        // Silently skip if is_confirmed/is_archived columns don't exist
+        unconfirmedUnits = [];
+      }
     }
-    // PLATFORM_ADMIN sees all
-
-    const { data: unconfirmedUnits } = await unconfirmedUnitsQuery;
 
     // ========================================================================
     // 5. CALCULATE PRIORITIES AND SORT

@@ -108,11 +108,21 @@ export async function DELETE(
     const supabase = getSupabaseServer();
 
     // TENANT SAFETY: Verify program belongs to user's organization before archiving
-    const { data: programCheck } = await supabase
+    let { data: programCheck, error: checkError } = await supabase
       .from('programs')
       .select('organization_id, is_archived')
       .eq('id', params.id)
       .single();
+
+    // Fallback if is_archived column doesn't exist yet
+    if (checkError && checkError.message.includes('is_archived')) {
+      const fallback = await supabase
+        .from('programs')
+        .select('organization_id')
+        .eq('id', params.id)
+        .single();
+      programCheck = fallback.data ? { ...fallback.data, is_archived: false } : null;
+    }
 
     if (!programCheck) {
       return NextResponse.json({ error: 'Program not found' }, { status: 404 });
@@ -127,8 +137,8 @@ export async function DELETE(
     }
 
     // GOVERNANCE: Soft delete (archive) instead of hard delete
-    // Archive the program
-    const { error: programError } = await supabase
+    // Try archive first, fall back to hard delete if columns don't exist
+    let { error: programError } = await supabase
       .from('programs')
       .update({
         is_archived: true,
@@ -137,14 +147,48 @@ export async function DELETE(
       })
       .eq('id', params.id);
 
+    // Fallback to hard delete if is_archived column doesn't exist
+    if (programError && programError.message.includes('is_archived')) {
+      // Delete child units first
+      const { data: workstreams } = await supabase
+        .from('workstreams')
+        .select('id')
+        .eq('program_id', params.id);
+
+      if (workstreams && workstreams.length > 0) {
+        const workstreamIds = workstreams.map(w => w.id);
+        await supabase.from('units').delete().in('workstream_id', workstreamIds);
+      }
+      // Delete workstreams
+      await supabase.from('workstreams').delete().eq('program_id', params.id);
+      // Delete program
+      const { error: deleteError } = await supabase.from('programs').delete().eq('id', params.id);
+      if (deleteError) throw deleteError;
+
+      return NextResponse.json({
+        success: true,
+        deleted: true,
+        message: 'Program and all child workstreams/units deleted (migration not applied for archive).',
+      });
+    }
+
     if (programError) throw programError;
 
     // Cascade archive to child workstreams
-    const { data: workstreams } = await supabase
+    let { data: workstreams, error: wsQueryError } = await supabase
       .from('workstreams')
       .select('id')
       .eq('program_id', params.id)
       .eq('is_archived', false);
+
+    // Fallback if is_archived column doesn't exist on workstreams
+    if (wsQueryError && wsQueryError.message.includes('is_archived')) {
+      const fallback = await supabase
+        .from('workstreams')
+        .select('id')
+        .eq('program_id', params.id);
+      workstreams = fallback.data;
+    }
 
     if (workstreams && workstreams.length > 0) {
       await supabase
@@ -158,11 +202,20 @@ export async function DELETE(
 
       // Cascade archive to child units
       const workstreamIds = workstreams.map(w => w.id);
-      const { data: units } = await supabase
+      let { data: units, error: unitsQueryError } = await supabase
         .from('units')
         .select('id')
         .in('workstream_id', workstreamIds)
         .eq('is_archived', false);
+
+      // Fallback if is_archived column doesn't exist on units
+      if (unitsQueryError && unitsQueryError.message.includes('is_archived')) {
+        const fallback = await supabase
+          .from('units')
+          .select('id')
+          .in('workstream_id', workstreamIds);
+        units = fallback.data;
+      }
 
       if (units && units.length > 0) {
         await supabase

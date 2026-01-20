@@ -21,7 +21,7 @@ export async function POST(
     const supabase = getSupabaseServer();
 
     // TENANT SAFETY: Verify unit belongs to user's organization
-    const { data: unitCheck } = await supabase
+    let { data: unitCheck, error: checkError } = await supabase
       .from('units')
       .select(`
         id,
@@ -35,6 +35,15 @@ export async function POST(
       `)
       .eq('id', params.id)
       .single();
+
+    // Fallback if is_confirmed/is_archived columns don't exist yet
+    if (checkError && (checkError.message.includes('is_confirmed') || checkError.message.includes('is_archived'))) {
+      // Migration not applied - confirmation feature not available
+      return NextResponse.json({
+        error: 'Confirmation feature not available - database migration pending',
+        migration_required: '20260119_governance_locks.sql'
+      }, { status: 503 });
+    }
 
     if (!unitCheck) {
       return NextResponse.json({ error: 'Unit not found' }, { status: 404 });

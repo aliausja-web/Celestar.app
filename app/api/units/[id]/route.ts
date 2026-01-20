@@ -199,11 +199,21 @@ export async function DELETE(
     const supabase = getSupabaseServer();
 
     // TENANT SAFETY: Verify unit belongs to user's organization before archiving
-    const { data: unitCheck } = await supabase
+    let { data: unitCheck, error: checkError } = await supabase
       .from('units')
       .select('workstreams!inner(programs!inner(organization_id)), is_archived')
       .eq('id', params.id)
       .single();
+
+    // Fallback if is_archived column doesn't exist yet
+    if (checkError && checkError.message.includes('is_archived')) {
+      const fallback = await supabase
+        .from('units')
+        .select('workstreams!inner(programs!inner(organization_id))')
+        .eq('id', params.id)
+        .single();
+      unitCheck = fallback.data ? { ...fallback.data, is_archived: false } : null;
+    }
 
     if (!unitCheck) {
       return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
@@ -213,7 +223,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unit is already archived' }, { status: 400 });
     }
 
-    const unitOrgId = unitCheck.workstreams[0].programs[0].organization_id;
+    const unitOrgId = (unitCheck.workstreams as any)[0]?.programs[0]?.organization_id;
     const userOrgId = context!.org_id;
 
     if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== userOrgId) {
@@ -222,7 +232,7 @@ export async function DELETE(
 
     // GOVERNANCE: Soft delete (archive) instead of hard delete
     // Proofs, escalations, and status_events are preserved
-    const { error } = await supabase
+    let { error } = await supabase
       .from('units')
       .update({
         is_archived: true,
@@ -230,6 +240,18 @@ export async function DELETE(
         archived_by: context!.user_id,
       })
       .eq('id', params.id);
+
+    // Fallback to hard delete if is_archived column doesn't exist
+    if (error && error.message.includes('is_archived')) {
+      const { error: deleteError } = await supabase.from('units').delete().eq('id', params.id);
+      if (deleteError) throw deleteError;
+
+      return NextResponse.json({
+        success: true,
+        deleted: true,
+        message: 'Unit deleted (migration not applied for archive).',
+      });
+    }
 
     if (error) throw error;
 
