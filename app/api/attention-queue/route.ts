@@ -3,14 +3,6 @@ import { NextResponse } from 'next/server';
 
 /**
  * Attention Queue API - Single view for all items requiring immediate action
- *
- * Returns:
- * - Proofs pending approval
- * - Units RED/BLOCKED and nearing deadline
- * - Active manual escalations
- *
- * Sorted by priority: deadline urgency, escalation severity, age
- * Respects role-based visibility (no cross-client leakage)
  */
 
 export async function GET() {
@@ -41,10 +33,7 @@ export async function GET() {
     const userRole = profile.role;
     const userOrgId = profile.organization_id;
 
-    // ========================================================================
-    // 1. PENDING PROOFS (Awaiting Approval)
-    // ========================================================================
-
+    // 1. PENDING PROOFS
     let pendingProofsQuery = supabase
       .from('unit_proofs')
       .select(`
@@ -74,22 +63,13 @@ export async function GET() {
       .eq('is_valid', true)
       .order('uploaded_at', { ascending: true });
 
-    // Role-based filtering
-    if (userRole === 'CLIENT') {
-      // Clients see nothing in attention queue
-      pendingProofsQuery = pendingProofsQuery.eq('units.workstreams.programs.organization_id', userOrgId);
-    } else if (userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
-      // Leads and Owners see only their org's proofs
+    if (userRole === 'CLIENT' || userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
       pendingProofsQuery = pendingProofsQuery.eq('units.workstreams.programs.organization_id', userOrgId);
     }
-    // PLATFORM_ADMIN sees all
 
     const { data: pendingProofs } = await pendingProofsQuery;
 
-    // ========================================================================
-    // 2. RED/BLOCKED UNITS NEARING DEADLINE
-    // ========================================================================
-
+    // 2. RED/BLOCKED UNITS
     let unitsAtRiskQuery = supabase
       .from('units')
       .select(`
@@ -116,19 +96,13 @@ export async function GET() {
       .order('required_green_by', { ascending: true })
       .limit(50);
 
-    // Role-based filtering
-    if (userRole === 'CLIENT') {
-      unitsAtRiskQuery = unitsAtRiskQuery.eq('workstreams.programs.organization_id', userOrgId);
-    } else if (userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
+    if (userRole === 'CLIENT' || userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
       unitsAtRiskQuery = unitsAtRiskQuery.eq('workstreams.programs.organization_id', userOrgId);
     }
 
     const { data: unitsAtRisk } = await unitsAtRiskQuery;
 
-    // ========================================================================
-    // 3. ACTIVE MANUAL ESCALATIONS (Site Issues/Blockers)
-    // ========================================================================
-
+    // 3. ACTIVE ESCALATIONS
     let activeEscalationsQuery = supabase
       .from('unit_escalations')
       .select(`
@@ -158,67 +132,13 @@ export async function GET() {
       .eq('escalation_type', 'manual')
       .order('triggered_at', { ascending: true });
 
-    // Role-based filtering
-    if (userRole === 'CLIENT') {
-      activeEscalationsQuery = activeEscalationsQuery.eq('units.workstreams.programs.organization_id', userOrgId);
-    } else if (userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
+    if (userRole === 'CLIENT' || userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
       activeEscalationsQuery = activeEscalationsQuery.eq('units.workstreams.programs.organization_id', userOrgId);
     }
 
     const { data: activeEscalations } = await activeEscalationsQuery;
 
-    // ========================================================================
-    // 4. UNCONFIRMED UNITS (FIELD_CONTRIBUTOR-created, awaiting confirmation)
-    // ========================================================================
-
-    let unconfirmedUnits: any[] = [];
-
-    // Only try to query unconfirmed units if user has permission to see them
-    if (userRole !== 'CLIENT_VIEWER' && userRole !== 'FIELD_CONTRIBUTOR') {
-      try {
-        let unconfirmedUnitsQuery = supabase
-          .from('units')
-          .select(`
-            id,
-            title,
-            created_at,
-            created_by,
-            required_green_by,
-            workstreams!inner(
-              id,
-              name,
-              programs!inner(
-                id,
-                name,
-                organization_id
-              )
-            )
-          `)
-          .eq('is_confirmed', false)
-          .eq('is_archived', false)
-          .order('created_at', { ascending: true });
-
-        // Role-based filtering
-        if (userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
-          unconfirmedUnitsQuery = unconfirmedUnitsQuery.eq('workstreams.programs.organization_id', userOrgId);
-        }
-
-        const { data, error } = await unconfirmedUnitsQuery;
-
-        // If columns don't exist, just skip this section (empty array)
-        if (!error) {
-          unconfirmedUnits = data || [];
-        }
-      } catch {
-        // Silently skip if is_confirmed/is_archived columns don't exist
-        unconfirmedUnits = [];
-      }
-    }
-
-    // ========================================================================
-    // 5. CALCULATE PRIORITIES AND SORT
-    // ========================================================================
-
+    // CALCULATE PRIORITIES
     const now = new Date();
 
     // Transform pending proofs
@@ -302,35 +222,10 @@ export async function GET() {
       };
     });
 
-    // Transform unconfirmed units
-    const unconfirmedItems = (unconfirmedUnits || []).map((unit: any) => {
-      const ageHours = (now.getTime() - new Date(unit.created_at).getTime()) / (1000 * 60 * 60);
-
-      return {
-        type: 'unit_unconfirmed',
-        priority: calculatePriority('unconfirmed', null, false, 0, ageHours),
-        id: unit.id,
-        unit_id: unit.id,
-        unit_title: unit.title,
-        program_name: unit.workstreams.programs.name,
-        workstream_name: unit.workstreams.name,
-        details: {
-          created_at: unit.created_at,
-          age_hours: Math.round(ageHours * 10) / 10,
-          deadline: unit.required_green_by,
-        },
-        action_url: `/units/${unit.id}`,
-      };
-    });
-
-    // Combine and sort by priority (higher = more urgent)
-    const allItems = [...proofItems, ...unitItems, ...escalationItems, ...unconfirmedItems].sort(
+    // Combine and sort by priority
+    const allItems = [...proofItems, ...unitItems, ...escalationItems].sort(
       (a, b) => b.priority - a.priority
     );
-
-    // ========================================================================
-    // 5. RETURN RESPONSE
-    // ========================================================================
 
     return NextResponse.json({
       success: true,
@@ -340,7 +235,6 @@ export async function GET() {
         units_at_risk: unitItems.filter(u => u.type === 'unit_at_risk').length,
         units_blocked: unitItems.filter(u => u.type === 'unit_blocked').length,
         manual_escalations: escalationItems.length,
-        units_unconfirmed: unconfirmedItems.length,
       },
       items: allItems,
       user_role: userRole,
@@ -354,12 +248,8 @@ export async function GET() {
   }
 }
 
-/**
- * Calculate priority score for sorting attention queue
- * Higher score = more urgent
- */
 function calculatePriority(
-  itemType: 'proof' | 'unit' | 'blocked' | 'escalation' | 'unconfirmed',
+  itemType: 'proof' | 'unit' | 'blocked' | 'escalation',
   hoursUntilDeadline: number | null,
   highCriticality: boolean,
   escalationLevel: number = 0,
@@ -367,46 +257,35 @@ function calculatePriority(
 ): number {
   let priority = 0;
 
-  // Base priority by type
   if (itemType === 'escalation') {
-    priority = 1000; // Manual escalations are highest priority
+    priority = 1000;
   } else if (itemType === 'blocked') {
-    priority = 900; // Blocked units are very high priority
-  } else if (itemType === 'unconfirmed') {
-    priority = 800; // Unconfirmed units are high priority (scope governance)
+    priority = 900;
   } else if (itemType === 'proof') {
-    priority = 700; // Pending proofs are high priority
+    priority = 700;
   } else {
-    priority = 500; // Units at risk are medium-high priority
+    priority = 500;
   }
 
-  // Escalation level bonus (0-300)
   priority += escalationLevel * 100;
 
-  // High criticality bonus
   if (highCriticality) {
     priority += 200;
   }
 
-  // Deadline urgency (0-200 based on hours remaining)
   if (hoursUntilDeadline !== null) {
     if (hoursUntilDeadline < 0) {
-      // Past deadline
       priority += 200 + Math.min(Math.abs(hoursUntilDeadline), 100);
     } else if (hoursUntilDeadline < 24) {
-      // Less than 24 hours
       priority += 150;
     } else if (hoursUntilDeadline < 48) {
-      // Less than 48 hours
       priority += 100;
     } else if (hoursUntilDeadline < 168) {
-      // Less than 1 week
       priority += 50;
     }
   }
 
-  // Age bonus for escalations and unconfirmed units (older = more urgent)
-  if ((itemType === 'escalation' || itemType === 'unconfirmed') && ageHours > 0) {
+  if (itemType === 'escalation' && ageHours > 0) {
     priority += Math.min(ageHours, 100);
   }
 

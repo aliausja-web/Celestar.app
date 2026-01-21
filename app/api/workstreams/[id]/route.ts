@@ -8,7 +8,6 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    // TENANT SAFETY: Authenticate user
     const authHeader = request.headers.get('authorization');
     const { authorized, context, error: authError } = await authorize(authHeader);
 
@@ -18,25 +17,12 @@ export async function GET(
 
     const supabase = getSupabaseServer();
 
-    // Get workstream with program org check
-    // Try with is_archived filter, fallback if column doesn't exist
-    let { data: workstream, error } = await supabase
+    // Get workstream
+    const { data: workstream, error } = await supabase
       .from('workstreams')
       .select('*, programs!inner(organization_id)')
       .eq('id', params.id)
-      .eq('is_archived', false)
       .single();
-
-    // Fallback if is_archived column doesn't exist yet
-    if (error && error.message.includes('is_archived')) {
-      const fallback = await supabase
-        .from('workstreams')
-        .select('*, programs!inner(organization_id)')
-        .eq('id', params.id)
-        .single();
-      workstream = fallback.data;
-      error = fallback.error;
-    }
 
     if (error || !workstream) {
       return NextResponse.json({ error: 'Workstream not found' }, { status: 404 });
@@ -47,35 +33,20 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
-    // Get unit counts - only confirmed and non-archived units
-    // Try with is_archived filter, fallback if column doesn't exist
-    let { data: units, error: unitsError } = await supabase
+    // Get unit counts
+    const { data: units } = await supabase
       .from('units')
-      .select('id, computed_status, required_green_by, is_confirmed, is_blocked')
-      .eq('workstream_id', params.id)
-      .eq('is_archived', false);
+      .select('id, computed_status, required_green_by, is_blocked')
+      .eq('workstream_id', params.id);
 
-    // Fallback if is_archived/is_confirmed columns don't exist yet
-    if (unitsError && (unitsError.message.includes('is_archived') || unitsError.message.includes('is_confirmed'))) {
-      const fallback = await supabase
-        .from('units')
-        .select('id, computed_status, required_green_by, is_blocked')
-        .eq('workstream_id', params.id);
-      units = fallback.data?.map(u => ({ ...u, is_confirmed: true })) || [];
-    }
-
-    // GOVERNANCE: Only count confirmed units in metrics
-    const confirmedUnits = units?.filter((u: any) => u.is_confirmed !== false) || [];
-    const unconfirmedUnits = units?.filter((u: any) => u.is_confirmed === false) || [];
-
-    const total_units = confirmedUnits.length;
-    const red_units = confirmedUnits.filter((u) => u.computed_status === 'RED').length;
-    const green_units = confirmedUnits.filter((u) => u.computed_status === 'GREEN').length;
-    const blocked_units = confirmedUnits.filter((u) => u.is_blocked).length;
-    const stale_units = confirmedUnits.filter(
+    const allUnits = units || [];
+    const total_units = allUnits.length;
+    const red_units = allUnits.filter((u) => u.computed_status === 'RED').length;
+    const green_units = allUnits.filter((u) => u.computed_status === 'GREEN').length;
+    const blocked_units = allUnits.filter((u) => u.is_blocked).length;
+    const stale_units = allUnits.filter(
       (u) => u.computed_status === 'RED' && u.required_green_by && new Date(u.required_green_by) < new Date()
     ).length;
-    const unconfirmed_count = unconfirmedUnits.length;
 
     // Get recent escalations
     const { data: escalations } = await supabase
@@ -96,7 +67,6 @@ export async function GET(
       green_units,
       blocked_units,
       stale_units,
-      unconfirmed_count,
       recent_escalations,
     });
   } catch (error: any) {
@@ -110,7 +80,6 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    // TENANT SAFETY: Authenticate user
     const authHeader = request.headers.get('authorization');
     const { authorized, context, error: authError } = await authorize(authHeader, {
       requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD'],
@@ -154,13 +123,12 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/workstreams/[id] - Archive a workstream (soft delete for audit safety)
+// DELETE /api/workstreams/[id] - Delete a workstream
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    // TENANT SAFETY: Authenticate user
     const authHeader = request.headers.get('authorization');
     const { authorized, context, error: authError } = await authorize(authHeader, {
       requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER'],
@@ -173,106 +141,29 @@ export async function DELETE(
     const supabase = getSupabaseServer();
 
     // TENANT SAFETY: Verify workstream belongs to user's organization
-    let { data: wsCheck, error: checkError } = await supabase
+    const { data: wsCheck } = await supabase
       .from('workstreams')
-      .select('programs!inner(organization_id), is_archived')
+      .select('programs!inner(organization_id)')
       .eq('id', params.id)
       .single();
 
-    // Fallback if is_archived column doesn't exist yet
-    if (checkError && checkError.message.includes('is_archived')) {
-      const fallback = await supabase
-        .from('workstreams')
-        .select('programs!inner(organization_id)')
-        .eq('id', params.id)
-        .single();
-      wsCheck = fallback.data ? { ...fallback.data, is_archived: false } : null;
-    }
-
     if (!wsCheck) {
       return NextResponse.json({ error: 'Workstream not found' }, { status: 404 });
-    }
-
-    if (wsCheck.is_archived) {
-      return NextResponse.json({ error: 'Workstream is already archived' }, { status: 400 });
     }
 
     if (context!.role !== 'PLATFORM_ADMIN' && (wsCheck.programs as any)[0]?.organization_id !== context!.org_id) {
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
-    // GOVERNANCE: Soft delete (archive) instead of hard delete
-    // Archive the workstream
-    let { error: wsError } = await supabase
-      .from('workstreams')
-      .update({
-        is_archived: true,
-        archived_at: new Date().toISOString(),
-        archived_by: context!.user_id,
-      })
-      .eq('id', params.id);
+    // Delete child units first
+    await supabase.from('units').delete().eq('workstream_id', params.id);
 
-    // Fallback to hard delete if is_archived column doesn't exist
-    if (wsError && wsError.message.includes('is_archived')) {
-      // Delete child units first
-      await supabase.from('units').delete().eq('workstream_id', params.id);
-      // Delete workstream
-      const { error: deleteError } = await supabase.from('workstreams').delete().eq('id', params.id);
-      if (deleteError) throw deleteError;
+    // Delete workstream
+    const { error } = await supabase.from('workstreams').delete().eq('id', params.id);
 
-      return NextResponse.json({
-        success: true,
-        deleted: true,
-        message: 'Workstream and all child units deleted (migration not applied for archive).',
-      });
-    }
+    if (error) throw error;
 
-    if (wsError) throw wsError;
-
-    // Cascade archive to child units
-    let { data: units, error: unitsQueryError } = await supabase
-      .from('units')
-      .select('id')
-      .eq('workstream_id', params.id)
-      .eq('is_archived', false);
-
-    // Fallback if is_archived column doesn't exist on units
-    if (unitsQueryError && unitsQueryError.message.includes('is_archived')) {
-      const fallback = await supabase
-        .from('units')
-        .select('id')
-        .eq('workstream_id', params.id);
-      units = fallback.data;
-    }
-
-    if (units && units.length > 0) {
-      await supabase
-        .from('units')
-        .update({
-          is_archived: true,
-          archived_at: new Date().toISOString(),
-          archived_by: context!.user_id,
-        })
-        .eq('workstream_id', params.id);
-
-      // Log audit events for archived units
-      const unitEvents = units.map(u => ({
-        unit_id: u.id,
-        event_type: 'unit_archived',
-        triggered_by: context!.user_id,
-        triggered_by_role: context!.role,
-        reason: 'Parent workstream archived',
-        metadata: { workstream_id: params.id },
-      }));
-
-      await supabase.from('unit_status_events').insert(unitEvents);
-    }
-
-    return NextResponse.json({
-      success: true,
-      archived: true,
-      message: 'Workstream and all child units archived. Proofs and audit trail preserved.',
-    });
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
