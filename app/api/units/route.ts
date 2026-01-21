@@ -111,8 +111,8 @@ export async function POST(request: NextRequest) {
     const isFieldContributor = userRole === 'FIELD_CONTRIBUTOR';
     const isConfirmed = !isFieldContributor; // Auto-confirm if not FIELD_CONTRIBUTOR
 
-    // Build insert object - only include confirmation fields if migration is applied
-    const insertData: any = {
+    // Base insert data (columns that always exist)
+    const baseInsertData: any = {
       workstream_id: body.workstream_id,
       title: body.name,
       owner_party_name: body.owner || 'Unassigned',
@@ -120,7 +120,11 @@ export async function POST(request: NextRequest) {
       acceptance_criteria: body.acceptance_criteria || null,
       proof_requirements: proofRequirements,
       escalation_config: escalationConfig,
-      // Confirmation tracking (will be ignored if columns don't exist)
+    };
+
+    // Try with governance columns first (created_by, is_confirmed, etc.)
+    const fullInsertData = {
+      ...baseInsertData,
       is_confirmed: isConfirmed,
       confirmed_at: isConfirmed ? new Date().toISOString() : null,
       confirmed_by: isConfirmed ? context!.user_id : null,
@@ -129,25 +133,15 @@ export async function POST(request: NextRequest) {
 
     let { data: unit, error } = await supabase
       .from('units')
-      .insert([insertData])
+      .insert([fullInsertData])
       .select()
       .single();
 
-    // If is_confirmed column doesn't exist yet, retry without confirmation fields
-    if (error && (error.message.includes('is_confirmed') || error.message.includes('confirmed_'))) {
-      const fallbackInsert = {
-        workstream_id: body.workstream_id,
-        title: body.name,
-        owner_party_name: body.owner || 'Unassigned',
-        required_green_by: body.deadline || null,
-        acceptance_criteria: body.acceptance_criteria || null,
-        proof_requirements: proofRequirements,
-        escalation_config: escalationConfig,
-        created_by: context!.user_id,
-      };
+    // If governance columns don't exist yet, retry with base data only
+    if (error && (error.message.includes('is_confirmed') || error.message.includes('confirmed_') || error.message.includes('created_by'))) {
       const fallbackResult = await supabase
         .from('units')
-        .insert([fallbackInsert])
+        .insert([baseInsertData])
         .select()
         .single();
       unit = fallbackResult.data;
