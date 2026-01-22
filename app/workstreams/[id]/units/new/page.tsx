@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,13 @@ import { supabase } from '@/lib/firebase';
 export default function NewUnitPage() {
   const router = useRouter();
   const params = useParams();
-  const workstreamId = params.id as string;
+  const [workstreamId, setWorkstreamId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (params?.id) {
+      setWorkstreamId(params.id as string);
+    }
+  }, [params]);
   const [loading, setLoading] = useState(false);
   const [showAdvancedAlerts, setShowAdvancedAlerts] = useState(false);
 
@@ -38,6 +44,11 @@ export default function NewUnitPage() {
 
     if (!formData.name) {
       toast.error('Unit name is required');
+      return;
+    }
+
+    if (!workstreamId) {
+      toast.error('Workstream ID not found');
       return;
     }
 

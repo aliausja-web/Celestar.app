@@ -32,9 +32,9 @@ import { getWorkstreamTypeLabel } from '@/lib/workstream-types';
 export default function WorkstreamBoard() {
   const params = useParams();
   const router = useRouter();
-  const workstreamId = params.id as string;
   const permissions = usePermissions();
 
+  const [workstreamId, setWorkstreamId] = useState<string | null>(null);
   const [workstream, setWorkstream] = useState<WorkstreamWithMetrics | null>(null);
   const [units, setUnits] = useState<UnitWithProofs[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +42,12 @@ export default function WorkstreamBoard() {
   const [showEscalationDialog, setShowEscalationDialog] = useState(false);
   const [selectedUnitForEscalation, setSelectedUnitForEscalation] = useState<UnitWithProofs | null>(null);
   const [escalationReason, setEscalationReason] = useState('');
+
+  useEffect(() => {
+    if (params?.id) {
+      setWorkstreamId(params.id as string);
+    }
+  }, [params]);
 
   useEffect(() => {
     if (workstreamId) {
