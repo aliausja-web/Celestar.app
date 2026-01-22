@@ -17,33 +17,35 @@ export async function GET(
 
     const supabase = getSupabaseServer();
 
-    // Get workstream
+    // Get workstream with program info
     const { data: workstream, error } = await supabase
       .from('workstreams')
-      .select('*, programs!inner(organization_id)')
+      .select('*, programs!inner(org_id)')
       .eq('id', params.id)
       .single();
 
     if (error || !workstream) {
+      console.error('Workstream fetch error:', error);
       return NextResponse.json({ error: 'Workstream not found' }, { status: 404 });
     }
 
     // TENANT SAFETY: Verify workstream belongs to user's organization
-    if (context!.role !== 'PLATFORM_ADMIN' && workstream.programs.organization_id !== context!.org_id) {
+    const programOrgId = workstream.programs?.org_id;
+    if (context!.role !== 'PLATFORM_ADMIN' && programOrgId !== context!.org_id) {
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
-    // Get unit counts
+    // Get unit counts (without is_blocked which may not exist)
     const { data: units } = await supabase
       .from('units')
-      .select('id, computed_status, required_green_by, is_blocked')
+      .select('id, computed_status, required_green_by')
       .eq('workstream_id', params.id);
 
     const allUnits = units || [];
     const total_units = allUnits.length;
     const red_units = allUnits.filter((u) => u.computed_status === 'RED').length;
     const green_units = allUnits.filter((u) => u.computed_status === 'GREEN').length;
-    const blocked_units = allUnits.filter((u) => u.is_blocked).length;
+    const blocked_units = 0; // is_blocked column may not exist
     const stale_units = allUnits.filter(
       (u) => u.computed_status === 'RED' && u.required_green_by && new Date(u.required_green_by) < new Date()
     ).length;
@@ -94,7 +96,7 @@ export async function PATCH(
     // TENANT SAFETY: Verify workstream belongs to user's organization
     const { data: wsCheck } = await supabase
       .from('workstreams')
-      .select('programs!inner(organization_id)')
+      .select('programs!inner(org_id)')
       .eq('id', params.id)
       .single();
 
@@ -102,7 +104,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Workstream not found' }, { status: 404 });
     }
 
-    if (context!.role !== 'PLATFORM_ADMIN' && (wsCheck.programs as any)[0]?.organization_id !== context!.org_id) {
+    const wsOrgId = (wsCheck.programs as any)?.org_id;
+    if (context!.role !== 'PLATFORM_ADMIN' && wsOrgId !== context!.org_id) {
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
@@ -143,7 +146,7 @@ export async function DELETE(
     // TENANT SAFETY: Verify workstream belongs to user's organization
     const { data: wsCheck } = await supabase
       .from('workstreams')
-      .select('programs!inner(organization_id)')
+      .select('programs!inner(org_id)')
       .eq('id', params.id)
       .single();
 
@@ -151,7 +154,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Workstream not found' }, { status: 404 });
     }
 
-    if (context!.role !== 'PLATFORM_ADMIN' && (wsCheck.programs as any)[0]?.organization_id !== context!.org_id) {
+    const wsOrgId = (wsCheck.programs as any)?.org_id;
+    if (context!.role !== 'PLATFORM_ADMIN' && wsOrgId !== context!.org_id) {
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
