@@ -34,7 +34,9 @@ export default function WorkstreamBoard() {
   const router = useRouter();
   const permissions = usePermissions();
 
-  const [workstreamId, setWorkstreamId] = useState<string | null>(null);
+  // Get workstream ID directly from params
+  const workstreamId = params?.id as string | undefined;
+
   const [workstream, setWorkstream] = useState<WorkstreamWithMetrics | null>(null);
   const [units, setUnits] = useState<UnitWithProofs[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,19 +46,13 @@ export default function WorkstreamBoard() {
   const [escalationReason, setEscalationReason] = useState('');
 
   useEffect(() => {
-    if (params?.id) {
-      setWorkstreamId(params.id as string);
-    }
-  }, [params]);
-
-  useEffect(() => {
     if (workstreamId) {
-      fetchWorkstream();
-      fetchUnits();
+      fetchWorkstream(workstreamId);
+      fetchUnits(workstreamId);
     }
   }, [workstreamId]);
 
-  async function fetchWorkstream() {
+  async function fetchWorkstream(id: string) {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
@@ -66,7 +62,7 @@ export default function WorkstreamBoard() {
 
       const token = session.access_token;
 
-      const response = await fetch(`/api/workstreams/${workstreamId}`, {
+      const response = await fetch(`/api/workstreams/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -84,7 +80,7 @@ export default function WorkstreamBoard() {
     }
   }
 
-  async function fetchUnits() {
+  async function fetchUnits(id: string) {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
@@ -94,7 +90,7 @@ export default function WorkstreamBoard() {
 
       const token = session.access_token;
 
-      const response = await fetch(`/api/units?workstream_id=${workstreamId}`, {
+      const response = await fetch(`/api/units?workstream_id=${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -166,7 +162,9 @@ export default function WorkstreamBoard() {
       setShowEscalationDialog(false);
 
       // Refresh units to show updated escalation level
-      await fetchUnits();
+      if (workstreamId) {
+        await fetchUnits(workstreamId);
+      }
     } catch (error: any) {
       console.error('Error escalating unit:', error);
       toast.error(error.message || 'Failed to escalate unit');

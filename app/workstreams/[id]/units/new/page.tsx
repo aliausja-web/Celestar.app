@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,13 +15,10 @@ import { supabase } from '@/lib/firebase';
 export default function NewUnitPage() {
   const router = useRouter();
   const params = useParams();
-  const [workstreamId, setWorkstreamId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (params?.id) {
-      setWorkstreamId(params.id as string);
-    }
-  }, [params]);
+  // Get workstream ID directly from params
+  const workstreamId = params?.id as string | undefined;
+
   const [loading, setLoading] = useState(false);
   const [showAdvancedAlerts, setShowAdvancedAlerts] = useState(false);
 
