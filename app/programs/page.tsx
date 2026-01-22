@@ -255,27 +255,52 @@ export default function ProgramDashboard() {
       });
       const data = await response.json();
 
+      // Check if response is an error or not an array
+      if (!Array.isArray(data)) {
+        console.error('Workstreams API returned non-array:', data);
+        setWorkstreams([]);
+        return;
+      }
+
+      // Filter out any items without valid IDs
+      const validWorkstreams = data.filter((ws: any) => ws && ws.id);
+
       // Fetch metrics for each workstream
       const withMetrics = await Promise.all(
-        data.map(async (ws: any) => {
-          const metricsResponse = await fetch(`/api/workstreams/${ws.id}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          });
-          return await metricsResponse.json();
+        validWorkstreams.map(async (ws: any) => {
+          try {
+            const metricsResponse = await fetch(`/api/workstreams/${ws.id}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+            });
+            const metricsData = await metricsResponse.json();
+            // If metrics fetch fails, return workstream with basic data
+            if (metricsData.error) {
+              return { ...ws, total_units: 0, red_units: 0, green_units: 0 };
+            }
+            return metricsData;
+          } catch {
+            return { ...ws, total_units: 0, red_units: 0, green_units: 0 };
+          }
         })
       );
 
       setWorkstreams(withMetrics);
     } catch (error) {
       console.error('Error fetching workstreams:', error);
+      setWorkstreams([]);
     } finally {
       setLoadingWorkstreams(false);
     }
   }
 
   function WorkstreamCard({ workstream }: { workstream: WorkstreamWithMetrics }) {
+    // Guard against invalid workstream data
+    if (!workstream || !workstream.id) {
+      return null;
+    }
+
     const isGreen = workstream.overall_status === 'GREEN';
     const isPending = !workstream.overall_status || workstream.total_units === 0;
     const isRed = !isGreen && !isPending;
@@ -286,7 +311,7 @@ export default function ProgramDashboard() {
     return (
       <Card
         className={`${cardStyle} border cursor-pointer hover:border-[#3d444d] transition-colors`}
-        onClick={() => router.push(`/workstreams/${workstream.id}`)}
+        onClick={() => workstream.id && router.push(`/workstreams/${workstream.id}`)}
       >
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
