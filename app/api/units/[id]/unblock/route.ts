@@ -23,15 +23,21 @@ export async function POST(
     const supabase = getSupabaseServer();
     const unitId = params.id;
 
-    // Get current unit
+    // Get current unit with tenant info
     const { data: unit, error: unitError } = await supabase
       .from('units')
-      .select('*')
+      .select('*, workstreams!inner(programs!inner(org_id))')
       .eq('id', unitId)
       .single();
 
     if (unitError || !unit) {
       return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
+    }
+
+    // TENANT SAFETY: Verify unit belongs to user's organization
+    const unitOrgId = (unit.workstreams as any)?.programs?.org_id;
+    if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== context!.org_id) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
     if (!unit.is_blocked) {
@@ -42,7 +48,7 @@ export async function POST(
     }
 
     // Unblock unit and recompute status
-    await supabase
+    const { error: updateError } = await supabase
       .from('units')
       .update({
         is_blocked: false,
@@ -52,8 +58,20 @@ export async function POST(
       })
       .eq('id', unitId);
 
-    // Trigger status recomputation
-    await supabase.rpc('compute_unit_status', { unit_id_param: unitId });
+    if (updateError) {
+      // If blocked columns don't exist, the unblock feature isn't available
+      console.warn('Unblock update failed:', updateError.message);
+      return NextResponse.json({
+        error: 'Unblock feature not available - database migration may be pending'
+      }, { status: 503 });
+    }
+
+    // Trigger status recomputation (optional - may not exist)
+    try {
+      await supabase.rpc('compute_unit_status', { unit_id_param: unitId });
+    } catch (rpcError) {
+      console.warn('Status recomputation RPC not available:', rpcError);
+    }
 
     return NextResponse.json({
       success: true,

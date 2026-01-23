@@ -44,15 +44,21 @@ export async function POST(
     const canConfirmBlocked = ['WORKSTREAM_LEAD', 'PROGRAM_OWNER', 'PLATFORM_ADMIN'].includes(userRole);
     const actuallyMarkBlocked = mark_as_blocked && canConfirmBlocked;
 
-    // Get current unit details
+    // Get current unit details with tenant info
     const { data: unit, error: unitError } = await supabase
       .from('units')
-      .select('*, workstreams(program_id)')
+      .select('*, workstreams!inner(program_id, programs!inner(org_id))')
       .eq('id', unitId)
       .single();
 
     if (unitError || !unit) {
       return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
+    }
+
+    // TENANT SAFETY: Verify unit belongs to user's organization
+    const unitOrgId = (unit.workstreams as any)?.programs?.org_id;
+    if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== context!.org_id) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
     // Calculate next escalation level
@@ -136,24 +142,33 @@ export async function POST(
     }
 
     // Update unit escalation level and blocked status if requested AND authorized
-    const updateData: any = {
-      current_escalation_level: nextLevel,
-      last_escalated_at: new Date().toISOString(),
-    };
+    // Use try-catch for optional columns that might not exist in older schemas
+    try {
+      const updateData: any = {
+        current_escalation_level: nextLevel,
+      };
 
-    // If marking as blocked AND user has authority, set blocked fields
-    if (actuallyMarkBlocked === true) {
-      updateData.is_blocked = true;
-      updateData.blocked_reason = reason;
-      updateData.blocked_at = new Date().toISOString();
-      updateData.blocked_by = context!.user_id;
-      updateData.computed_status = 'BLOCKED';
+      // If marking as blocked AND user has authority, set blocked fields
+      if (actuallyMarkBlocked === true) {
+        updateData.is_blocked = true;
+        updateData.blocked_reason = reason;
+        updateData.blocked_at = new Date().toISOString();
+        updateData.blocked_by = context!.user_id;
+        updateData.computed_status = 'BLOCKED';
+      }
+
+      await supabase
+        .from('units')
+        .update(updateData)
+        .eq('id', unitId);
+    } catch (updateError: any) {
+      // If update fails due to missing columns, try minimal update
+      console.warn('Full update failed, trying minimal update:', updateError.message);
+      await supabase
+        .from('units')
+        .update({ current_escalation_level: nextLevel })
+        .eq('id', unitId);
     }
-
-    await supabase
-      .from('units')
-      .update(updateData)
-      .eq('id', unitId);
 
     return NextResponse.json({
       success: true,
