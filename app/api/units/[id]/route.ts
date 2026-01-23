@@ -27,7 +27,7 @@ export async function GET(
           programs!inner(
             id,
             name,
-            organization_id
+            org_id
           )
         )
       `)
@@ -39,7 +39,7 @@ export async function GET(
     }
 
     // TENANT SAFETY: Verify unit belongs to user's organization
-    const unitOrgId = unit.workstreams.programs.organization_id;
+    const unitOrgId = (unit.workstreams as any)?.programs?.org_id;
     const userOrgId = context!.org_id;
 
     if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== userOrgId) {
@@ -84,7 +84,7 @@ export async function PATCH(
     // TENANT SAFETY: Verify unit belongs to user's organization before updating
     const { data: unitCheck } = await supabase
       .from('units')
-      .select('workstreams!inner(programs!inner(organization_id))')
+      .select('workstreams!inner(programs!inner(org_id))')
       .eq('id', params.id)
       .single();
 
@@ -92,7 +92,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
     }
 
-    const unitOrgId = (unitCheck.workstreams as any)[0]?.programs[0]?.organization_id;
+    const unitOrgId = (unitCheck.workstreams as any)?.programs?.org_id;
     const userOrgId = context!.org_id;
 
     if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== userOrgId) {
@@ -165,7 +165,7 @@ export async function DELETE(
     // TENANT SAFETY: Verify unit belongs to user's organization
     const { data: unitCheck } = await supabase
       .from('units')
-      .select('workstreams!inner(programs!inner(organization_id))')
+      .select('workstreams!inner(programs!inner(org_id))')
       .eq('id', params.id)
       .single();
 
@@ -173,7 +173,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
     }
 
-    const unitOrgId = (unitCheck.workstreams as any)[0]?.programs[0]?.organization_id;
+    const unitOrgId = (unitCheck.workstreams as any)?.programs?.org_id;
     const userOrgId = context!.org_id;
 
     if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== userOrgId) {

@@ -28,7 +28,7 @@ export async function GET(
     }
 
     // TENANT SAFETY: Verify program belongs to user's organization
-    if (context!.role !== 'PLATFORM_ADMIN' && program.organization_id !== context!.org_id) {
+    if (context!.role !== 'PLATFORM_ADMIN' && program.org_id !== context!.org_id) {
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
@@ -58,7 +58,7 @@ export async function PATCH(
     // TENANT SAFETY: Verify program belongs to user's organization before updating
     const { data: programCheck } = await supabase
       .from('programs')
-      .select('organization_id')
+      .select('org_id')
       .eq('id', params.id)
       .single();
 
@@ -66,7 +66,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Program not found' }, { status: 404 });
     }
 
-    if (context!.role !== 'PLATFORM_ADMIN' && programCheck.organization_id !== context!.org_id) {
+    if (context!.role !== 'PLATFORM_ADMIN' && programCheck.org_id !== context!.org_id) {
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
@@ -107,7 +107,7 @@ export async function DELETE(
     // TENANT SAFETY: Verify program belongs to user's organization
     const { data: programCheck } = await supabase
       .from('programs')
-      .select('organization_id')
+      .select('org_id')
       .eq('id', params.id)
       .single();
 
@@ -115,7 +115,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Program not found' }, { status: 404 });
     }
 
-    if (context!.role !== 'PLATFORM_ADMIN' && programCheck.organization_id !== context!.org_id) {
+    if (context!.role !== 'PLATFORM_ADMIN' && programCheck.org_id !== context!.org_id) {
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 

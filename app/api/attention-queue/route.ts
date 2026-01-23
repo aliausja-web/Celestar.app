@@ -54,7 +54,7 @@ export async function GET() {
             programs!inner(
               id,
               name,
-              organization_id
+              org_id
             )
           )
         )
@@ -64,7 +64,7 @@ export async function GET() {
       .order('uploaded_at', { ascending: true });
 
     if (userRole === 'CLIENT' || userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
-      pendingProofsQuery = pendingProofsQuery.eq('units.workstreams.programs.organization_id', userOrgId);
+      pendingProofsQuery = pendingProofsQuery.eq('units.workstreams.programs.org_id', userOrgId);
     }
 
     const { data: pendingProofs } = await pendingProofsQuery;
@@ -87,7 +87,7 @@ export async function GET() {
           programs!inner(
             id,
             name,
-            organization_id
+            org_id
           )
         )
       `)
@@ -97,7 +97,7 @@ export async function GET() {
       .limit(50);
 
     if (userRole === 'CLIENT' || userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
-      unitsAtRiskQuery = unitsAtRiskQuery.eq('workstreams.programs.organization_id', userOrgId);
+      unitsAtRiskQuery = unitsAtRiskQuery.eq('workstreams.programs.org_id', userOrgId);
     }
 
     const { data: unitsAtRisk } = await unitsAtRiskQuery;
@@ -123,7 +123,7 @@ export async function GET() {
             programs!inner(
               id,
               name,
-              organization_id
+              org_id
             )
           )
         )
@@ -133,7 +133,7 @@ export async function GET() {
       .order('triggered_at', { ascending: true });
 
     if (userRole === 'CLIENT' || userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
-      activeEscalationsQuery = activeEscalationsQuery.eq('units.workstreams.programs.organization_id', userOrgId);
+      activeEscalationsQuery = activeEscalationsQuery.eq('units.workstreams.programs.org_id', userOrgId);
     }
 
     const { data: activeEscalations } = await activeEscalationsQuery;

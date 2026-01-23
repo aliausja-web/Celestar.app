@@ -29,7 +29,7 @@ export async function POST(
         is_archived,
         workstreams!inner(
           programs!inner(
-            organization_id
+            org_id
           )
         )
       `)
@@ -50,7 +50,7 @@ export async function POST(
     }
 
     // Check tenant isolation (Supabase returns arrays for nested joins)
-    const unitOrgId = (unitCheck.workstreams as any)[0]?.programs[0]?.organization_id;
+    const unitOrgId = (unitCheck.workstreams as any)?.programs?.org_id;
     const userOrgId = context!.org_id;
 
     if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== userOrgId) {
