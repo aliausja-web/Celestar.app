@@ -34,21 +34,19 @@ export async function POST(
 
     const publicUrl = urlData.publicUrl;
 
-    // Create proof
+    // Create proof - use only columns that exist in unit_proofs table
     const { data: proof, error: proofError } = await supabase
-      .from('proofs')
+      .from('unit_proofs')
       .insert([
         {
           unit_id: params.id,
           type: body.type || 'photo',
           url: publicUrl,
-          captured_at: body.captured_at || new Date().toISOString(),
+          uploaded_at: new Date().toISOString(),
           uploaded_by: context!.user_id,
           uploaded_by_email: context!.email,
-          validation_notes: body.notes || null,
-          metadata_exif: body.metadata_exif || {},
-          gps_latitude: body.gps_latitude || null,
-          gps_longitude: body.gps_longitude || null,
+          is_valid: true,
+          approval_status: 'pending',
         },
       ])
       .select()

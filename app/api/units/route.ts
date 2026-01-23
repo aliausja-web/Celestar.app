@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     const unitsWithProofs = await Promise.all(
       (units || []).map(async (unit) => {
         const { data: proofs } = await supabase
-          .from('proofs')
+          .from('unit_proofs')
           .select('*')
           .eq('unit_id', unit.id)
           .eq('is_valid', true)

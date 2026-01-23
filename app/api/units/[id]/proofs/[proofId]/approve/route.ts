@@ -39,7 +39,7 @@ export async function POST(
 
     // Get the proof to check uploader
     const { data: proof, error: proofFetchError } = await supabase
-      .from('proofs')
+      .from('unit_proofs')
       .select('*')
       .eq('id', params.proofId)
       .single();
@@ -63,7 +63,6 @@ export async function POST(
     }
 
     // Update proof approval status
-    // Note: approved_by column is UUID type, but context.user_id is already a string UUID
     const updateData: any = {
       approval_status: action === 'approve' ? 'approved' : 'rejected',
       approved_by_email: context!.email,
@@ -80,7 +79,7 @@ export async function POST(
     }
 
     const { error: updateError } = await supabase
-      .from('proofs')
+      .from('unit_proofs')
       .update(updateData)
       .eq('id', params.proofId);
 
