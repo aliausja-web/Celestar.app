@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Building2, Plus, Edit2, Trash2, ArrowLeft } from 'lucide-react';
+import { supabase } from '@/lib/firebase';
 
 interface ClientOrganization {
   id: string;
@@ -38,7 +39,12 @@ export default function ClientsManagement() {
 
   const fetchClients = async () => {
     try {
-      const response = await fetch('/api/admin/organizations');
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch('/api/admin/organizations', {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
       if (response.ok) {
         const data = await response.json();
         setClients(data.organizations || []);
@@ -58,9 +64,15 @@ export default function ClientsManagement() {
 
     setSaving(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch('/api/admin/organizations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
         body: JSON.stringify(formData),
       });
 
@@ -87,8 +99,12 @@ export default function ClientsManagement() {
     }
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch(`/api/admin/organizations/${id}`, {
         method: 'DELETE',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
 
       if (response.ok) {

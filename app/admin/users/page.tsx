@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Users, Plus, Trash2, ArrowLeft, Mail, Shield, Building2 } from 'lucide-react';
+import { supabase } from '@/lib/firebase';
 
 interface User {
   user_id: string;
@@ -47,15 +48,20 @@ export default function UsersManagement() {
 
   const fetchData = async () => {
     try {
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
       // Fetch users
-      const usersRes = await fetch('/api/admin/users');
+      const usersRes = await fetch('/api/admin/users', { headers });
       if (usersRes.ok) {
         const usersData = await usersRes.json();
         setUsers(usersData.users || []);
       }
 
       // Fetch organizations
-      const orgsRes = await fetch('/api/admin/organizations');
+      const orgsRes = await fetch('/api/admin/organizations', { headers });
       if (orgsRes.ok) {
         const orgsData = await orgsRes.json();
         setOrganizations(orgsData.organizations || []);
@@ -80,9 +86,15 @@ export default function UsersManagement() {
 
     setSaving(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch('/api/admin/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
         body: JSON.stringify(formData),
       });
 
@@ -115,8 +127,12 @@ export default function UsersManagement() {
     }
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: 'DELETE',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
 
       if (response.ok) {

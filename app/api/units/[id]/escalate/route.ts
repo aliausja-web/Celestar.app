@@ -80,7 +80,8 @@ export async function POST(
       .insert([
         {
           unit_id: unitId,
-          workstream_id: unit.workstream_id, // Required field
+          workstream_id: unit.workstream_id,
+          program_id: (unit.workstreams as any)?.program_id, // Required fields
           escalation_level: nextLevel,
           triggered_at: new Date().toISOString(),
           escalation_type: 'manual',
