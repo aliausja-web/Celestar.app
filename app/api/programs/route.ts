@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
 import { authorize } from '@/lib/auth-utils';
 
-// GET /api/programs - List all programs (filtered by RLS)
+// GET /api/programs - List all programs for user's organization
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
-    const { authorized, error: authError } = await authorize(authHeader);
+    const { authorized, context, error: authError } = await authorize(authHeader);
 
     if (!authorized) {
       return NextResponse.json({ error: authError }, { status: 401 });
@@ -14,11 +14,18 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseServer();
 
-    // Simple query without governance columns
-    const { data: programs, error } = await supabase
+    // TENANT SAFETY: Filter programs by user's organization
+    let query = supabase
       .from('programs')
       .select('*')
       .order('created_at', { ascending: false });
+
+    // Only PLATFORM_ADMIN can see all programs
+    if (context!.role !== 'PLATFORM_ADMIN') {
+      query = query.eq('org_id', context!.org_id);
+    }
+
+    const { data: programs, error } = await query;
 
     if (error) throw error;
 
