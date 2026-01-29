@@ -41,10 +41,10 @@ export default function ClientsManagement() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const response = await fetch('/api/admin/organizations', {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-      });
+      const response = await fetch('/api/admin/organizations', { headers });
       if (response.ok) {
         const data = await response.json();
         setClients(data.organizations || []);
@@ -101,10 +101,12 @@ export default function ClientsManagement() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
       const response = await fetch(`/api/admin/organizations/${id}`, {
         method: 'DELETE',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        headers,
       });
 
       if (response.ok) {

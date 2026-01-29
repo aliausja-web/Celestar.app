@@ -51,7 +51,8 @@ export default function UsersManagement() {
       // Get auth token
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
-      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
       // Fetch users
       const usersRes = await fetch('/api/admin/users', { headers });
@@ -130,9 +131,12 @@ export default function UsersManagement() {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const response = await fetch(`/api/admin/users/${userId}`, {
         method: 'DELETE',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        headers,
       });
 
       if (response.ok) {
