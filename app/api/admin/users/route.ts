@@ -24,9 +24,10 @@ export async function GET(request: NextRequest) {
         email,
         full_name,
         role,
-        organization_id,
+        org_id,
         created_at,
-        organizations (
+        orgs (
+          id,
           name
         )
       `)
@@ -40,8 +41,8 @@ export async function GET(request: NextRequest) {
       email: user.email,
       full_name: user.full_name,
       role: user.role,
-      organization_id: user.organization_id,
-      organization_name: user.organizations?.name,
+      organization_id: user.org_id,
+      organization_name: user.orgs?.name,
       created_at: user.created_at,
     }));
 
@@ -65,10 +66,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { email, password, full_name, role, organization_id } = body;
+    // Support both organization_id (from UI) and org_id (database column name)
+    const org_id = organization_id || body.org_id;
 
-    if (!email || !password || !organization_id) {
+    if (!email || !password || !org_id) {
       return NextResponse.json(
-        { error: 'Email, password, and organization_id are required' },
+        { error: 'Email, password, and organization are required' },
         { status: 400 }
       );
     }
@@ -101,16 +104,16 @@ export async function POST(request: NextRequest) {
 
     if (createAuthError) throw createAuthError;
 
-    // Create profile
+    // Create profile - use org_id (text field referencing orgs table)
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert([
         {
           user_id: authData.user.id,
           email,
-          full_name: full_name || null,
+          full_name: full_name || 'User',
           role: role || 'FIELD_CONTRIBUTOR',
-          organization_id,
+          org_id: org_id,
         },
       ]);
 

@@ -510,6 +510,71 @@ Cross-tenant access returns 403 Forbidden
 
 ---
 
+## CRITICAL TECHNICAL NOTES (Updated Jan 2026)
+
+### Database Column Names (IMPORTANT)
+
+The `programs` table uses `org_id` NOT `organization_id`:
+```sql
+-- CORRECT
+programs.org_id
+
+-- WRONG (will cause errors)
+programs.organization_id
+```
+
+The `profiles` table uses `organization_id`:
+```sql
+-- CORRECT
+profiles.organization_id
+```
+
+### Table Names
+
+Proofs are stored in `unit_proofs` table, NOT `proofs`:
+```sql
+-- CORRECT
+FROM unit_proofs
+
+-- WRONG (legacy table, may not have all columns)
+FROM proofs
+```
+
+Storage bucket is named `proofs` (for file uploads).
+
+### Columns That May Not Exist
+
+These columns require migration `20260112_hardening_pass.sql`:
+- `units.is_blocked`
+- `units.blocked_reason`
+- `units.blocked_at`
+- `units.blocked_by`
+- `units.high_criticality`
+
+These columns require migration `20260119_governance_locks.sql`:
+- `units.is_confirmed`
+- `units.confirmed_at`
+- `units.confirmed_by`
+- `units.is_archived`
+- `programs.is_archived`
+- `workstreams.is_archived`
+
+### API Routes Fixed (Jan 23, 2026)
+
+| Route | Issue Fixed |
+|-------|------------|
+| `/api/workstreams/[id]` | Changed `organization_id` to `org_id` |
+| `/api/units/[id]` | Changed `organization_id` to `org_id` |
+| `/api/programs/[id]` | Changed `organization_id` to `org_id` |
+| `/api/units/[id]/proofs` | Changed `proofs` to `unit_proofs` table |
+| `/api/units/[id]/proofs/[proofId]/approve` | Changed `proofs` to `unit_proofs` table |
+| `/api/units/route` | Changed `proofs` to `unit_proofs` table |
+| `/api/units/[id]/escalate` | Added tenant isolation check |
+| `/api/units/[id]/unblock` | Added tenant isolation check |
+| `/api/attention-queue` | Changed `organization_id` to `org_id` |
+
+---
+
 ## MIGRATION DEPENDENCY
 
 Before testing, ensure these migrations have been run in order:

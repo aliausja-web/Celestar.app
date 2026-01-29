@@ -74,24 +74,19 @@ export async function POST(
 
     const targetRoles = targetRolesMap[nextLevel] || ['PROGRAM_OWNER'];
 
-    // Create escalation record with proposed_blocked tracking
+    // Create escalation record - use actual database column names
     const { data: escalation, error: escalationError } = await supabase
       .from('unit_escalations')
       .insert([
         {
           unit_id: unitId,
           workstream_id: unit.workstream_id,
-          program_id: (unit.workstreams as any)?.program_id, // Required fields
-          escalation_level: nextLevel,
+          program_id: (unit.workstreams as any)?.program_id,
+          level: nextLevel, // Column is 'level' not 'escalation_level'
           triggered_at: new Date().toISOString(),
-          escalation_type: 'manual',
-          escalation_reason: reason,
-          escalated_by: context!.user_id,
-          visible_to_roles: targetRoles,
-          message: `Manual escalation (Level ${nextLevel}): ${reason}`,
+          threshold_minutes_past_deadline: 0, // Manual escalation = 0 threshold
+          recipients: targetRoles.map(role => ({ role, reason })),
           status: 'active',
-          proposed_blocked: mark_as_blocked && !canConfirmBlocked, // Track if CLIENT proposed blockage
-          proposed_by_role: userRole,
         },
       ])
       .select()

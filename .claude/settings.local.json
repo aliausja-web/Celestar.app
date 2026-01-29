@@ -21,7 +21,11 @@
       "Bash(supabase functions list:*)",
       "Bash(psql:*)",
       "Bash(taskkill:*)",
-      "Bash(npx supabase:*)"
+      "Bash(npx supabase:*)",
+      "Bash(supabase secrets:*)",
+      "Bash(python -c:*)",
+      "Bash(dir:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

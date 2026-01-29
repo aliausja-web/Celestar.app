@@ -16,8 +16,9 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseServer();
 
     // Fetch stats in parallel with fault tolerance
+    // Use 'orgs' table (not 'organizations') for client count - matches RBAC
     const results = await Promise.allSettled([
-      supabase.from('organizations').select('*', { count: 'exact', head: true }),
+      supabase.from('orgs').select('*', { count: 'exact', head: true }).neq('id', 'org_celestar'),
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
       supabase.from('programs').select('*', { count: 'exact', head: true }),
       supabase.from('escalation_notifications').select('*', { count: 'exact', head: true }).eq('status', 'pending')
