@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, Users, FolderKanban, Bell, ArrowLeft } from 'lucide-react';
+import { supabase } from '@/lib/firebase';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -20,12 +21,26 @@ export default function AdminDashboard() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch('/api/admin/stats');
+      // Get auth token for API calls
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        console.error('No auth token available');
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch('/api/admin/stats', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       if (response.ok) {
         const data = await response.json();
         setStats(data.stats);
       } else {
-        console.error('Failed to fetch stats');
+        console.error('Failed to fetch stats:', await response.text());
       }
     } catch (error) {
       console.error('Error fetching stats:', error);

@@ -80,6 +80,7 @@ export async function POST(
       .insert([
         {
           unit_id: unitId,
+          workstream_id: unit.workstream_id, // Required field
           escalation_level: nextLevel,
           triggered_at: new Date().toISOString(),
           escalation_type: 'manual',
