@@ -1,51 +1,41 @@
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
-import { NextResponse } from 'next/server';
+import { authorize } from '@/lib/auth-utils';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authHeader = request.headers.get('authorization');
+    const { authorized, context, error: authError } = await authorize(authHeader, {
+      requireRole: ['PLATFORM_ADMIN'],
+    });
+
+    if (!authorized) {
+      return NextResponse.json({ error: authError }, { status: 403 });
+    }
+
     const supabase = getSupabaseServer();
 
-    // Check authentication
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Get user's profile to check if they're a platform admin
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('user_id', user.id)
-      .single();
-
-    if (!profile || profile.role !== 'PLATFORM_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden - Platform Admin access required' }, { status: 403 });
-    }
-
-    // Fetch stats in parallel
-    const [
-      { count: totalClients },
-      { count: totalUsers },
-      { count: totalPrograms },
-      { count: pendingNotifications }
-    ] = await Promise.all([
+    // Fetch stats in parallel with fault tolerance
+    const results = await Promise.allSettled([
       supabase.from('organizations').select('*', { count: 'exact', head: true }),
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
       supabase.from('programs').select('*', { count: 'exact', head: true }),
       supabase.from('escalation_notifications').select('*', { count: 'exact', head: true }).eq('status', 'pending')
     ]);
 
+    // Extract counts with fallback to 0
+    const totalClients = results[0].status === 'fulfilled' ? (results[0].value.count || 0) : 0;
+    const totalUsers = results[1].status === 'fulfilled' ? (results[1].value.count || 0) : 0;
+    const totalPrograms = results[2].status === 'fulfilled' ? (results[2].value.count || 0) : 0;
+    const pendingNotifications = results[3].status === 'fulfilled' ? (results[3].value.count || 0) : 0;
+
     return NextResponse.json({
       success: true,
       stats: {
-        totalClients: totalClients || 0,
-        totalUsers: totalUsers || 0,
-        totalPrograms: totalPrograms || 0,
-        pendingNotifications: pendingNotifications || 0,
+        totalClients,
+        totalUsers,
+        totalPrograms,
+        pendingNotifications,
       },
     });
   } catch (error: any) {
