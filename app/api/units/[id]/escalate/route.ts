@@ -139,6 +139,23 @@ export async function POST(
       }));
 
       await supabase.from('escalation_notifications').insert(emailNotifications);
+
+      // Trigger the Edge Function to send emails immediately
+      try {
+        await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-escalation-emails`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      } catch (emailError) {
+        // Don't fail the escalation if email sending fails
+        console.warn('Failed to trigger email function:', emailError);
+      }
     }
 
     // Update unit escalation level and blocked status if requested AND authorized

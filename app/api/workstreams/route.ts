@@ -6,7 +6,7 @@ import { authorize } from '@/lib/auth-utils';
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
-    const { authorized, error: authError } = await authorize(authHeader);
+    const { authorized, context, error: authError } = await authorize(authHeader);
 
     if (!authorized) {
       return NextResponse.json({ error: authError }, { status: 401 });
@@ -21,6 +21,21 @@ export async function GET(request: NextRequest) {
         { error: 'program_id is required' },
         { status: 400 }
       );
+    }
+
+    // TENANT SAFETY: Verify program belongs to user's organization
+    const { data: progCheck } = await supabase
+      .from('programs')
+      .select('org_id')
+      .eq('id', programId)
+      .single();
+
+    if (!progCheck) {
+      return NextResponse.json({ error: 'Program not found' }, { status: 404 });
+    }
+
+    if (context!.role !== 'PLATFORM_ADMIN' && progCheck.org_id !== context!.org_id) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
     // Simple query without governance columns
@@ -42,7 +57,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
-    const { authorized, error: authError } = await authorize(authHeader, {
+    const { authorized, context, error: authError } = await authorize(authHeader, {
       requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD'],
     });
 
@@ -52,6 +67,21 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseServer();
     const body = await request.json();
+
+    // TENANT SAFETY: Verify program belongs to user's organization
+    const { data: progCheck } = await supabase
+      .from('programs')
+      .select('org_id')
+      .eq('id', body.program_id)
+      .single();
+
+    if (!progCheck) {
+      return NextResponse.json({ error: 'Program not found' }, { status: 404 });
+    }
+
+    if (context!.role !== 'PLATFORM_ADMIN' && progCheck.org_id !== context!.org_id) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
+    }
 
     const { data: workstream, error } = await supabase
       .from('workstreams')

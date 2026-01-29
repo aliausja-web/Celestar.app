@@ -37,10 +37,26 @@ export async function POST(
 
     const supabase = getSupabaseServer();
 
-    // Get the proof to check uploader
+    // TENANT SAFETY: Verify unit belongs to user's organization
+    const { data: unitCheck } = await supabase
+      .from('units')
+      .select('workstreams!inner(programs!inner(org_id))')
+      .eq('id', params.id)
+      .single();
+
+    if (!unitCheck) {
+      return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
+    }
+
+    const unitOrgId = (unitCheck.workstreams as any)?.programs?.org_id;
+    if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== context!.org_id) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
+    }
+
+    // Get the proof with unit details for notification
     const { data: proof, error: proofFetchError } = await supabase
       .from('unit_proofs')
-      .select('*')
+      .select('*, units(id, title)')
       .eq('id', params.proofId)
       .single();
 
@@ -86,6 +102,49 @@ export async function POST(
     if (updateError) throw updateError;
 
     // The trigger will automatically recompute unit status and log to status_events
+
+    // Send email notification to the uploader
+    if (proof.uploaded_by_email) {
+      const unitTitle = (proof.units as any)?.title || 'Unknown Unit';
+      const isApproved = action === 'approve';
+
+      try {
+        // Create email notification record
+        await supabase.from('escalation_notifications').insert([{
+          escalation_id: null, // Not an escalation, general notification
+          recipient_email: proof.uploaded_by_email,
+          recipient_name: proof.uploaded_by_email.split('@')[0],
+          channel: 'email',
+          subject: isApproved
+            ? `✅ Proof Approved - "${unitTitle}"`
+            : `❌ Proof Rejected - "${unitTitle}"`,
+          message: isApproved
+            ? `Great news! Your proof submission for "${unitTitle}" has been approved by ${context!.email}.`
+            : `Your proof submission for "${unitTitle}" was rejected.\n\nReason: ${rejection_reason}\n\nPlease submit a new proof addressing the feedback.`,
+          template_data: {
+            unit_title: unitTitle,
+            action: action,
+            reviewed_by: context!.email,
+            rejection_reason: rejection_reason || null,
+          },
+          status: 'pending',
+        }]);
+
+        // Trigger Edge Function to send email
+        await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-escalation-emails`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      } catch (emailError) {
+        console.warn('Failed to send proof notification email:', emailError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

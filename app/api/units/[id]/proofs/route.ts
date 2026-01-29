@@ -24,6 +24,23 @@ export async function POST(
     }
 
     const supabase = getSupabaseServer();
+
+    // TENANT SAFETY: Verify unit belongs to user's organization
+    const { data: unitCheck } = await supabase
+      .from('units')
+      .select('workstreams!inner(programs!inner(org_id))')
+      .eq('id', params.id)
+      .single();
+
+    if (!unitCheck) {
+      return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
+    }
+
+    const unitOrgId = (unitCheck.workstreams as any)?.programs?.org_id;
+    if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== context!.org_id) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
+    }
+
     const body = await request.json();
 
     // Get public URL from file path
@@ -90,7 +107,22 @@ export async function GET(
 
     const supabase = getSupabaseServer();
 
-    // RLS will automatically filter based on user permissions
+    // TENANT SAFETY: Verify unit belongs to user's organization
+    const { data: unitCheck } = await supabase
+      .from('units')
+      .select('workstreams!inner(programs!inner(org_id))')
+      .eq('id', params.id)
+      .single();
+
+    if (!unitCheck) {
+      return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
+    }
+
+    const unitOrgId = (unitCheck.workstreams as any)?.programs?.org_id;
+    if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== context!.org_id) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
+    }
+
     const { data: proofs, error } = await supabase
       .from('unit_proofs')
       .select('*')

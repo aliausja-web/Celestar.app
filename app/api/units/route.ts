@@ -23,6 +23,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // TENANT SAFETY: Verify workstream belongs to user's organization
+    const { data: wsCheck } = await supabase
+      .from('workstreams')
+      .select('programs!inner(org_id)')
+      .eq('id', workstreamId)
+      .single();
+
+    if (!wsCheck) {
+      return NextResponse.json({ error: 'Workstream not found' }, { status: 404 });
+    }
+
+    const wsOrgId = (wsCheck.programs as any)?.org_id;
+    if (context!.role !== 'PLATFORM_ADMIN' && wsOrgId !== context!.org_id) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
+    }
+
     // Simple query without governance columns
     const { data: units, error } = await supabase
       .from('units')
@@ -71,6 +87,22 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseServer();
     const body = await request.json();
+
+    // TENANT SAFETY: Verify workstream belongs to user's organization
+    const { data: wsCheck } = await supabase
+      .from('workstreams')
+      .select('programs!inner(org_id)')
+      .eq('id', body.workstream_id)
+      .single();
+
+    if (!wsCheck) {
+      return NextResponse.json({ error: 'Workstream not found' }, { status: 404 });
+    }
+
+    const wsOrgId = (wsCheck.programs as any)?.org_id;
+    if (context!.role !== 'PLATFORM_ADMIN' && wsOrgId !== context!.org_id) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
+    }
 
     // Build proof requirements object
     const proofRequirements = {
