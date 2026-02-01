@@ -94,18 +94,39 @@ export async function POST(
 
     if (escalationError) throw escalationError;
 
-    // Get users to notify
+    // Get workstream and program details for the email
+    const { data: workstreamData } = await supabase
+      .from('workstreams')
+      .select('name, programs(name)')
+      .eq('id', unit.workstream_id)
+      .single();
+
+    const workstreamName = workstreamData?.name || 'Unknown Workstream';
+    const programName = (workstreamData?.programs as any)?.name || 'Unknown Program';
+
+    // CRITICAL: Get users to notify - FILTER BY SAME ORGANIZATION
+    // This prevents cross-tenant email leakage
     const { data: usersToNotify } = await supabase
       .from('profiles')
       .select('user_id, email, full_name, role')
+      .eq('org_id', unitOrgId) // TENANT ISOLATION - only same org users
       .in('role', targetRoles);
+
+    // Get escalator's name for the email
+    const { data: escalatorProfile } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('user_id', context!.user_id)
+      .single();
+
+    const escalatorName = escalatorProfile?.full_name || escalatorProfile?.email || 'A team member';
 
     // Create in-app notifications
     if (usersToNotify && usersToNotify.length > 0) {
       const notifications = usersToNotify.map((user) => ({
         user_id: user.user_id,
-        title: `Level ${nextLevel} Manual Escalation`,
-        message: `Unit "${unit.title}" has been manually escalated. Reason: ${reason}`,
+        title: `🚨 MANUAL ESCALATION - Level ${nextLevel}`,
+        message: `Unit "${unit.title}" has been manually escalated by ${escalatorName}. Reason: ${reason}`,
         type: 'manual_escalation',
         priority: nextLevel === 3 ? 'critical' : nextLevel === 2 ? 'high' : 'normal',
         related_unit_id: unitId,
@@ -116,42 +137,77 @@ export async function POST(
 
       await supabase.from('in_app_notifications').insert(notifications);
 
-      // Create email notifications (queue for Edge Function to process)
-      const emailNotifications = usersToNotify.map((user) => ({
-        escalation_id: escalation.id,
-        recipient_user_id: user.user_id,
-        recipient_email: user.email,
-        recipient_name: user.full_name,
-        channel: 'email',
-        subject: `🚨 URGENT: Manual Escalation - "${unit.title}"`,
-        message: `Critical issue reported by ${context?.user_id}:\n\n"${reason}"\n\nUnit: ${unit.title}\nEscalation Level: ${nextLevel}\n\nImmediate action required.`,
-        template_data: {
-          unit_title: unit.title,
-          escalation_level: nextLevel,
-          reason: reason,
-          escalated_by: context?.user_id,
-          priority: nextLevel === 3 ? 'critical' : 'high',
-        },
-        status: 'pending',
-      }));
-
-      await supabase.from('escalation_notifications').insert(emailNotifications);
-
-      // Trigger the Edge Function to send emails immediately
-      try {
-        await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-escalation-emails`,
-          {
+      // Send emails directly via Resend (not through the automatic alert Edge Function)
+      // This is a MANUAL escalation - completely different from automatic deadline alerts
+      for (const user of usersToNotify) {
+        try {
+          await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+              'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
               'Content-Type': 'application/json',
             },
-          }
-        );
-      } catch (emailError) {
-        // Don't fail the escalation if email sending fails
-        console.warn('Failed to trigger email function:', emailError);
+            body: JSON.stringify({
+              from: 'Celestar Alerts <alerts@celestar.app>',
+              to: user.email,
+              subject: `🚨 MANUAL ESCALATION: "${unit.title}" - Action Required`,
+              html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <div style="background: #dc2626; color: white; padding: 20px; text-align: center;">
+                    <h1 style="margin: 0;">⚠️ MANUAL ESCALATION</h1>
+                    <p style="margin: 5px 0 0 0; font-size: 14px;">This is NOT an automatic alert - Someone has raised an issue</p>
+                  </div>
+
+                  <div style="padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb;">
+                    <p>Hi ${user.full_name || user.email},</p>
+
+                    <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 15px 0;">
+                      <strong>ESCALATION REASON:</strong>
+                      <p style="margin: 10px 0 0 0; font-size: 16px;">"${reason}"</p>
+                    </div>
+
+                    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+                      <tr>
+                        <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Unit:</strong></td>
+                        <td style="padding: 8px; border: 1px solid #e5e7eb;">${unit.title}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Workstream:</strong></td>
+                        <td style="padding: 8px; border: 1px solid #e5e7eb;">${workstreamName}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Program:</strong></td>
+                        <td style="padding: 8px; border: 1px solid #e5e7eb;">${programName}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Escalation Level:</strong></td>
+                        <td style="padding: 8px; border: 1px solid #e5e7eb;">Level ${nextLevel}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Escalated By:</strong></td>
+                        <td style="padding: 8px; border: 1px solid #e5e7eb;">${escalatorName}</td>
+                      </tr>
+                    </table>
+
+                    <p><strong>Please review and take appropriate action immediately.</strong></p>
+
+                    <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://celestar.app'}/units/${unitId}"
+                       style="display: inline-block; background: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 10px;">
+                      View Unit in Portal
+                    </a>
+                  </div>
+
+                  <div style="padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
+                    <p>This is a manual escalation from Celestar Execution Readiness Portal</p>
+                    <p>© 2026 Celestar. All rights reserved.</p>
+                  </div>
+                </div>
+              `,
+            }),
+          });
+        } catch (emailError) {
+          console.warn('Failed to send manual escalation email to', user.email, emailError);
+        }
       }
     }
 
