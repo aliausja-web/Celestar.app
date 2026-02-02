@@ -104,13 +104,30 @@ export async function POST(
     const workstreamName = workstreamData?.name || 'Unknown Workstream';
     const programName = (workstreamData?.programs as any)?.name || 'Unknown Program';
 
-    // CRITICAL: Get users to notify - FILTER BY SAME ORGANIZATION
-    // This prevents cross-tenant email leakage
-    const { data: usersToNotify } = await supabase
-      .from('profiles')
-      .select('user_id, email, full_name, role')
-      .eq('org_id', unitOrgId) // TENANT ISOLATION - only same org users
-      .in('role', targetRoles);
+    // CRITICAL: Get users to notify with proper tenant isolation
+    // - Same-org users for client roles (PROGRAM_OWNER, WORKSTREAM_LEAD, etc.)
+    // - PLATFORM_ADMIN always gets notified (they oversee all orgs)
+
+    // Get same-org users (excluding PLATFORM_ADMIN which is cross-org)
+    const sameOrgRoles = targetRoles.filter(r => r !== 'PLATFORM_ADMIN');
+    const { data: sameOrgUsers } = sameOrgRoles.length > 0
+      ? await supabase
+          .from('profiles')
+          .select('user_id, email, full_name, role')
+          .eq('org_id', unitOrgId)
+          .in('role', sameOrgRoles)
+      : { data: [] };
+
+    // Get PLATFORM_ADMIN users separately (they're in org_celestar but oversee all)
+    const { data: platformAdmins } = targetRoles.includes('PLATFORM_ADMIN')
+      ? await supabase
+          .from('profiles')
+          .select('user_id, email, full_name, role')
+          .eq('role', 'PLATFORM_ADMIN')
+      : { data: [] };
+
+    // Combine both lists
+    const usersToNotify = [...(sameOrgUsers || []), ...(platformAdmins || [])];
 
     // Get escalator's name for the email
     const { data: escalatorProfile } = await supabase
