@@ -242,6 +242,15 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
+      debug: {
+        unitOrgId,
+        sameOrgUsersCount: sameOrgUsers?.length || 0,
+        platformAdminsCount: platformAdmins?.length || 0,
+        totalUsersToNotify: usersToNotify?.length || 0,
+        resendKeyExists: !!process.env.RESEND_API_KEY,
+        resendKeyPrefix: process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.substring(0, 6) + '...' : 'NOT SET',
+        userEmails: usersToNotify?.map(u => u.email) || [],
+      },
       notifications_sent: usersToNotify?.length || 0,
       emails_sent: emailsSent,
       emails_failed: emailsFailed,
