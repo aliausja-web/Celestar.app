@@ -123,6 +123,9 @@ export async function POST(
 
     const escalatorName = escalatorProfile?.full_name || escalatorProfile?.email || 'A team member';
 
+    let emailsSent = 0;
+    let emailsFailed = 0;
+
     // Create in-app notifications
     if (usersToNotify && usersToNotify.length > 0) {
       const notifications = usersToNotify.map((user) => ({
@@ -142,8 +145,6 @@ export async function POST(
       // Send MANUAL ESCALATION emails directly via Resend
       // These are completely separate from automatic deadline reminders
       const resendKey = process.env.RESEND_API_KEY;
-      let emailsSent = 0;
-      let emailsFailed = 0;
 
       if (!resendKey) {
         console.error('RESEND_API_KEY is not set — cannot send escalation emails');
