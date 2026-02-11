@@ -140,7 +140,10 @@ export async function POST(
         emailErrors.push('RESEND_API_KEY is not set in environment variables');
         console.error('RESEND_API_KEY is not set — cannot send escalation emails');
       } else {
-        for (const user of usersToNotify) {
+        for (let i = 0; i < usersToNotify.length; i++) {
+          const user = usersToNotify[i];
+          // Delay between emails to avoid Resend rate limit (2/sec on free plan)
+          if (i > 0) await new Promise(r => setTimeout(r, 600));
           try {
             const emailRes = await fetch('https://api.resend.com/emails', {
               method: 'POST',
@@ -149,7 +152,7 @@ export async function POST(
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                from: 'Celestar <onboarding@resend.dev>',
+                from: 'Celestar Alerts <alerts@celestar.app>',
                 to: [user.email],
                 subject: `MANUAL ESCALATION: "${unit.title}" - Action Required`,
                 html: `
