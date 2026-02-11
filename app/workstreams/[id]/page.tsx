@@ -158,7 +158,7 @@ export default function WorkstreamBoard() {
         throw new Error(data.error || 'Failed to escalate unit');
       }
 
-      toast.success(`Unit escalated to level ${data.new_level}`);
+      toast.success(`Escalation sent to all users (${data.emails_sent} emails sent)`);
       setShowEscalationDialog(false);
 
       // Refresh units to show updated escalation level

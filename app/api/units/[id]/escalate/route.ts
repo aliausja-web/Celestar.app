@@ -3,6 +3,8 @@ import { getSupabaseServer } from '@/lib/supabase-server';
 import { authorize } from '@/lib/auth-utils';
 
 // POST /api/units/[id]/escalate - Manually escalate a unit
+// Manual escalation = someone raises a real-world issue (e.g. water damage, broken equipment)
+// This notifies ALL users in the org + ALL PLATFORM_ADMINs — no levels involved
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -38,9 +40,6 @@ export async function POST(
 
     const userRole = userProfile?.role;
 
-    // Role-based BLOCKED authority check
-    // Only WORKSTREAM_LEAD, PROGRAM_OWNER, or PLATFORM_ADMIN can confirm BLOCKED
-    // CLIENT can propose blockage but cannot set it directly
     const canConfirmBlocked = ['WORKSTREAM_LEAD', 'PROGRAM_OWNER', 'PLATFORM_ADMIN'].includes(userRole);
     const actuallyMarkBlocked = mark_as_blocked && canConfirmBlocked;
 
@@ -61,11 +60,7 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
-    // Calculate next escalation level
-    const currentLevel = unit.current_escalation_level || 0;
-    const nextLevel = Math.min(currentLevel + 1, 3);
-
-    // Create escalation record
+    // Create escalation record (level 1 for audit trail — manual escalations don't use levels)
     const { data: escalation, error: escalationError } = await supabase
       .from('unit_escalations')
       .insert([
@@ -73,7 +68,7 @@ export async function POST(
           unit_id: unitId,
           workstream_id: unit.workstream_id,
           program_id: (unit.workstreams as any)?.program_id,
-          level: nextLevel,
+          level: 1,
           triggered_at: new Date().toISOString(),
           threshold_minutes_past_deadline: 0,
           recipients: [{ type: 'manual', reason }],
@@ -96,25 +91,20 @@ export async function POST(
     const programName = (workstreamData?.programs as any)?.name || 'Unknown Program';
 
     // MANUAL ESCALATION: Notify ALL users in the org + ALL PLATFORM_ADMINs
-    // (Unlike automatic alerts which are level-based)
-
-    // Get ALL users in the same org
     const { data: sameOrgUsers } = await supabase
       .from('profiles')
       .select('user_id, email, full_name, role')
       .eq('org_id', unitOrgId)
       .neq('role', 'PLATFORM_ADMIN');
 
-    // Get ALL PLATFORM_ADMIN users (they oversee all orgs)
     const { data: platformAdmins } = await supabase
       .from('profiles')
       .select('user_id, email, full_name, role')
       .eq('role', 'PLATFORM_ADMIN');
 
-    // Combine — everyone gets notified for manual escalations
     const usersToNotify = [...(sameOrgUsers || []), ...(platformAdmins || [])];
 
-    // Get escalator's name for the email
+    // Get escalator's name
     const { data: escalatorProfile } = await supabase
       .from('profiles')
       .select('full_name, email')
@@ -125,28 +115,29 @@ export async function POST(
 
     let emailsSent = 0;
     let emailsFailed = 0;
+    const emailErrors: string[] = [];
 
     // Create in-app notifications
     if (usersToNotify && usersToNotify.length > 0) {
       const notifications = usersToNotify.map((user) => ({
         user_id: user.user_id,
-        title: `🚨 MANUAL ESCALATION - Level ${nextLevel}`,
+        title: `MANUAL ESCALATION`,
         message: `Unit "${unit.title}" has been manually escalated by ${escalatorName}. Reason: ${reason}`,
         type: 'manual_escalation',
-        priority: nextLevel === 3 ? 'critical' : nextLevel === 2 ? 'high' : 'normal',
+        priority: 'critical',
         related_unit_id: unitId,
         related_escalation_id: escalation.id,
         action_url: `/units/${unitId}`,
-        metadata: { unit_title: unit.title, escalation_level: nextLevel, reason },
+        metadata: { unit_title: unit.title, reason },
       }));
 
       await supabase.from('in_app_notifications').insert(notifications);
 
-      // Send MANUAL ESCALATION emails directly via Resend
-      // These are completely separate from automatic deadline reminders
+      // Send MANUAL ESCALATION emails via Resend
       const resendKey = process.env.RESEND_API_KEY;
 
       if (!resendKey) {
+        emailErrors.push('RESEND_API_KEY is not set in environment variables');
         console.error('RESEND_API_KEY is not set — cannot send escalation emails');
       } else {
         for (const user of usersToNotify) {
@@ -158,7 +149,7 @@ export async function POST(
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                from: 'Celestar Alerts <alerts@celestar.app>',
+                from: 'Celestar <onboarding@resend.dev>',
                 to: [user.email],
                 subject: `MANUAL ESCALATION: "${unit.title}" - Action Required`,
                 html: `
@@ -217,59 +208,49 @@ export async function POST(
               console.log('Manual escalation email sent to', user.email);
             } else {
               emailsFailed++;
-              console.error('Resend API error for', user.email, JSON.stringify(emailResult));
+              const errMsg = `Resend error for ${user.email}: ${JSON.stringify(emailResult)}`;
+              emailErrors.push(errMsg);
+              console.error(errMsg);
             }
           } catch (emailError: any) {
             emailsFailed++;
-            console.error('Failed to send manual escalation email to', user.email, emailError.message);
+            const errMsg = `Exception for ${user.email}: ${emailError.message}`;
+            emailErrors.push(errMsg);
+            console.error(errMsg);
           }
         }
       }
     }
 
-    // Update unit escalation level and blocked status if requested AND authorized
-    // Use try-catch for optional columns that might not exist in older schemas
-    try {
-      const updateData: any = {
-        current_escalation_level: nextLevel,
-      };
-
-      // If marking as blocked AND user has authority, set blocked fields
-      if (actuallyMarkBlocked === true) {
-        updateData.is_blocked = true;
-        updateData.blocked_reason = reason;
-        updateData.blocked_at = new Date().toISOString();
-        updateData.blocked_by = context!.user_id;
-        updateData.computed_status = 'BLOCKED';
+    // Update blocked status if requested AND authorized (no level change for manual)
+    if (actuallyMarkBlocked === true) {
+      try {
+        await supabase
+          .from('units')
+          .update({
+            is_blocked: true,
+            blocked_reason: reason,
+            blocked_at: new Date().toISOString(),
+            blocked_by: context!.user_id,
+            computed_status: 'BLOCKED',
+          })
+          .eq('id', unitId);
+      } catch (updateError: any) {
+        console.warn('Block update failed:', updateError.message);
       }
-
-      await supabase
-        .from('units')
-        .update(updateData)
-        .eq('id', unitId);
-    } catch (updateError: any) {
-      // If update fails due to missing columns, try minimal update
-      console.warn('Full update failed, trying minimal update:', updateError.message);
-      await supabase
-        .from('units')
-        .update({ current_escalation_level: nextLevel })
-        .eq('id', unitId);
     }
 
     return NextResponse.json({
       success: true,
-      new_level: nextLevel,
       notifications_sent: usersToNotify?.length || 0,
-      emails_sent: emailsSent || 0,
-      emails_failed: emailsFailed || 0,
+      emails_sent: emailsSent,
+      emails_failed: emailsFailed,
+      email_errors: emailErrors.length > 0 ? emailErrors : undefined,
       resend_configured: !!process.env.RESEND_API_KEY,
       blocked: actuallyMarkBlocked === true,
-      blocked_proposed: mark_as_blocked && !canConfirmBlocked, // CLIENT proposed but lacks authority
-      message: mark_as_blocked && !canConfirmBlocked
-        ? 'Escalation created with proposed blockage. WORKSTREAM_LEAD or PROGRAM_OWNER must confirm.'
-        : actuallyMarkBlocked
-        ? 'Unit marked as BLOCKED.'
-        : 'Escalation created.',
+      message: actuallyMarkBlocked
+        ? 'Escalation sent to all users. Unit marked as BLOCKED.'
+        : 'Escalation sent to all users.',
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
