@@ -65,16 +65,7 @@ export async function POST(
     const currentLevel = unit.current_escalation_level || 0;
     const nextLevel = Math.min(currentLevel + 1, 3);
 
-    // Determine target roles
-    const targetRolesMap: { [key: number]: string[] } = {
-      1: ['WORKSTREAM_LEAD'],
-      2: ['PROGRAM_OWNER', 'WORKSTREAM_LEAD'],
-      3: ['PLATFORM_ADMIN', 'PROGRAM_OWNER'],
-    };
-
-    const targetRoles = targetRolesMap[nextLevel] || ['PROGRAM_OWNER'];
-
-    // Create escalation record - use actual database column names
+    // Create escalation record
     const { data: escalation, error: escalationError } = await supabase
       .from('unit_escalations')
       .insert([
@@ -82,10 +73,10 @@ export async function POST(
           unit_id: unitId,
           workstream_id: unit.workstream_id,
           program_id: (unit.workstreams as any)?.program_id,
-          level: nextLevel, // Column is 'level' not 'escalation_level'
+          level: nextLevel,
           triggered_at: new Date().toISOString(),
-          threshold_minutes_past_deadline: 0, // Manual escalation = 0 threshold
-          recipients: targetRoles.map(role => ({ role, reason })),
+          threshold_minutes_past_deadline: 0,
+          recipients: [{ type: 'manual', reason }],
           status: 'active',
         },
       ])
@@ -104,29 +95,23 @@ export async function POST(
     const workstreamName = workstreamData?.name || 'Unknown Workstream';
     const programName = (workstreamData?.programs as any)?.name || 'Unknown Program';
 
-    // CRITICAL: Get users to notify with proper tenant isolation
-    // - Same-org users for client roles (PROGRAM_OWNER, WORKSTREAM_LEAD, etc.)
-    // - PLATFORM_ADMIN always gets notified (they oversee all orgs)
+    // MANUAL ESCALATION: Notify ALL users in the org + ALL PLATFORM_ADMINs
+    // (Unlike automatic alerts which are level-based)
 
-    // Get same-org users (excluding PLATFORM_ADMIN which is cross-org)
-    const sameOrgRoles = targetRoles.filter(r => r !== 'PLATFORM_ADMIN');
-    const { data: sameOrgUsers } = sameOrgRoles.length > 0
-      ? await supabase
-          .from('profiles')
-          .select('user_id, email, full_name, role')
-          .eq('org_id', unitOrgId)
-          .in('role', sameOrgRoles)
-      : { data: [] };
+    // Get ALL users in the same org
+    const { data: sameOrgUsers } = await supabase
+      .from('profiles')
+      .select('user_id, email, full_name, role')
+      .eq('org_id', unitOrgId)
+      .neq('role', 'PLATFORM_ADMIN');
 
-    // Get PLATFORM_ADMIN users separately (they're in org_celestar but oversee all)
-    const { data: platformAdmins } = targetRoles.includes('PLATFORM_ADMIN')
-      ? await supabase
-          .from('profiles')
-          .select('user_id, email, full_name, role')
-          .eq('role', 'PLATFORM_ADMIN')
-      : { data: [] };
+    // Get ALL PLATFORM_ADMIN users (they oversee all orgs)
+    const { data: platformAdmins } = await supabase
+      .from('profiles')
+      .select('user_id, email, full_name, role')
+      .eq('role', 'PLATFORM_ADMIN');
 
-    // Combine both lists
+    // Combine — everyone gets notified for manual escalations
     const usersToNotify = [...(sameOrgUsers || []), ...(platformAdmins || [])];
 
     // Get escalator's name for the email
@@ -154,76 +139,89 @@ export async function POST(
 
       await supabase.from('in_app_notifications').insert(notifications);
 
-      // Send emails directly via Resend (not through the automatic alert Edge Function)
-      // This is a MANUAL escalation - completely different from automatic deadline alerts
-      for (const user of usersToNotify) {
-        try {
-          await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              from: 'Celestar Alerts <alerts@celestar.app>',
-              to: user.email,
-              subject: `🚨 MANUAL ESCALATION: "${unit.title}" - Action Required`,
-              html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                  <div style="background: #dc2626; color: white; padding: 20px; text-align: center;">
-                    <h1 style="margin: 0;">⚠️ MANUAL ESCALATION</h1>
-                    <p style="margin: 5px 0 0 0; font-size: 14px;">This is NOT an automatic alert - Someone has raised an issue</p>
-                  </div>
+      // Send MANUAL ESCALATION emails directly via Resend
+      // These are completely separate from automatic deadline reminders
+      const resendKey = process.env.RESEND_API_KEY;
+      let emailsSent = 0;
+      let emailsFailed = 0;
 
-                  <div style="padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb;">
-                    <p>Hi ${user.full_name || user.email},</p>
-
-                    <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 15px 0;">
-                      <strong>ESCALATION REASON:</strong>
-                      <p style="margin: 10px 0 0 0; font-size: 16px;">"${reason}"</p>
+      if (!resendKey) {
+        console.error('RESEND_API_KEY is not set — cannot send escalation emails');
+      } else {
+        for (const user of usersToNotify) {
+          try {
+            const emailRes = await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${resendKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                from: 'Celestar Alerts <alerts@celestar.app>',
+                to: [user.email],
+                subject: `MANUAL ESCALATION: "${unit.title}" - Action Required`,
+                html: `
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <div style="background: #dc2626; color: white; padding: 20px; text-align: center;">
+                      <h1 style="margin: 0;">MANUAL ESCALATION</h1>
+                      <p style="margin: 5px 0 0 0; font-size: 14px;">This is NOT an automatic reminder — a team member has raised an urgent issue</p>
                     </div>
 
-                    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
-                      <tr>
-                        <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Unit:</strong></td>
-                        <td style="padding: 8px; border: 1px solid #e5e7eb;">${unit.title}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Workstream:</strong></td>
-                        <td style="padding: 8px; border: 1px solid #e5e7eb;">${workstreamName}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Program:</strong></td>
-                        <td style="padding: 8px; border: 1px solid #e5e7eb;">${programName}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Escalation Level:</strong></td>
-                        <td style="padding: 8px; border: 1px solid #e5e7eb;">Level ${nextLevel}</td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Escalated By:</strong></td>
-                        <td style="padding: 8px; border: 1px solid #e5e7eb;">${escalatorName}</td>
-                      </tr>
-                    </table>
+                    <div style="padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb;">
+                      <p>Hi ${user.full_name || user.email},</p>
 
-                    <p><strong>Please review and take appropriate action immediately.</strong></p>
+                      <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 15px 0;">
+                        <strong>REASON FOR ESCALATION:</strong>
+                        <p style="margin: 10px 0 0 0; font-size: 16px;">"${reason}"</p>
+                      </div>
 
-                    <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://celestar.app'}/units/${unitId}"
-                       style="display: inline-block; background: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 10px;">
-                      View Unit in Portal
-                    </a>
+                      <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Unit:</strong></td>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${unit.title}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Workstream:</strong></td>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${workstreamName}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Program:</strong></td>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${programName}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Escalated By:</strong></td>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${escalatorName}</td>
+                        </tr>
+                      </table>
+
+                      <p><strong>Please review and take appropriate action immediately.</strong></p>
+
+                      <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://celestar.app'}/units/${unitId}"
+                         style="display: inline-block; background: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 10px;">
+                        View Unit in Portal
+                      </a>
+                    </div>
+
+                    <div style="padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
+                      <p>This is a manual escalation from Celestar Execution Readiness Portal</p>
+                    </div>
                   </div>
+                `,
+              }),
+            });
 
-                  <div style="padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
-                    <p>This is a manual escalation from Celestar Execution Readiness Portal</p>
-                    <p>© 2026 Celestar. All rights reserved.</p>
-                  </div>
-                </div>
-              `,
-            }),
-          });
-        } catch (emailError) {
-          console.warn('Failed to send manual escalation email to', user.email, emailError);
+            const emailResult = await emailRes.json();
+            if (emailRes.ok) {
+              emailsSent++;
+              console.log('Manual escalation email sent to', user.email);
+            } else {
+              emailsFailed++;
+              console.error('Resend API error for', user.email, JSON.stringify(emailResult));
+            }
+          } catch (emailError: any) {
+            emailsFailed++;
+            console.error('Failed to send manual escalation email to', user.email, emailError.message);
+          }
         }
       }
     }
@@ -261,6 +259,9 @@ export async function POST(
       success: true,
       new_level: nextLevel,
       notifications_sent: usersToNotify?.length || 0,
+      emails_sent: emailsSent || 0,
+      emails_failed: emailsFailed || 0,
+      resend_configured: !!process.env.RESEND_API_KEY,
       blocked: actuallyMarkBlocked === true,
       blocked_proposed: mark_as_blocked && !canConfirmBlocked, // CLIENT proposed but lacks authority
       message: mark_as_blocked && !canConfirmBlocked
