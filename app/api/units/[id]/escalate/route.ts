@@ -142,8 +142,8 @@ export async function POST(
       } else {
         for (let i = 0; i < usersToNotify.length; i++) {
           const user = usersToNotify[i];
-          // Delay between emails to avoid Resend rate limit (2/sec on free plan)
-          if (i > 0) await new Promise(r => setTimeout(r, 600));
+          // Delay between ALL emails to avoid Resend rate limit (2/sec on free plan)
+          if (i > 0) await new Promise(r => setTimeout(r, 1200));
           try {
             const emailRes = await fetch('https://api.resend.com/emails', {
               method: 'POST',
