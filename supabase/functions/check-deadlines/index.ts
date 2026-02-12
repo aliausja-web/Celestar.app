@@ -1,5 +1,5 @@
 // Supabase Edge Function: Automatic Deadline Reminders
-// Polite reminders at 10%, 30%, and 100% of timeline elapsed
+// Thresholds are loaded from the alert_thresholds table — no code changes needed
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -8,10 +8,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const THRESHOLDS = [
-  { level: 1, percent: 10, label: 'Early Reminder', emoji: '📋', color: '#2563eb', tone: 'We wanted to give you an early heads-up' },
-  { level: 2, percent: 30, label: 'Important Reminder', emoji: '📌', color: '#ea580c', tone: 'This is an important reminder that time is moving along' },
-  { level: 3, percent: 100, label: 'Final Reminder', emoji: '⏳', color: '#dc2626', tone: 'This is a final reminder — the deadline has arrived' },
+// Fallback thresholds if the table doesn't exist or is empty
+const DEFAULT_THRESHOLDS = [
+  { level: 1, percent: 10, label: 'Early Reminder', emoji: '📋', color: '#2563eb', tone: 'We wanted to give you an early heads-up', notify_roles: ['WORKSTREAM_LEAD'] },
+  { level: 2, percent: 30, label: 'Important Reminder', emoji: '📌', color: '#ea580c', tone: 'This is an important reminder that time is moving along', notify_roles: ['WORKSTREAM_LEAD', 'PROGRAM_OWNER'] },
+  { level: 3, percent: 100, label: 'Final Reminder', emoji: '⏳', color: '#dc2626', tone: 'This is a final reminder — the deadline has arrived', notify_roles: ['WORKSTREAM_LEAD', 'PROGRAM_OWNER', 'PLATFORM_ADMIN'] },
 ];
 
 serve(async (req) => {
@@ -30,6 +31,21 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const now = new Date();
+
+    // Load thresholds from database (fall back to defaults)
+    let THRESHOLDS = DEFAULT_THRESHOLDS;
+    try {
+      const { data: dbThresholds, error: thErr } = await supabase
+        .from('alert_thresholds')
+        .select('level, percent, label, emoji, color, tone, notify_roles')
+        .order('level', { ascending: true });
+
+      if (!thErr && dbThresholds && dbThresholds.length > 0) {
+        THRESHOLDS = dbThresholds;
+      }
+    } catch {
+      console.warn('Could not load alert_thresholds table, using defaults');
+    }
 
     // Fetch all non-GREEN units that have a deadline set
     const { data: units, error: unitsError } = await supabase
@@ -62,6 +78,9 @@ serve(async (req) => {
     let unitsChecked = 0;
     const results: any[] = [];
     const skipped: any[] = [];
+
+    // Build threshold percentages string for email footer
+    const thresholdPcts = THRESHOLDS.map(t => `${t.percent}%`).join(', ');
 
     for (const unit of units || []) {
       unitsChecked++;
@@ -98,75 +117,63 @@ serve(async (req) => {
         continue;
       }
 
-      // Build recipient list based on level using profiles table (org_id + role)
-      // This matches the same reliable pattern used by manual escalations
+      // Build recipient list dynamically from notify_roles in the threshold
       const orgId = program?.org_id;
       const recipients: { email: string; name: string; role: string }[] = [];
       const addedEmails = new Set<string>();
 
       if (!orgId) {
         console.warn(`Unit "${unit.title}" has no org_id on its program — skipping`);
+        skipped.push({ unit: unit.title, reason: 'no_org_id' });
         continue;
       }
 
-      // L1+: Workstream Leads in the same org
-      const { data: wsLeads } = await supabase
-        .from('profiles')
-        .select('email, full_name, role')
-        .eq('org_id', orgId)
-        .eq('role', 'WORKSTREAM_LEAD');
+      // Get the roles that should be notified at THIS level
+      const rolesToNotify: string[] = threshold.notify_roles || [];
 
-      for (const lead of wsLeads || []) {
-        if (lead.email && !addedEmails.has(lead.email)) {
-          addedEmails.add(lead.email);
-          recipients.push({
-            email: lead.email,
-            name: lead.full_name || lead.email.split('@')[0],
-            role: 'WORKSTREAM_LEAD',
-          });
-        }
-      }
+      for (const role of rolesToNotify) {
+        if (role === 'PLATFORM_ADMIN') {
+          // Platform admins oversee everything — no org filter
+          const { data: admins } = await supabase
+            .from('profiles')
+            .select('email, full_name, role')
+            .eq('role', 'PLATFORM_ADMIN');
 
-      // L2+: Program Owners in the same org
-      if (targetLevel >= 2) {
-        const { data: progOwners } = await supabase
-          .from('profiles')
-          .select('email, full_name, role')
-          .eq('org_id', orgId)
-          .eq('role', 'PROGRAM_OWNER');
+          for (const admin of admins || []) {
+            if (admin.email && !addedEmails.has(admin.email)) {
+              addedEmails.add(admin.email);
+              recipients.push({
+                email: admin.email,
+                name: admin.full_name || admin.email.split('@')[0],
+                role: 'PLATFORM_ADMIN',
+              });
+            }
+          }
+        } else {
+          // Org-scoped roles (WORKSTREAM_LEAD, PROGRAM_OWNER, etc.)
+          const { data: users } = await supabase
+            .from('profiles')
+            .select('email, full_name, role')
+            .eq('org_id', orgId)
+            .eq('role', role);
 
-        for (const owner of progOwners || []) {
-          if (owner.email && !addedEmails.has(owner.email)) {
-            addedEmails.add(owner.email);
-            recipients.push({
-              email: owner.email,
-              name: owner.full_name || owner.email.split('@')[0],
-              role: 'PROGRAM_OWNER',
-            });
+          for (const user of users || []) {
+            if (user.email && !addedEmails.has(user.email)) {
+              addedEmails.add(user.email);
+              recipients.push({
+                email: user.email,
+                name: user.full_name || user.email.split('@')[0],
+                role: role,
+              });
+            }
           }
         }
       }
 
-      // L3: Platform Admins (any org — they oversee everything)
-      if (targetLevel >= 3) {
-        const { data: admins } = await supabase
-          .from('profiles')
-          .select('email, full_name, role')
-          .eq('role', 'PLATFORM_ADMIN');
-
-        for (const admin of admins || []) {
-          if (admin.email && !addedEmails.has(admin.email)) {
-            addedEmails.add(admin.email);
-            recipients.push({
-              email: admin.email,
-              name: admin.full_name || admin.email.split('@')[0],
-              role: 'PLATFORM_ADMIN',
-            });
-          }
-        }
+      if (recipients.length === 0) {
+        skipped.push({ unit: unit.title, reason: 'no_recipients', orgId, roles: rolesToNotify });
+        continue;
       }
-
-      if (recipients.length === 0) continue;
 
       const msRemaining = deadline.getTime() - now.getTime();
       const daysRemaining = Math.max(0, Math.ceil(msRemaining / (24 * 60 * 60 * 1000)));
@@ -246,7 +253,7 @@ serve(async (req) => {
 
             <div style="padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
               <p>This is an automatic deadline reminder from Celestar</p>
-              <p>Reminders are sent at 10%, 30%, and 100% of the timeline</p>
+              <p>Reminders are sent at ${thresholdPcts} of the timeline</p>
             </div>
           </div>
         `;
@@ -292,6 +299,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
+        thresholds_used: THRESHOLDS.map(t => ({ level: t.level, percent: t.percent, roles: t.notify_roles })),
         units_checked: unitsChecked,
         reminders_sent: alertsSent,
         details: results,
