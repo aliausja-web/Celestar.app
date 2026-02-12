@@ -23,26 +23,28 @@ export async function POST(request: NextRequest) {
     const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
+    // Shared query shape (no lead_email/owner_email — those columns don't exist)
+    const unitSelect = `
+      id,
+      title,
+      required_green_by,
+      computed_status,
+      workstreams!inner(
+        id,
+        name,
+        program_id,
+        programs!inner(
+          id,
+          name,
+          org_id
+        )
+      )
+    `;
+
     // Find units with approaching deadlines (next 3 days) that aren't completed
     const { data: approachingUnits, error: approachingError } = await supabase
       .from('units')
-      .select(`
-        id,
-        title,
-        required_green_by,
-        computed_status,
-        workstreams!inner(
-          id,
-          name,
-          lead_email,
-          programs!inner(
-            id,
-            name,
-            owner_email,
-            org_id
-          )
-        )
-      `)
+      .select(unitSelect)
       .gte('required_green_by', now.toISOString())
       .lte('required_green_by', threeDaysFromNow.toISOString())
       .not('computed_status', 'eq', 'GREEN');
@@ -52,23 +54,7 @@ export async function POST(request: NextRequest) {
     // Find overdue units
     const { data: overdueUnits, error: overdueError } = await supabase
       .from('units')
-      .select(`
-        id,
-        title,
-        required_green_by,
-        computed_status,
-        workstreams!inner(
-          id,
-          name,
-          lead_email,
-          programs!inner(
-            id,
-            name,
-            owner_email,
-            org_id
-          )
-        )
-      `)
+      .select(unitSelect)
       .lt('required_green_by', now.toISOString())
       .not('computed_status', 'eq', 'GREEN');
 
@@ -76,21 +62,35 @@ export async function POST(request: NextRequest) {
 
     const notifications: any[] = [];
 
+    // Helper: look up recipients by org_id + role from profiles table
+    async function getRecipientsByRole(orgId: string, role: string) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('org_id', orgId)
+        .eq('role', role);
+      return (data || []).filter((p: any) => p.email);
+    }
+
     // Process approaching deadline notifications
     for (const unit of approachingUnits || []) {
       const workstream = unit.workstreams as any;
       const program = workstream?.programs;
+      const orgId = program?.org_id;
+      if (!orgId) continue;
+
       const deadline = new Date(unit.required_green_by);
       const daysUntil = Math.ceil((deadline.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
 
-      // Notify workstream lead
-      if (workstream?.lead_email) {
+      // Notify workstream leads in the org
+      const wsLeads = await getRecipientsByRole(orgId, 'WORKSTREAM_LEAD');
+      for (const lead of wsLeads) {
         notifications.push({
           escalation_id: null,
-          recipient_email: workstream.lead_email,
-          recipient_name: workstream.lead_email.split('@')[0],
+          recipient_email: lead.email,
+          recipient_name: lead.full_name || lead.email.split('@')[0],
           channel: 'email',
-          subject: `⏰ Deadline Approaching: "${unit.title}" - ${daysUntil} day${daysUntil === 1 ? '' : 's'} left`,
+          subject: `Deadline Approaching: "${unit.title}" - ${daysUntil} day${daysUntil === 1 ? '' : 's'} left`,
           message: `Unit "${unit.title}" in workstream "${workstream.name}" has a deadline approaching.\n\nDeadline: ${deadline.toLocaleDateString()}\nDays remaining: ${daysUntil}\nCurrent status: ${unit.computed_status || 'IN PROGRESS'}\n\nPlease ensure this unit is completed on time.`,
           template_data: {
             unit_title: unit.title,
@@ -103,24 +103,27 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Also notify program owner if deadline is tomorrow
-      if (daysUntil <= 1 && program?.owner_email) {
-        notifications.push({
-          escalation_id: null,
-          recipient_email: program.owner_email,
-          recipient_name: program.owner_email.split('@')[0],
-          channel: 'email',
-          subject: `🚨 URGENT: "${unit.title}" deadline is TOMORROW`,
-          message: `URGENT: Unit "${unit.title}" deadline is tomorrow!\n\nProgram: ${program.name}\nWorkstream: ${workstream.name}\nDeadline: ${deadline.toLocaleDateString()}\nCurrent status: ${unit.computed_status || 'IN PROGRESS'}\n\nImmediate attention required.`,
-          template_data: {
-            unit_title: unit.title,
-            program_name: program.name,
-            workstream_name: workstream.name,
-            deadline: deadline.toISOString(),
-            priority: 'critical',
-          },
-          status: 'pending',
-        });
+      // Also notify program owners if deadline is tomorrow
+      if (daysUntil <= 1) {
+        const progOwners = await getRecipientsByRole(orgId, 'PROGRAM_OWNER');
+        for (const owner of progOwners) {
+          notifications.push({
+            escalation_id: null,
+            recipient_email: owner.email,
+            recipient_name: owner.full_name || owner.email.split('@')[0],
+            channel: 'email',
+            subject: `URGENT: "${unit.title}" deadline is TOMORROW`,
+            message: `URGENT: Unit "${unit.title}" deadline is tomorrow!\n\nProgram: ${program.name}\nWorkstream: ${workstream.name}\nDeadline: ${deadline.toLocaleDateString()}\nCurrent status: ${unit.computed_status || 'IN PROGRESS'}\n\nImmediate attention required.`,
+            template_data: {
+              unit_title: unit.title,
+              program_name: program.name,
+              workstream_name: workstream.name,
+              deadline: deadline.toISOString(),
+              priority: 'critical',
+            },
+            status: 'pending',
+          });
+        }
       }
     }
 
@@ -128,22 +131,27 @@ export async function POST(request: NextRequest) {
     for (const unit of overdueUnits || []) {
       const workstream = unit.workstreams as any;
       const program = workstream?.programs;
+      const orgId = program?.org_id;
+      if (!orgId) continue;
+
       const deadline = new Date(unit.required_green_by);
       const daysOverdue = Math.ceil((now.getTime() - deadline.getTime()) / (24 * 60 * 60 * 1000));
 
-      // Notify both workstream lead and program owner for overdue
-      const recipients = [
-        workstream?.lead_email,
-        program?.owner_email,
-      ].filter(Boolean);
+      // Notify both workstream leads and program owners for overdue
+      const wsLeads = await getRecipientsByRole(orgId, 'WORKSTREAM_LEAD');
+      const progOwners = await getRecipientsByRole(orgId, 'PROGRAM_OWNER');
+      const allRecipients = [...wsLeads, ...progOwners];
+      const seen = new Set<string>();
 
-      for (const email of recipients) {
+      for (const recipient of allRecipients) {
+        if (seen.has(recipient.email)) continue;
+        seen.add(recipient.email);
         notifications.push({
           escalation_id: null,
-          recipient_email: email,
-          recipient_name: email.split('@')[0],
+          recipient_email: recipient.email,
+          recipient_name: recipient.full_name || recipient.email.split('@')[0],
           channel: 'email',
-          subject: `🔴 OVERDUE: "${unit.title}" - ${daysOverdue} day${daysOverdue === 1 ? '' : 's'} past deadline`,
+          subject: `OVERDUE: "${unit.title}" - ${daysOverdue} day${daysOverdue === 1 ? '' : 's'} past deadline`,
           message: `OVERDUE ALERT: Unit "${unit.title}" is past its deadline!\n\nProgram: ${program?.name}\nWorkstream: ${workstream?.name}\nDeadline was: ${deadline.toLocaleDateString()}\nDays overdue: ${daysOverdue}\nCurrent status: ${unit.computed_status || 'IN PROGRESS'}\n\nThis requires immediate escalation and resolution.`,
           template_data: {
             unit_title: unit.title,
