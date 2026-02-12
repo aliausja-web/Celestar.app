@@ -1,5 +1,5 @@
 // Supabase Edge Function: Automatic Deadline Reminders
-// Polite reminders at 50%, 75%, and 90% of timeline elapsed
+// Polite reminders at 10%, 30%, and 100% of timeline elapsed
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -9,9 +9,9 @@ const corsHeaders = {
 };
 
 const THRESHOLDS = [
-  { level: 1, percent: 50, label: 'Friendly Reminder', emoji: '📋', color: '#2563eb', tone: 'We wanted to give you a heads-up' },
-  { level: 2, percent: 75, label: 'Important Reminder', emoji: '📌', color: '#ea580c', tone: 'This is an important reminder that time is moving along' },
-  { level: 3, percent: 90, label: 'Final Reminder', emoji: '⏳', color: '#dc2626', tone: 'This is a final reminder — the deadline is very close' },
+  { level: 1, percent: 10, label: 'Early Reminder', emoji: '📋', color: '#2563eb', tone: 'We wanted to give you an early heads-up' },
+  { level: 2, percent: 30, label: 'Important Reminder', emoji: '📌', color: '#ea580c', tone: 'This is an important reminder that time is moving along' },
+  { level: 3, percent: 100, label: 'Final Reminder', emoji: '⏳', color: '#dc2626', tone: 'This is a final reminder — the deadline has arrived' },
 ];
 
 serve(async (req) => {
@@ -61,6 +61,7 @@ serve(async (req) => {
     let alertsSent = 0;
     let unitsChecked = 0;
     const results: any[] = [];
+    const skipped: any[] = [];
 
     for (const unit of units || []) {
       unitsChecked++;
@@ -71,7 +72,10 @@ serve(async (req) => {
       const deadline = new Date(unit.required_green_by);
       const totalDuration = deadline.getTime() - createdAt.getTime();
 
-      if (totalDuration <= 0) continue;
+      if (totalDuration <= 0) {
+        skipped.push({ unit: unit.title, reason: 'negative_duration', created_at: unit.created_at, deadline: unit.required_green_by });
+        continue;
+      }
 
       const elapsed = now.getTime() - createdAt.getTime();
       const percentElapsed = Math.min(Math.round((elapsed / totalDuration) * 100), 100);
@@ -89,7 +93,10 @@ serve(async (req) => {
       const currentLevel = unit.current_escalation_level || 0;
 
       // Only remind if we've crossed a NEW threshold
-      if (targetLevel <= currentLevel || targetLevel === 0) continue;
+      if (targetLevel <= currentLevel || targetLevel === 0) {
+        skipped.push({ unit: unit.title, reason: 'level_already_sent', percent: percentElapsed, targetLevel, currentLevel, orgId: program?.org_id });
+        continue;
+      }
 
       // Build recipient list based on level using profiles table (org_id + role)
       // This matches the same reliable pattern used by manual escalations
@@ -239,7 +246,7 @@ serve(async (req) => {
 
             <div style="padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">
               <p>This is an automatic deadline reminder from Celestar</p>
-              <p>Reminders are sent at 50%, 75%, and 90% of the timeline</p>
+              <p>Reminders are sent at 10%, 30%, and 100% of the timeline</p>
             </div>
           </div>
         `;
@@ -288,6 +295,7 @@ serve(async (req) => {
         units_checked: unitsChecked,
         reminders_sent: alertsSent,
         details: results,
+        skipped: skipped,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
