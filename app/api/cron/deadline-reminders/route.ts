@@ -63,14 +63,14 @@ export async function POST(request: NextRequest) {
     const notifications: any[] = [];
 
     // Helper: look up recipients by org_id + role from profiles table
-    async function getRecipientsByRole(orgId: string, role: string) {
+    const getRecipientsByRole = async (orgId: string, role: string) => {
       const { data } = await supabase
         .from('profiles')
         .select('email, full_name')
         .eq('org_id', orgId)
         .eq('role', role);
       return (data || []).filter((p: any) => p.email);
-    }
+    };
 
     // Process approaching deadline notifications
     for (const unit of approachingUnits || []) {
