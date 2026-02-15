@@ -519,12 +519,12 @@ export default function ProgramDashboard() {
                 <span className="text-gray-500">Owner Org:</span>
                 <span className="text-white ml-2 font-medium">{selectedProgram.owner_org}</span>
               </div>
-              {selectedProgram.start_time && (
+              {selectedProgram.start_time && !isNaN(new Date(selectedProgram.start_time).getTime()) && (
                 <div>
                   <span className="text-gray-500">Period:</span>
                   <span className="text-white ml-2 font-medium">
                     {format(new Date(selectedProgram.start_time), 'MMM d, yyyy')}
-                    {selectedProgram.end_time &&
+                    {selectedProgram.end_time && !isNaN(new Date(selectedProgram.end_time).getTime()) &&
                       ` - ${format(new Date(selectedProgram.end_time), 'MMM d, yyyy')}`}
                   </span>
                 </div>

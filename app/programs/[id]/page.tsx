@@ -158,7 +158,7 @@ export default function ProgramDetailPage() {
                     <div className="text-white font-medium">{program.owner_org}</div>
                   </div>
                 </div>
-                {program.start_time && (
+                {program.start_time && !isNaN(new Date(program.start_time).getTime()) && (
                   <div className="flex items-center gap-3">
                     <Calendar className="w-5 h-5 text-gray-400" />
                     <div>
@@ -169,7 +169,7 @@ export default function ProgramDetailPage() {
                     </div>
                   </div>
                 )}
-                {program.end_time && (
+                {program.end_time && !isNaN(new Date(program.end_time).getTime()) && (
                   <div className="flex items-center gap-3">
                     <Calendar className="w-5 h-5 text-gray-400" />
                     <div>
