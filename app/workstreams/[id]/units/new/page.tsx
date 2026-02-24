@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Info, Bell, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Info, Bell, AlertCircle, ChevronDown, ChevronUp, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/firebase';
 
@@ -30,6 +30,9 @@ export default function NewUnitPage() {
     acceptance_criteria: '',
     required_proof_count: 1,
     required_proof_types: ['photo'] as string[],
+    requires_reviewer_approval: true,
+    requires_reference_number: false,
+    requires_expiry_date: false,
     urgency_alerts_enabled: true,
     urgency_level_1: 50,  // Alert at 50% of time elapsed
     urgency_level_2: 75,  // Alert at 75% of time elapsed
@@ -74,6 +77,9 @@ export default function NewUnitPage() {
           acceptance_criteria: formData.acceptance_criteria || null,
           required_proof_count: formData.required_proof_count,
           required_proof_types: formData.required_proof_types,
+          requires_reviewer_approval: formData.requires_reviewer_approval,
+          requires_reference_number: formData.requires_reference_number,
+          requires_expiry_date: formData.requires_expiry_date,
           escalation_config: {
             enabled: formData.urgency_alerts_enabled,
             thresholds: [
@@ -118,6 +124,9 @@ export default function NewUnitPage() {
           acceptance_criteria: '',
           required_proof_count: 1,
           required_proof_types: ['photo'] as string[],
+          requires_reviewer_approval: true,
+          requires_reference_number: false,
+          requires_expiry_date: false,
           urgency_alerts_enabled: true,
           urgency_level_1: 50,
           urgency_level_2: 75,
@@ -267,7 +276,7 @@ export default function NewUnitPage() {
                       Select which types of proofs are required (at least one of each selected type must be approved)
                     </p>
                     <div className="space-y-2">
-                      {['photo', 'video'].map((type) => (
+                      {['photo', 'video', 'document'].map((type) => (
                         <div key={type} className="flex items-center gap-2">
                           <Checkbox
                             id={`type-${type}`}
@@ -301,6 +310,90 @@ export default function NewUnitPage() {
                         ⚠️ At least one proof type should be selected
                       </p>
                     )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Governance Validation Section */}
+              <div className="pt-6 border-t border-gray-800">
+                <div className="flex items-center gap-2 mb-4">
+                  <Shield className="w-4 h-4 text-purple-400" />
+                  <h3 className="text-white font-semibold">Governance Validation</h3>
+                </div>
+                <p className="text-sm text-gray-400 mb-4">
+                  Configure additional evidence requirements for this unit. These settings determine what
+                  constitutes a qualifying proof submission.
+                </p>
+
+                <div className="space-y-4 bg-black/20 p-4 rounded-lg border border-gray-700">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="requires_reviewer_approval"
+                      checked={formData.requires_reviewer_approval}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, requires_reviewer_approval: checked as boolean })
+                      }
+                      className="border-gray-600 mt-0.5"
+                    />
+                    <div>
+                      <Label
+                        htmlFor="requires_reviewer_approval"
+                        className="text-gray-300 font-medium cursor-pointer"
+                      >
+                        Require reviewer approval
+                      </Label>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Proofs must be explicitly approved by a Workstream Lead or Program Owner before counting
+                        toward GREEN. Recommended for all units. (Default: on)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="requires_reference_number"
+                      checked={formData.requires_reference_number}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, requires_reference_number: checked as boolean })
+                      }
+                      className="border-gray-600 mt-0.5"
+                    />
+                    <div>
+                      <Label
+                        htmlFor="requires_reference_number"
+                        className="text-gray-300 font-medium cursor-pointer"
+                      >
+                        Require reference number
+                      </Label>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Each proof must include a structured reference (permit number, certificate ID, invoice ref,
+                        etc.) to be counted. Enable for regulatory or contractual evidence.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="requires_expiry_date"
+                      checked={formData.requires_expiry_date}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, requires_expiry_date: checked as boolean })
+                      }
+                      className="border-gray-600 mt-0.5"
+                    />
+                    <div>
+                      <Label
+                        htmlFor="requires_expiry_date"
+                        className="text-gray-300 font-medium cursor-pointer"
+                      >
+                        Require expiry date (time-bound proofs)
+                      </Label>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Each proof must include a validity expiry date. Expired proofs are automatically
+                        revoked and the unit reverts to RED. Enable for permits, certifications, or
+                        time-bound licences.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

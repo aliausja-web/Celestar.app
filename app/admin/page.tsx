@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, Users, FolderKanban, Bell, ArrowLeft } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
+import { NotificationBell } from '@/components/notification-bell';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -117,13 +118,16 @@ export default function AdminDashboard() {
                 <p className="text-[#7d8590] text-sm">Platform administration and client management</p>
               </div>
             </div>
-            <button
-              onClick={() => router.push('/programs')}
-              className="flex items-center gap-2 px-4 py-2 bg-[#1f2937] hover:bg-[#374151] text-[#e6edf3] rounded border border-[#30363d] transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Programs
-            </button>
+            <div className="flex items-center gap-3">
+              <NotificationBell />
+              <button
+                onClick={() => router.push('/programs')}
+                className="flex items-center gap-2 px-4 py-2 bg-[#1f2937] hover:bg-[#374151] text-[#e6edf3] rounded border border-[#30363d] transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Programs
+              </button>
+            </div>
           </div>
         </div>
       </div>

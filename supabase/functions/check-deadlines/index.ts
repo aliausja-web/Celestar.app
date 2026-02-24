@@ -32,6 +32,14 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const now = new Date();
 
+    // HTML escape helper to prevent email template injection
+    const escapeHtml = (text: string) => String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+
     // Load thresholds from database (fall back to defaults)
     let THRESHOLDS = DEFAULT_THRESHOLDS;
     try {
@@ -91,13 +99,18 @@ serve(async (req) => {
       const deadline = new Date(unit.required_green_by);
       const totalDuration = deadline.getTime() - createdAt.getTime();
 
-      if (totalDuration <= 0) {
+      // If deadline has already passed, treat as 100% elapsed (overdue)
+      let percentElapsed: number;
+      if (now.getTime() >= deadline.getTime()) {
+        percentElapsed = 100;
+      } else if (totalDuration <= 0) {
+        // Created after deadline but somehow not yet past deadline — shouldn't happen, skip
         skipped.push({ unit: unit.title, reason: 'negative_duration', created_at: unit.created_at, deadline: unit.required_green_by });
         continue;
+      } else {
+        const elapsed = now.getTime() - createdAt.getTime();
+        percentElapsed = Math.min(Math.round((elapsed / totalDuration) * 100), 100);
       }
-
-      const elapsed = now.getTime() - createdAt.getTime();
-      const percentElapsed = Math.min(Math.round((elapsed / totalDuration) * 100), 100);
 
       // Determine reminder level based on percentage thresholds
       let targetLevel = 0;
@@ -119,7 +132,7 @@ serve(async (req) => {
 
       // Build recipient list dynamically from notify_roles in the threshold
       const orgId = program?.org_id;
-      const recipients: { email: string; name: string; role: string }[] = [];
+      const recipients: { email: string; name: string; role: string; user_id?: string }[] = [];
       const addedEmails = new Set<string>();
 
       if (!orgId) {
@@ -136,7 +149,7 @@ serve(async (req) => {
           // Platform admins oversee everything — no org filter
           const { data: admins } = await supabase
             .from('profiles')
-            .select('email, full_name, role')
+            .select('user_id, email, full_name, role')
             .eq('role', 'PLATFORM_ADMIN');
 
           for (const admin of admins || []) {
@@ -146,6 +159,7 @@ serve(async (req) => {
                 email: admin.email,
                 name: admin.full_name || admin.email.split('@')[0],
                 role: 'PLATFORM_ADMIN',
+                user_id: admin.user_id,
               });
             }
           }
@@ -153,7 +167,7 @@ serve(async (req) => {
           // Org-scoped roles (WORKSTREAM_LEAD, PROGRAM_OWNER, etc.)
           const { data: users } = await supabase
             .from('profiles')
-            .select('email, full_name, role')
+            .select('user_id, email, full_name, role')
             .eq('org_id', orgId)
             .eq('role', role);
 
@@ -164,6 +178,7 @@ serve(async (req) => {
                 email: user.email,
                 name: user.full_name || user.email.split('@')[0],
                 role: role,
+                user_id: user.user_id,
               });
             }
           }
@@ -199,6 +214,31 @@ serve(async (req) => {
         .update({ current_escalation_level: targetLevel })
         .eq('id', unit.id);
 
+      // Create in-app notifications for all recipients
+      const inAppNotifications = recipients
+        .filter(r => r.user_id)
+        .map(r => ({
+          user_id: r.user_id,
+          title: `${threshold.emoji} ${threshold.label}`,
+          message: `"${unit.title}" has reached ${percentElapsed}% of its timeline. ${daysRemaining > 0 ? `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} remaining.` : 'The deadline has passed.'}`,
+          type: 'deadline_approaching',
+          priority: targetLevel >= 3 ? 'critical' : targetLevel >= 2 ? 'high' : 'normal',
+          related_unit_id: unit.id,
+          action_url: `/units/${unit.id}`,
+          metadata: {
+            threshold_level: targetLevel,
+            percent_elapsed: percentElapsed,
+            days_remaining: daysRemaining,
+            unit_title: unit.title,
+            workstream_name: workstream?.name,
+            program_name: program?.name,
+          },
+        }));
+
+      if (inAppNotifications.length > 0) {
+        await supabase.from('in_app_notifications').insert(inAppNotifications);
+      }
+
       // Send polite reminder emails (1200ms delay between sends for Resend rate limit)
       for (let ri = 0; ri < recipients.length; ri++) {
         if (ri > 0) await new Promise(r => setTimeout(r, 1200));
@@ -213,10 +253,10 @@ serve(async (req) => {
             </div>
 
             <div style="padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb;">
-              <p>Hi ${recipient.name},</p>
+              <p>Hi ${escapeHtml(recipient.name)},</p>
 
-              <p>${threshold.tone} — <strong>${percentElapsed}%</strong> of the allocated time for
-              <strong>"${unit.title}"</strong> has been used.</p>
+              <p>${escapeHtml(threshold.tone)} — <strong>${percentElapsed}%</strong> of the allocated time for
+              <strong>"${escapeHtml(unit.title)}"</strong> has been used.</p>
 
               <div style="background: #fff; border-left: 4px solid ${threshold.color}; padding: 15px; margin: 15px 0;">
                 <strong style="font-size: 18px;">${daysRemaining > 0 ? `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} remaining` : 'The deadline has passed'}</strong>
@@ -226,19 +266,19 @@ serve(async (req) => {
               <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
                 <tr>
                   <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Unit:</strong></td>
-                  <td style="padding: 8px; border: 1px solid #e5e7eb;">${unit.title}</td>
+                  <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(unit.title)}</td>
                 </tr>
                 <tr>
                   <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Workstream:</strong></td>
-                  <td style="padding: 8px; border: 1px solid #e5e7eb;">${workstream?.name || 'N/A'}</td>
+                  <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(workstream?.name || 'N/A')}</td>
                 </tr>
                 <tr>
                   <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Program:</strong></td>
-                  <td style="padding: 8px; border: 1px solid #e5e7eb;">${program?.name || 'N/A'}</td>
+                  <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(program?.name || 'N/A')}</td>
                 </tr>
                 <tr>
                   <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Current Status:</strong></td>
-                  <td style="padding: 8px; border: 1px solid #e5e7eb;">${unit.computed_status || 'IN PROGRESS'}</td>
+                  <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(unit.computed_status || 'IN PROGRESS')}</td>
                 </tr>
               </table>
 

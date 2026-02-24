@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { NotificationBell } from '@/components/notification-bell';
 
 interface AttentionItem {
   type: 'proof_pending' | 'unit_at_risk' | 'unit_blocked' | 'manual_escalation';
@@ -76,9 +77,12 @@ export default function AttentionQueue() {
     <div className="min-h-screen bg-[#0a0a0a] p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Attention Queue</h1>
-          <p className="text-gray-400">Items requiring immediate action</p>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Attention Queue</h1>
+            <p className="text-gray-400">Items requiring immediate action</p>
+          </div>
+          <NotificationBell />
         </div>
 
         {/* Summary Cards */}

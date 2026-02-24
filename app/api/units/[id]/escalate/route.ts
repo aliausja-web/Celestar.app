@@ -113,6 +113,14 @@ export async function POST(
 
     const escalatorName = escalatorProfile?.full_name || escalatorProfile?.email || 'A team member';
 
+    // HTML escape helper to prevent email template injection
+    const escapeHtml = (text: string) => String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+
     let emailsSent = 0;
     let emailsFailed = 0;
     const emailErrors: string[] = [];
@@ -154,7 +162,7 @@ export async function POST(
               body: JSON.stringify({
                 from: 'Celestar Alerts <alerts@celestar.app>',
                 to: [user.email],
-                subject: `MANUAL ESCALATION: "${unit.title}" - Action Required`,
+                subject: `MANUAL ESCALATION: "${escapeHtml(unit.title)}" - Action Required`,
                 html: `
                   <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                     <div style="background: #dc2626; color: white; padding: 20px; text-align: center;">
@@ -163,29 +171,29 @@ export async function POST(
                     </div>
 
                     <div style="padding: 20px; background: #f9fafb; border: 1px solid #e5e7eb;">
-                      <p>Hi ${user.full_name || user.email},</p>
+                      <p>Hi ${escapeHtml(user.full_name || user.email)},</p>
 
                       <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 15px 0;">
                         <strong>REASON FOR ESCALATION:</strong>
-                        <p style="margin: 10px 0 0 0; font-size: 16px;">"${reason}"</p>
+                        <p style="margin: 10px 0 0 0; font-size: 16px;">"${escapeHtml(reason)}"</p>
                       </div>
 
                       <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
                         <tr>
                           <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Unit:</strong></td>
-                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${unit.title}</td>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(unit.title)}</td>
                         </tr>
                         <tr>
                           <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Workstream:</strong></td>
-                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${workstreamName}</td>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(workstreamName)}</td>
                         </tr>
                         <tr>
                           <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Program:</strong></td>
-                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${programName}</td>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(programName)}</td>
                         </tr>
                         <tr>
                           <td style="padding: 8px; border: 1px solid #e5e7eb; background: #f3f4f6;"><strong>Escalated By:</strong></td>
-                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${escalatorName}</td>
+                          <td style="padding: 8px; border: 1px solid #e5e7eb;">${escapeHtml(escalatorName)}</td>
                         </tr>
                       </table>
 
@@ -245,20 +253,10 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      debug: {
-        unitOrgId,
-        sameOrgUsersCount: sameOrgUsers?.length || 0,
-        platformAdminsCount: platformAdmins?.length || 0,
-        totalUsersToNotify: usersToNotify?.length || 0,
-        resendKeyExists: !!process.env.RESEND_API_KEY,
-        resendKeyPrefix: process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.substring(0, 6) + '...' : 'NOT SET',
-        userEmails: usersToNotify?.map(u => u.email) || [],
-      },
       notifications_sent: usersToNotify?.length || 0,
       emails_sent: emailsSent,
       emails_failed: emailsFailed,
       email_errors: emailErrors.length > 0 ? emailErrors : undefined,
-      resend_configured: !!process.env.RESEND_API_KEY,
       blocked: actuallyMarkBlocked === true,
       message: actuallyMarkBlocked
         ? 'Escalation sent to all users. Unit marked as BLOCKED.'

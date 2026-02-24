@@ -28,6 +28,7 @@ import { supabase } from '@/lib/firebase';
 import { toast } from 'sonner';
 import { usePermissions } from '@/hooks/use-permissions';
 import { getWorkstreamTypeLabel } from '@/lib/workstream-types';
+import { NotificationBell } from '@/components/notification-bell';
 
 export default function WorkstreamBoard() {
   const params = useParams();
@@ -305,11 +306,20 @@ export default function WorkstreamBoard() {
             <div className="flex flex-col gap-2">
               <Button
                 size="sm"
-                onClick={() => router.push(`/units/${unit.id}/upload`)}
+                onClick={() => router.push(`/units/${unit.id}/upload?type=photo`)}
                 className="bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]"
               >
                 <Upload className="w-4 h-4 mr-2" />
-                Upload Proof
+                Upload Photo/Video
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => router.push(`/units/${unit.id}/upload?type=document`)}
+                className="border-[#30363d] text-[#e6edf3] hover:bg-[#161b22]"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Upload Document
               </Button>
               <Button
                 size="sm"
@@ -377,6 +387,7 @@ export default function WorkstreamBoard() {
               <p className="text-[#7d8590] text-sm">Type: {getWorkstreamTypeLabel(workstream.type)}</p>
             )}
           </div>
+          <NotificationBell />
           {workstream && (
             <Badge
               className={`${

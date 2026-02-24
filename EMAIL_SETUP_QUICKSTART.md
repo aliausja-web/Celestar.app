@@ -6,7 +6,7 @@ Get escalation emails working in 15 minutes.
 
 ## Step 1: Get Resend API Key (3 minutes)
 
-1. Go to https://resend.com/signup
+1. Go to  
 2. Sign up with your email
 3. Verify your email
 4. Click **"API Keys"** in left sidebar

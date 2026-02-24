@@ -103,21 +103,41 @@ export async function POST(
 
     // The trigger will automatically recompute unit status and log to status_events
 
-    // Send email notification to the uploader
+    // Send notifications to the uploader (both in-app and email)
     if (proof.uploaded_by_email) {
       const unitTitle = (proof.units as any)?.title || 'Unknown Unit';
       const isApproved = action === 'approve';
 
       try {
+        // Create in-app notification for the uploader
+        if (proof.uploaded_by) {
+          await supabase.from('in_app_notifications').insert([{
+            user_id: proof.uploaded_by,
+            title: isApproved ? 'Proof Approved' : 'Proof Rejected',
+            message: isApproved
+              ? `Your proof for "${unitTitle}" has been approved by ${context!.email}.`
+              : `Your proof for "${unitTitle}" was rejected. Reason: ${rejection_reason}`,
+            type: isApproved ? 'proof_approved' : 'proof_rejected',
+            priority: isApproved ? 'normal' : 'high',
+            related_unit_id: params.id,
+            action_url: `/units/${params.id}`,
+            metadata: {
+              proof_id: params.proofId,
+              reviewed_by: context!.email,
+              rejection_reason: rejection_reason || null,
+            },
+          }]);
+        }
+
         // Create email notification record
         await supabase.from('escalation_notifications').insert([{
-          escalation_id: null, // Not an escalation, general notification
+          escalation_id: null,
           recipient_email: proof.uploaded_by_email,
           recipient_name: proof.uploaded_by_email.split('@')[0],
           channel: 'email',
           subject: isApproved
-            ? `✅ Proof Approved - "${unitTitle}"`
-            : `❌ Proof Rejected - "${unitTitle}"`,
+            ? `Proof Approved - "${unitTitle}"`
+            : `Proof Rejected - "${unitTitle}"`,
           message: isApproved
             ? `Great news! Your proof submission for "${unitTitle}" has been approved by ${context!.email}.`
             : `Your proof submission for "${unitTitle}" was rejected.\n\nReason: ${rejection_reason}\n\nPlease submit a new proof addressing the feedback.`,
@@ -130,13 +150,13 @@ export async function POST(
           status: 'pending',
         }]);
 
-        // Trigger Edge Function to send email
+        // Trigger Edge Function to send email (use service role key for internal calls)
         await fetch(
           `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-escalation-emails`,
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+              Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
               'Content-Type': 'application/json',
             },
           }

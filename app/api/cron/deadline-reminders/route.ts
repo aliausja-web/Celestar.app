@@ -5,13 +5,17 @@ import { getSupabaseServer } from '@/lib/supabase-server';
 // This endpoint should be called by a cron job (e.g., daily at 9 AM)
 export async function POST(request: NextRequest) {
   try {
-    // Verify cron secret to prevent unauthorized access
+    // Verify cron secret to prevent unauthorized access (mandatory)
     const authHeader = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
 
-    // Allow if CRON_SECRET matches OR if called from Supabase Edge Function
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-      // Also check for service role key for internal calls
+    if (!cronSecret) {
+      console.error('CRON_SECRET not configured - rejecting request for security');
+      return NextResponse.json({ error: 'Server misconfiguration: CRON_SECRET not set' }, { status: 500 });
+    }
+
+    // Allow if CRON_SECRET matches OR if called from Supabase Edge Function with service role key
+    if (authHeader !== `Bearer ${cronSecret}`) {
       const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (authHeader !== `Bearer ${supabaseServiceKey}`) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -61,12 +65,13 @@ export async function POST(request: NextRequest) {
     if (overdueError) throw overdueError;
 
     const notifications: any[] = [];
+    const inAppNotifications: any[] = [];
 
     // Helper: look up recipients by org_id + role from profiles table
     const getRecipientsByRole = async (orgId: string, role: string) => {
       const { data } = await supabase
         .from('profiles')
-        .select('email, full_name')
+        .select('user_id, email, full_name')
         .eq('org_id', orgId)
         .eq('role', role);
       return (data || []).filter((p: any) => p.email);
@@ -101,6 +106,19 @@ export async function POST(request: NextRequest) {
           },
           status: 'pending',
         });
+        // Create in-app notification
+        if (lead.user_id) {
+          inAppNotifications.push({
+            user_id: lead.user_id,
+            title: `Deadline Approaching: ${unit.title}`,
+            message: `${daysUntil} day${daysUntil === 1 ? '' : 's'} until deadline for "${unit.title}" in ${workstream.name}.`,
+            type: 'deadline_approaching',
+            priority: daysUntil <= 1 ? 'critical' : 'high',
+            related_unit_id: unit.id,
+            action_url: `/units/${unit.id}`,
+            metadata: { days_remaining: daysUntil },
+          });
+        }
       }
 
       // Also notify program owners if deadline is tomorrow
@@ -123,6 +141,18 @@ export async function POST(request: NextRequest) {
             },
             status: 'pending',
           });
+          if (owner.user_id) {
+            inAppNotifications.push({
+              user_id: owner.user_id,
+              title: `URGENT: "${unit.title}" deadline is TOMORROW`,
+              message: `Immediate attention required for "${unit.title}" in ${workstream.name}.`,
+              type: 'deadline_approaching',
+              priority: 'critical',
+              related_unit_id: unit.id,
+              action_url: `/units/${unit.id}`,
+              metadata: { days_remaining: daysUntil },
+            });
+          }
         }
       }
     }
@@ -163,6 +193,18 @@ export async function POST(request: NextRequest) {
           },
           status: 'pending',
         });
+        if (recipient.user_id) {
+          inAppNotifications.push({
+            user_id: recipient.user_id,
+            title: `OVERDUE: "${unit.title}"`,
+            message: `"${unit.title}" is ${daysOverdue} day${daysOverdue === 1 ? '' : 's'} past deadline. Immediate action required.`,
+            type: 'deadline_approaching',
+            priority: 'critical',
+            related_unit_id: unit.id,
+            action_url: `/units/${unit.id}`,
+            metadata: { days_overdue: daysOverdue },
+          });
+        }
       }
     }
 
@@ -179,6 +221,18 @@ export async function POST(request: NextRequest) {
 
       await supabase.from('escalation_notifications').insert(uniqueNotifications);
 
+      // Insert in-app notifications
+      if (inAppNotifications.length > 0) {
+        const seenInApp = new Set();
+        const uniqueInApp = inAppNotifications.filter((n: any) => {
+          const key = `${n.user_id}:${n.title}`;
+          if (seenInApp.has(key)) return false;
+          seenInApp.add(key);
+          return true;
+        });
+        await supabase.from('in_app_notifications').insert(uniqueInApp);
+      }
+
       // Trigger Edge Function to send emails
       try {
         await fetch(
@@ -186,7 +240,7 @@ export async function POST(request: NextRequest) {
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+              Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
               'Content-Type': 'application/json',
             },
           }

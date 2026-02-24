@@ -32,11 +32,19 @@ function getSupabaseAdmin() {
  */
 export async function GET(request: NextRequest) {
   try {
-    // Verify cron secret
+    // Verify cron secret (mandatory - reject if not configured)
     const authHeader = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
 
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    if (!cronSecret) {
+      console.error('CRON_SECRET not configured - rejecting request for security');
+      return NextResponse.json(
+        { error: 'Server misconfiguration: CRON_SECRET not set' },
+        { status: 500 }
+      );
+    }
+
+    if (authHeader !== `Bearer ${cronSecret}`) {
       console.error('Unauthorized cron request - invalid secret');
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -58,12 +66,19 @@ export async function GET(request: NextRequest) {
       'check_and_trigger_escalations'
     );
 
+    // Check and mark expired proofs, revert affected units to RED
+    const { data: expiryData, error: expiryError } = await supabaseAdmin.rpc(
+      'check_proof_expiry'
+    );
+
     const unitResult = unitData?.[0] || { units_checked: 0, escalations_created: 0 };
     const zoneResult = zoneData?.[0] || { zones_checked: 0, escalations_created: 0 };
+    const expiryResult = expiryData?.[0] || { proofs_expired: 0, units_reverted: 0 };
 
     console.log('[CRON] Escalation check completed:', {
       units: unitResult,
       zones: zoneResult,
+      expiry: expiryResult,
     });
 
     return NextResponse.json({
@@ -72,10 +87,13 @@ export async function GET(request: NextRequest) {
       unit_escalations_created: unitResult.escalations_created,
       zones_checked: zoneResult.zones_checked,
       zone_escalations_created: zoneResult.escalations_created,
+      proofs_expired: expiryResult.proofs_expired,
+      units_reverted_by_expiry: expiryResult.units_reverted,
       timestamp: new Date().toISOString(),
       errors: {
         unit_error: unitError?.message || null,
         zone_error: zoneError?.message || null,
+        expiry_error: expiryError?.message || null,
       },
     });
   } catch (error: any) {

@@ -19,11 +19,18 @@ import {
   AlertCircle,
   Video,
   Play,
+  FileText,
+  Hash,
+  CalendarClock,
+  BookCheck,
+  AlertTriangle,
+  History,
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, isPast, differenceInDays } from 'date-fns';
 import { supabase } from '@/lib/firebase';
 import { toast } from 'sonner';
 import { usePermissions } from '@/hooks/use-permissions';
+import { NotificationBell } from '@/components/notification-bell';
 
 interface Proof {
   id: string;
@@ -39,6 +46,28 @@ interface Proof {
   approved_at?: string;
   rejection_reason?: string;
   validation_notes?: string;
+  // New fields
+  file_name?: string;
+  file_hash?: string;
+  document_category?: string;
+  reference_number?: string;
+  expiry_date?: string;
+  notes?: string;
+  is_expired?: boolean;
+  mime_type?: string;
+  file_size?: number;
+  is_superseded?: boolean;
+}
+
+interface AuditEvent {
+  id: string;
+  event_type: string;
+  old_status?: string;
+  new_status?: string;
+  triggered_by_role?: string;
+  reason?: string;
+  created_at: string;
+  metadata?: Record<string, any>;
 }
 
 interface Unit {
@@ -53,6 +82,10 @@ interface Unit {
   computed_status: string;
   workstream_id: string;
   proofs: Proof[];
+  // New config fields
+  requires_reviewer_approval?: boolean;
+  requires_reference_number?: boolean;
+  requires_expiry_date?: boolean;
 }
 
 export default function UnitDetailPage() {
@@ -62,6 +95,7 @@ export default function UnitDetailPage() {
   const permissions = usePermissions();
 
   const [unit, setUnit] = useState<Unit | null>(null);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProof, setSelectedProof] = useState<Proof | null>(null);
   const [showZoomDialog, setShowZoomDialog] = useState(false);
@@ -73,28 +107,20 @@ export default function UnitDetailPage() {
   useEffect(() => {
     if (unitId) {
       fetchUnit();
+      fetchAuditEvents();
     }
   }, [unitId]);
 
   async function fetchUnit() {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-      if (sessionError || !session) {
-        throw new Error('Not authenticated. Please log in again.');
-      }
-
+      if (sessionError || !session) throw new Error('Not authenticated. Please log in again.');
       const token = session.access_token;
 
       const response = await fetch(`/api/units/${unitId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch unit');
-      }
+      if (!response.ok) throw new Error('Failed to fetch unit');
 
       const data = await response.json();
       setUnit(data);
@@ -106,9 +132,28 @@ export default function UnitDetailPage() {
     }
   }
 
+  async function fetchAuditEvents() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const { data, error } = await supabase
+        .from('unit_status_events')
+        .select('*')
+        .eq('unit_id', unitId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (!error && data) {
+        setAuditEvents(data);
+      }
+    } catch {
+      // Audit trail is non-critical — silently fail
+    }
+  }
+
   async function handleApprovalAction() {
     if (!selectedProof) return;
-
     if (approvalAction === 'reject' && !rejectionReason.trim()) {
       toast.error('Please provide a reason for rejection');
       return;
@@ -122,7 +167,7 @@ export default function UnitDetailPage() {
       const response = await fetch(`/api/units/${unitId}/proofs/${selectedProof.id}/approve`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -132,16 +177,14 @@ export default function UnitDetailPage() {
       });
 
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || `Failed to ${approvalAction} proof`);
-      }
+      if (!response.ok) throw new Error(data.error || `Failed to ${approvalAction} proof`);
 
       toast.success(`Proof ${approvalAction}d successfully`);
       setShowApprovalDialog(false);
       setSelectedProof(null);
       setRejectionReason('');
-      await fetchUnit(); // Refresh to show updated status
+      await fetchUnit();
+      await fetchAuditEvents();
     } catch (error: any) {
       console.error(`Error ${approvalAction}ing proof:`, error);
       toast.error(error.message || `Failed to ${approvalAction} proof`);
@@ -161,9 +204,10 @@ export default function UnitDetailPage() {
     setShowZoomDialog(true);
   }
 
-  const canApproveProofs = permissions.isPlatformAdmin ||
-                           permissions.role === 'PROGRAM_OWNER' ||
-                           permissions.role === 'WORKSTREAM_LEAD';
+  const canApproveProofs =
+    permissions.isPlatformAdmin ||
+    permissions.role === 'PROGRAM_OWNER' ||
+    permissions.role === 'WORKSTREAM_LEAD';
 
   if (loading) {
     return (
@@ -188,8 +232,88 @@ export default function UnitDetailPage() {
 
   const isGreen = unit.computed_status === 'GREEN';
   const isPastDeadline = unit.required_green_by && new Date(unit.required_green_by) < new Date();
-  const approvedCount = unit.proofs.filter(p => p.approval_status === 'approved').length;
+  const approvedCount = unit.proofs.filter(p => p.approval_status === 'approved' && !p.is_superseded).length;
   const pendingCount = unit.proofs.filter(p => p.approval_status === 'pending').length;
+
+  function getExpiryBadge(proof: Proof) {
+    if (!proof.expiry_date) return null;
+    if (proof.is_expired) {
+      return <Badge className="bg-red-600 text-white text-xs">EXPIRED</Badge>;
+    }
+    const daysLeft = differenceInDays(new Date(proof.expiry_date), new Date());
+    if (daysLeft <= 30) {
+      return (
+        <Badge className="bg-orange-500/80 text-white text-xs">
+          Expires in {daysLeft}d
+        </Badge>
+      );
+    }
+    return null;
+  }
+
+  function getAuditEventLabel(event: AuditEvent) {
+    const labels: Record<string, string> = {
+      proof_approved: 'Proof Approved',
+      proof_rejected: 'Proof Rejected',
+      proof_expired: 'Proof Expired',
+      status_computed: 'Status Recomputed',
+      blocked: 'Unit Blocked',
+      unblocked: 'Unit Unblocked',
+      manual_escalation: 'Manual Escalation',
+      unit_confirmed: 'Unit Confirmed',
+      unit_archived: 'Unit Archived',
+    };
+    return labels[event.event_type] || event.event_type;
+  }
+
+  function getAuditEventColor(event: AuditEvent) {
+    if (event.event_type === 'proof_approved' || event.new_status === 'GREEN') return 'text-green-400';
+    if (event.event_type === 'proof_rejected' || event.event_type === 'proof_expired') return 'text-red-400';
+    if (event.event_type === 'manual_escalation') return 'text-orange-400';
+    return 'text-gray-400';
+  }
+
+  function ProofCardMedia({ proof }: { proof: Proof }) {
+    if (proof.type === 'photo') {
+      return (
+        <img
+          src={proof.url}
+          alt="Proof"
+          className="w-full h-full object-contain"
+        />
+      );
+    }
+    if (proof.type === 'video') {
+      return (
+        <div className="relative w-full h-full">
+          <video src={proof.url} className="w-full h-full object-contain" preload="metadata" />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+            <div className="bg-white/90 rounded-full p-4">
+              <Play className="w-8 h-8 text-black fill-black" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+    // Document type
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-2 p-4">
+        <FileText className="w-12 h-12 text-blue-400" />
+        <span className="text-gray-400 text-xs text-center truncate w-full px-2">
+          {proof.file_name || 'Document'}
+        </span>
+        <a
+          href={proof.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          className="text-blue-400 hover:text-blue-300 text-xs underline"
+        >
+          Open document
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 p-6">
@@ -208,6 +332,7 @@ export default function UnitDetailPage() {
             <h1 className="text-3xl font-black text-white">{unit.title}</h1>
             <p className="text-gray-500">Owner: {unit.owner_party_name}</p>
           </div>
+          <NotificationBell />
           <Badge
             className={`${
               isGreen
@@ -237,16 +362,39 @@ export default function UnitDetailPage() {
 
             <div className="space-y-2">
               <p className="text-sm text-gray-400">Proof Requirements:</p>
-              <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-4 text-sm flex-wrap">
                 <span className="text-white">
-                  <strong>{approvedCount}</strong> / {unit.proof_requirements.required_count} approved proofs
+                  <strong>{approvedCount}</strong> / {unit.proof_requirements?.required_count || 1} approved proofs
                 </span>
-                {unit.proof_requirements.required_types.length > 0 && (
+                {unit.proof_requirements?.required_types?.length > 0 && (
                   <span className="text-gray-400">
                     Required types: {unit.proof_requirements.required_types.join(', ')}
                   </span>
                 )}
               </div>
+
+              {/* Enhanced proof configuration indicators */}
+              <div className="flex flex-wrap gap-2 mt-2">
+                {unit.requires_reviewer_approval !== false && (
+                  <Badge className="bg-blue-900/40 text-blue-300 border border-blue-700/50 text-xs">
+                    <BookCheck className="w-3 h-3 mr-1" />
+                    Reviewer approval required
+                  </Badge>
+                )}
+                {unit.requires_reference_number && (
+                  <Badge className="bg-purple-900/40 text-purple-300 border border-purple-700/50 text-xs">
+                    <Hash className="w-3 h-3 mr-1" />
+                    Reference number required
+                  </Badge>
+                )}
+                {unit.requires_expiry_date && (
+                  <Badge className="bg-orange-900/40 text-orange-300 border border-orange-700/50 text-xs">
+                    <CalendarClock className="w-3 h-3 mr-1" />
+                    Expiry date required
+                  </Badge>
+                )}
+              </div>
+
               {pendingCount > 0 && (
                 <p className="text-sm text-yellow-400">
                   <AlertCircle className="w-4 h-4 inline mr-1" />
@@ -255,13 +403,23 @@ export default function UnitDetailPage() {
               )}
             </div>
 
-            <Button
-              onClick={() => router.push(`/units/${unitId}/upload`)}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Upload New Proof
-            </Button>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                onClick={() => router.push(`/units/${unitId}/upload?type=photo`)}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Upload Photo / Video
+              </Button>
+              <Button
+                onClick={() => router.push(`/units/${unitId}/upload?type=document`)}
+                variant="outline"
+                className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Upload Document
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -270,7 +428,7 @@ export default function UnitDetailPage() {
           <CardHeader>
             <CardTitle className="text-white">Proofs ({unit.proofs.length})</CardTitle>
             <CardDescription className="text-gray-400">
-              Click on any proof to view full size
+              Click on a photo or video proof to view full size. Documents open in a new tab.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -285,7 +443,11 @@ export default function UnitDetailPage() {
                   <Card
                     key={proof.id}
                     className={`bg-black/40 border-gray-700 ${
-                      proof.approval_status === 'approved'
+                      proof.is_superseded
+                        ? 'opacity-50 border-gray-600'
+                        : proof.is_expired
+                        ? 'border-red-800'
+                        : proof.approval_status === 'approved'
                         ? 'border-green-500/50'
                         : proof.approval_status === 'rejected'
                         ? 'border-red-500/50'
@@ -293,58 +455,94 @@ export default function UnitDetailPage() {
                     }`}
                   >
                     <CardContent className="p-4 space-y-3">
-                      {/* Proof Image/Video - Clickable */}
+                      {/* Proof Media / Document Preview */}
                       <div
-                        onClick={() => openZoomDialog(proof)}
-                        className="relative aspect-video bg-gray-900 rounded overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => proof.type !== 'document' && openZoomDialog(proof)}
+                        className={`relative aspect-video bg-gray-900 rounded overflow-hidden ${
+                          proof.type !== 'document' ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''
+                        }`}
                       >
-                        {proof.type === 'photo' ? (
-                          <img
-                            src={proof.url}
-                            alt="Proof"
-                            className="w-full h-full object-contain"
-                          />
-                        ) : proof.type === 'video' ? (
-                          <div className="relative w-full h-full">
-                            <video
-                              src={proof.url}
-                              className="w-full h-full object-contain"
-                              preload="metadata"
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                              <div className="bg-white/90 rounded-full p-4">
-                                <Play className="w-8 h-8 text-black fill-black" />
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center h-full">
-                            <ImageIcon className="w-12 h-12 text-gray-600" />
-                          </div>
-                        )}
+                        <ProofCardMedia proof={proof} />
+
                         {/* Status Badge Overlay */}
                         <Badge
                           className={`absolute top-2 right-2 ${
-                            proof.approval_status === 'approved'
+                            proof.is_expired
+                              ? 'bg-red-800 text-white'
+                              : proof.approval_status === 'approved'
                               ? 'bg-green-600 text-white'
                               : proof.approval_status === 'rejected'
                               ? 'bg-red-600 text-white'
                               : 'bg-yellow-600 text-black'
                           }`}
                         >
-                          {proof.approval_status}
+                          {proof.is_expired ? 'EXPIRED' : proof.approval_status}
                         </Badge>
+
+                        {/* Superseded overlay */}
+                        {proof.is_superseded && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <span className="text-gray-400 text-xs font-medium bg-black/70 px-2 py-1 rounded">
+                              Superseded
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Proof Type Badge */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge className="bg-gray-800 text-gray-300 border-gray-700 text-xs capitalize">
+                          {proof.type === 'photo' && <ImageIcon className="w-3 h-3 mr-1" />}
+                          {proof.type === 'video' && <Video className="w-3 h-3 mr-1" />}
+                          {proof.type === 'document' && <FileText className="w-3 h-3 mr-1" />}
+                          {proof.type}
+                        </Badge>
+                        {getExpiryBadge(proof)}
                       </div>
 
                       {/* Proof Metadata */}
                       <div className="space-y-1 text-xs text-gray-400">
-                        <p>
-                          Uploaded: {format(new Date(proof.uploaded_at), 'MMM d, yyyy HH:mm')}
-                        </p>
+                        <p>Uploaded: {format(new Date(proof.uploaded_at), 'MMM d, yyyy HH:mm')}</p>
                         <p>By: {proof.uploaded_by_email || proof.uploaded_by}</p>
-                        {proof.captured_at && (
+
+                        {proof.captured_at && proof.type !== 'document' && (
                           <p>Captured: {format(new Date(proof.captured_at), 'MMM d, yyyy HH:mm:ss')}</p>
                         )}
+
+                        {/* Document category badge */}
+                        {proof.document_category && (
+                          <p className="flex items-center gap-1">
+                            <FileText className="w-3 h-3 text-blue-400" />
+                            <span className="text-blue-300 font-medium capitalize">
+                              {proof.document_category.replace(/_/g, ' ')}
+                            </span>
+                          </p>
+                        )}
+
+                        {/* Governance structured fields */}
+                        {proof.reference_number && (
+                          <p className="flex items-center gap-1">
+                            <Hash className="w-3 h-3 text-purple-400" />
+                            <span className="text-purple-300">Ref: {proof.reference_number}</span>
+                          </p>
+                        )}
+
+                        {proof.expiry_date && (
+                          <p className={`flex items-center gap-1 ${proof.is_expired ? 'text-red-400' : differenceInDays(new Date(proof.expiry_date), new Date()) <= 30 ? 'text-orange-400' : 'text-gray-400'}`}>
+                            <CalendarClock className="w-3 h-3" />
+                            Expires: {format(new Date(proof.expiry_date), 'MMM d, yyyy')}
+                          </p>
+                        )}
+
+                        {/* File integrity hash */}
+                        {proof.file_hash && (
+                          <p className="flex items-center gap-1 font-mono">
+                            <span className="text-gray-600">SHA:</span>
+                            <span className="text-gray-500">{proof.file_hash.slice(0, 12)}…</span>
+                          </p>
+                        )}
+
+                        {/* Approval info */}
                         {proof.approved_at && (
                           <p className="text-green-400">
                             Approved: {format(new Date(proof.approved_at), 'MMM d, yyyy HH:mm')}
@@ -352,19 +550,21 @@ export default function UnitDetailPage() {
                           </p>
                         )}
                         {proof.rejection_reason && (
-                          <p className="text-red-400">
-                            Rejection reason: {proof.rejection_reason}
-                          </p>
+                          <p className="text-red-400">Rejection: {proof.rejection_reason}</p>
                         )}
+
+                        {/* Notes */}
+                        {proof.notes && (
+                          <p className="text-gray-400 italic">"{proof.notes}"</p>
+                        )}
+
                         {proof.validation_notes && (
-                          <p className="text-gray-400">
-                            Notes: {proof.validation_notes}
-                          </p>
+                          <p className="text-gray-400">Notes: {proof.validation_notes}</p>
                         )}
                       </div>
 
                       {/* Approval Actions */}
-                      {canApproveProofs && proof.approval_status === 'pending' && (
+                      {canApproveProofs && proof.approval_status === 'pending' && !proof.is_expired && (
                         <div className="flex gap-2 pt-2">
                           <Button
                             size="sm"
@@ -391,9 +591,67 @@ export default function UnitDetailPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Audit Trail */}
+        {auditEvents.length > 0 && (
+          <Card className="bg-black/25 border-gray-800">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <History className="w-5 h-5 text-gray-400" />
+                Audit Trail
+              </CardTitle>
+              <CardDescription className="text-gray-400">
+                Immutable record of all status changes for this unit
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {auditEvents.map((event) => (
+                  <div key={event.id} className="flex gap-3 text-sm">
+                    <div className="flex flex-col items-center">
+                      <div className={`w-2 h-2 rounded-full mt-1.5 ${
+                        event.event_type === 'proof_approved' || event.new_status === 'GREEN'
+                          ? 'bg-green-500'
+                          : event.event_type === 'proof_rejected' || event.event_type === 'proof_expired'
+                          ? 'bg-red-500'
+                          : event.event_type === 'manual_escalation'
+                          ? 'bg-orange-500'
+                          : 'bg-gray-500'
+                      }`} />
+                      <div className="w-px flex-1 bg-gray-800 mt-1" />
+                    </div>
+                    <div className="flex-1 pb-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className={`font-medium ${getAuditEventColor(event)}`}>
+                            {getAuditEventLabel(event)}
+                          </span>
+                          {event.old_status && event.new_status && event.old_status !== event.new_status && (
+                            <span className="text-gray-500 ml-2">
+                              {event.old_status} → {event.new_status}
+                            </span>
+                          )}
+                          {event.triggered_by_role && (
+                            <span className="text-gray-600 ml-2 text-xs">({event.triggered_by_role})</span>
+                          )}
+                        </div>
+                        <span className="text-gray-600 text-xs whitespace-nowrap">
+                          {formatDistanceToNow(new Date(event.created_at), { addSuffix: true })}
+                        </span>
+                      </div>
+                      {event.reason && (
+                        <p className="text-gray-500 text-xs mt-0.5">{event.reason}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      {/* Zoom Dialog */}
+      {/* Zoom Dialog (photo/video only) */}
       <Dialog open={showZoomDialog} onOpenChange={setShowZoomDialog}>
         <DialogContent className="max-w-4xl bg-gray-950 border-gray-800">
           <DialogHeader>
@@ -402,36 +660,32 @@ export default function UnitDetailPage() {
           {selectedProof && (
             <div className="space-y-4">
               {selectedProof.type === 'photo' ? (
-                <img
-                  src={selectedProof.url}
-                  alt="Proof full size"
-                  className="w-full rounded-lg"
-                />
+                <img src={selectedProof.url} alt="Proof full size" className="w-full rounded-lg" />
               ) : selectedProof.type === 'video' ? (
-                <video
-                  src={selectedProof.url}
-                  controls
-                  autoPlay
-                  className="w-full rounded-lg"
-                  preload="auto"
-                />
-              ) : (
-                <div className="flex items-center justify-center h-64 bg-gray-900 rounded-lg">
-                  <ImageIcon className="w-16 h-16 text-gray-600" />
-                </div>
-              )}
+                <video src={selectedProof.url} controls autoPlay className="w-full rounded-lg" preload="auto" />
+              ) : null}
               <div className="text-sm text-gray-400 space-y-1">
                 <p>Status: <Badge className={
                   selectedProof.approval_status === 'approved' ? 'bg-green-600' :
                   selectedProof.approval_status === 'rejected' ? 'bg-red-600' :
                   'bg-yellow-600 text-black'
                 }>{selectedProof.approval_status}</Badge></p>
-                <p>Captured: {selectedProof.captured_at ? format(new Date(selectedProof.captured_at), 'MMM d, yyyy HH:mm:ss') : 'N/A'}</p>
+                {selectedProof.captured_at && (
+                  <p>Captured: {format(new Date(selectedProof.captured_at), 'MMM d, yyyy HH:mm:ss')}</p>
+                )}
                 <p>Uploaded: {format(new Date(selectedProof.uploaded_at), 'MMM d, yyyy HH:mm')}</p>
                 <p>By: {selectedProof.uploaded_by_email || selectedProof.uploaded_by}</p>
-                {selectedProof.validation_notes && (
-                  <p>Notes: {selectedProof.validation_notes}</p>
+                {selectedProof.reference_number && (
+                  <p>Reference: {selectedProof.reference_number}</p>
                 )}
+                {selectedProof.expiry_date && (
+                  <p>Expires: {format(new Date(selectedProof.expiry_date), 'MMM d, yyyy')}</p>
+                )}
+                {selectedProof.file_hash && (
+                  <p className="font-mono text-xs">SHA-256: {selectedProof.file_hash.slice(0, 32)}…</p>
+                )}
+                {selectedProof.notes && <p>Notes: {selectedProof.notes}</p>}
+                {selectedProof.validation_notes && <p>Validation: {selectedProof.validation_notes}</p>}
               </div>
             </div>
           )}
@@ -449,9 +703,19 @@ export default function UnitDetailPage() {
           <div className="space-y-4">
             <p className="text-gray-400">
               {approvalAction === 'approve'
-                ? 'Are you sure you want to approve this proof? This will count toward the unit\'s GREEN status.'
+                ? "Are you sure you want to approve this proof? This will count toward the unit's GREEN status."
                 : 'Are you sure you want to reject this proof? Please provide a reason.'}
             </p>
+
+            {/* Show governance fields for reviewer awareness */}
+            {selectedProof?.reference_number && (
+              <div className="bg-gray-900 rounded p-3 text-sm">
+                <p className="text-gray-400">Reference: <span className="text-white">{selectedProof.reference_number}</span></p>
+                {selectedProof.expiry_date && (
+                  <p className="text-gray-400">Expires: <span className="text-white">{format(new Date(selectedProof.expiry_date), 'MMM d, yyyy')}</span></p>
+                )}
+              </div>
+            )}
 
             {approvalAction === 'reject' && (
               <div className="space-y-2">

@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       ]
     };
 
-    // Insert with base columns only (works without migration)
+    // Insert with base columns + new proof configuration fields
     const { data: unit, error } = await supabase
       .from('units')
       .insert([
@@ -132,6 +132,10 @@ export async function POST(request: NextRequest) {
           acceptance_criteria: body.acceptance_criteria || null,
           proof_requirements: proofRequirements,
           escalation_config: escalationConfig,
+          // Enhanced proof configuration (optional — all default to backward-compat values)
+          requires_reviewer_approval: body.requires_reviewer_approval ?? true,
+          requires_reference_number: body.requires_reference_number ?? false,
+          requires_expiry_date: body.requires_expiry_date ?? false,
         },
       ])
       .select()
