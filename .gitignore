@@ -55,6 +55,9 @@ supabase/config.toml
 # claude temp files
 tmpclaude-*
 
+# Windows system artifacts
+nul
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
