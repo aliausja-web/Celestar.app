@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Users, Plus, Trash2, ArrowLeft, Mail, Shield, Building2 } from 'lucide-react';
+import { Users, Plus, Trash2, ArrowLeft, Mail, Shield, Building2, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
 
 interface User {
@@ -28,6 +28,8 @@ export default function UsersManagement() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editForm, setEditForm] = useState({ full_name: '', role: '', organization_id: '' });
 
   // Form state
   const [formData, setFormData] = useState({
@@ -117,6 +119,50 @@ export default function UsersManagement() {
     } catch (error) {
       console.error('Error creating user:', error);
       alert('Failed to create user');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEdit = (user: User) => {
+    setEditingUser(user);
+    setEditForm({
+      full_name: user.full_name || '',
+      role: user.role,
+      organization_id: user.organization_id || '',
+    });
+  };
+
+  const handleEdit = async () => {
+    if (!editingUser) return;
+    setSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch(`/api/admin/users/${editingUser.user_id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+        body: JSON.stringify({
+          full_name: editForm.full_name,
+          role: editForm.role,
+          org_id: editForm.organization_id,
+        }),
+      });
+
+      if (response.ok) {
+        await fetchData();
+        setEditingUser(null);
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Failed to update user');
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      alert('Failed to update user');
     } finally {
       setSaving(false);
     }
@@ -260,11 +306,19 @@ export default function UsersManagement() {
                         {new Date(user.created_at).toLocaleDateString()}
                       </td>
                       <td className="py-4 px-6">
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => openEdit(user)}
+                            className="p-2 hover:bg-blue-500/10 rounded-lg text-blue-400 hover:text-blue-300 transition-colors"
+                            title="Edit user"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
                           {user.role !== 'PLATFORM_ADMIN' && (
                             <button
                               onClick={() => handleDelete(user.user_id, user.email)}
                               className="p-2 hover:bg-red-500/10 rounded-lg text-red-400 hover:text-red-300 transition-colors"
+                              title="Delete user"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -279,6 +333,79 @@ export default function UsersManagement() {
           </div>
         )}
       </div>
+
+      {/* Edit Dialog */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+            <h2 className="text-2xl font-bold text-white mb-1">Edit User</h2>
+            <p className="text-gray-400 text-sm mb-4">{editingUser.email}</p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-gray-300 text-sm font-medium mb-2">Full Name</label>
+                <input
+                  type="text"
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-gray-300 text-sm font-medium mb-2">Role</label>
+                <select
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="PROGRAM_OWNER">Program Owner</option>
+                  <option value="WORKSTREAM_LEAD">Workstream Lead</option>
+                  <option value="FIELD_CONTRIBUTOR">Field Contributor</option>
+                  <option value="CLIENT_VIEWER">Client Viewer</option>
+                  <option value="PLATFORM_ADMIN">Platform Admin</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-gray-300 text-sm font-medium mb-2">Organization</label>
+                <select
+                  value={editForm.organization_id}
+                  onChange={(e) => setEditForm({ ...editForm, organization_id: e.target.value })}
+                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Organization...</option>
+                  {organizations.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name} ({org.client_code})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-gray-500 text-xs mt-1">
+                  Current: {editingUser.organization_name || editingUser.organization_id || 'None'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setEditingUser(null)}
+                disabled={saving}
+                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEdit}
+                disabled={saving || !editForm.organization_id}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Dialog */}
       {showCreateDialog && (
