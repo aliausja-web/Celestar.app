@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
         user_id: authData.user.id,
         email,
         full_name,
-        organization_id: org_id, // API accepts org_id but column is organization_id
+        org_id,
         role: role as AppRole,
       },
     ]);
