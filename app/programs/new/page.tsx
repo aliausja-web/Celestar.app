@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,18 +12,50 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 
+interface Org {
+  id: string;
+  name: string;
+}
+
 export default function NewProgramPage() {
   const router = useRouter();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [orgs, setOrgs] = useState<Org[]>([]);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     owner_org: '',
+    org_id: '',
     start_time: '',
     end_time: '',
   });
+
+  useEffect(() => {
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const token = session.access_token;
+
+      // Check role
+      const profileRes = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => null);
+
+      // Fall back: load orgs — only PLATFORM_ADMIN can access this endpoint
+      const orgsRes = await fetch('/api/admin/organizations', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (orgsRes.ok) {
+        const data = await orgsRes.json();
+        setOrgs(data.organizations || []);
+        setIsPlatformAdmin(true);
+      }
+    }
+    init();
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -33,17 +65,20 @@ export default function NewProgramPage() {
       return;
     }
 
+    if (isPlatformAdmin && !formData.org_id) {
+      toast.error('Please select a client organization to assign this program to');
+      return;
+    }
+
     setLoading(true);
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
       if (sessionError || !session) {
-        console.error('Session error:', sessionError);
         throw new Error('Not authenticated. Please log in again.');
       }
 
       const token = session.access_token;
-      console.log('Creating program with token:', token ? 'Token exists' : 'No token');
 
       const response = await fetch('/api/programs', {
         method: 'POST',
@@ -55,13 +90,13 @@ export default function NewProgramPage() {
           name: formData.name,
           description: formData.description || null,
           owner_org: formData.owner_org,
+          org_id: formData.org_id || undefined,
           start_time: formData.start_time || null,
           end_time: formData.end_time || null,
         }),
       });
 
       const data = await response.json();
-      console.log('API Response:', { status: response.status, data });
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to create program');
@@ -146,6 +181,32 @@ export default function NewProgramPage() {
                   required
                 />
               </div>
+
+              {/* Client org assignment — only shown to PLATFORM_ADMIN */}
+              {isPlatformAdmin && (
+                <div className="space-y-2">
+                  <Label htmlFor="org_id" className="text-gray-300">
+                    Assign to Client Organization <span className="text-red-400">*</span>
+                  </Label>
+                  <select
+                    id="org_id"
+                    value={formData.org_id}
+                    onChange={(e) => setFormData({ ...formData, org_id: e.target.value })}
+                    className="w-full px-3 py-2 bg-black/40 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Select client organization...</option>
+                    {orgs.map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {org.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500">
+                    All users in this org will receive escalation emails for units in this program
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
