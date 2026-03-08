@@ -66,12 +66,14 @@ export default function UploadProofPage() {
     ['photo', 'video', 'document'].includes(initialType) ? initialType : 'photo'
   );
 
-  // Camera/video state (existing)
+  // Camera/video state
   const [capturedMedia, setCapturedMedia] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  // Tracks whether the user has explicitly activated the camera
+  const [cameraActive, setCameraActive] = useState(false);
 
   // Document state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -117,7 +119,7 @@ export default function UploadProofPage() {
     if (unitId) fetchUnitConfig();
   }, [unitId]);
 
-  // Update timestamp every second
+  // Update timestamp every second (used for watermark and display)
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -125,16 +127,21 @@ export default function UploadProofPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Start camera when proof type changes (photo/video only)
+  // When proof type changes, stop any active camera/recording and reset camera state
   useEffect(() => {
-    if (proofType !== 'document' && !capturedMedia) {
-      startCamera();
-    }
     return () => {
       stopCamera();
       stopRecording();
     };
-  }, [proofType]);
+  }, [proofType]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Stop camera and recording on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+      stopRecording();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function startCamera() {
     try {
@@ -155,6 +162,7 @@ export default function UploadProofPage() {
       }
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(mediaStream);
+      setCameraActive(true);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
@@ -169,6 +177,11 @@ export default function UploadProofPage() {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
+    setCameraActive(false);
+  }
+
+  async function handleActivateCamera() {
+    await startCamera();
   }
 
   function capturePhoto() {
@@ -257,7 +270,8 @@ export default function UploadProofPage() {
   function retakeMedia() {
     setCapturedMedia(null);
     setRecordingDuration(0);
-    startCamera();
+    setCameraActive(false);
+    // Camera will be restarted when user clicks the activate button again
   }
 
   function formatDuration(seconds: number): string {
@@ -396,6 +410,12 @@ export default function UploadProofPage() {
     }
   }
 
+  function handleCancel() {
+    stopCamera();
+    stopRecording();
+    router.back();
+  }
+
   const isDocumentMode = proofType === 'document';
   const canSubmit = isDocumentMode ? !!selectedFile : !!capturedMedia;
 
@@ -404,11 +424,7 @@ export default function UploadProofPage() {
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="flex items-center gap-4">
           <Button
-            onClick={() => {
-              stopCamera();
-              stopRecording();
-              router.back();
-            }}
+            onClick={handleCancel}
             variant="outline"
             className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
           >
@@ -448,6 +464,7 @@ export default function UploadProofPage() {
                       setCapturedMedia(null);
                       setSelectedFile(null);
                       setFileHash(null);
+                      setCameraActive(false);
                       setProofType(value as ProofType);
                     }}
                   >
@@ -576,7 +593,7 @@ export default function UploadProofPage() {
                 </div>
               )}
 
-              {/* ── CAMERA MODE (photo/video) — UNCHANGED ── */}
+              {/* ── CAMERA MODE (photo/video) ── */}
               {!isDocumentMode && (
                 <div className="space-y-2">
                   <Label className="text-gray-300">
@@ -585,14 +602,21 @@ export default function UploadProofPage() {
                   <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
                     {!capturedMedia ? (
                       <>
+                        {/* Placeholder shown until user activates camera */}
+                        {!cameraActive && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-900/80">
+                            <Camera className="w-12 h-12 text-gray-500" />
+                            <p className="text-gray-400 text-sm">Tap to activate camera</p>
+                          </div>
+                        )}
                         <video
                           ref={videoRef}
                           autoPlay
                           playsInline
                           muted
-                          className="w-full h-full object-cover"
+                          className={`w-full h-full object-cover ${!cameraActive ? 'invisible' : ''}`}
                         />
-                        {proofType === 'photo' && (
+                        {cameraActive && proofType === 'photo' && (
                           <div className="absolute bottom-4 right-4 bg-black/70 text-white px-3 py-2 rounded font-mono text-sm">
                             {currentTime.toLocaleString('en-US', {
                               year: 'numeric', month: '2-digit', day: '2-digit',
@@ -620,17 +644,39 @@ export default function UploadProofPage() {
                   <div className="flex gap-2">
                     {!capturedMedia ? (
                       proofType === 'photo' ? (
-                        <Button
-                          type="button"
-                          onClick={capturePhoto}
-                          className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                          disabled={!stream}
-                        >
-                          <Camera className="w-4 h-4 mr-2" />
-                          Capture Photo
-                        </Button>
+                        // Photo: clicking activates camera first, then captures
+                        !cameraActive ? (
+                          <Button
+                            type="button"
+                            onClick={handleActivateCamera}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            <Camera className="w-4 h-4 mr-2" />
+                            Capture Photo
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            onClick={capturePhoto}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                            disabled={!stream}
+                          >
+                            <Camera className="w-4 h-4 mr-2" />
+                            Capture Photo
+                          </Button>
+                        )
                       ) : (
-                        !isRecording ? (
+                        // Video: clicking activates camera first, then starts recording
+                        !cameraActive ? (
+                          <Button
+                            type="button"
+                            onClick={handleActivateCamera}
+                            className="w-full bg-red-600 hover:bg-red-700 text-white"
+                          >
+                            <Circle className="w-4 h-4 mr-2" />
+                            Start Recording
+                          </Button>
+                        ) : !isRecording ? (
                           <Button
                             type="button"
                             onClick={startVideoRecording}
@@ -746,26 +792,23 @@ export default function UploadProofPage() {
                 />
               </div>
 
-              {/* Submit */}
-              <div className="flex gap-3 pt-2">
+              {/* Submit — Cancel link above, Submit Proof button below */}
+              <div className="pt-2 space-y-3">
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="text-gray-400 hover:text-gray-200 text-sm transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
                 <Button
                   type="submit"
                   disabled={loading || !canSubmit}
-                  className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                  className="w-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
                 >
                   {loading ? 'Uploading...' : 'Submit Proof'}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    stopCamera();
-                    stopRecording();
-                    router.back();
-                  }}
-                  variant="outline"
-                  className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
-                >
-                  Cancel
                 </Button>
               </div>
             </form>
