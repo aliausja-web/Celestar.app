@@ -391,7 +391,7 @@ export default function ProgramDashboard() {
 
           {/* Accountability: Last verified timestamp */}
           <div className="text-xs text-[#7d8590] pt-2 border-t border-[#30363d]">
-            Last verified: {workstream.last_update_time ? format(new Date(workstream.last_update_time), 'MMM d, HH:mm') : 'Never'}
+            Last verified: {workstream.last_update_time ? format(new Date(workstream.last_update_time), 'MMM d, yyyy') : 'Never'}
           </div>
         </CardContent>
       </Card>
@@ -435,7 +435,7 @@ export default function ProgramDashboard() {
                 Program Dashboard
               </h1>
               <p className="text-[#7d8590] text-sm">
-                Execution readiness across all programs {permissions.role && `(${permissions.role})`}
+                Execution readiness across all programs
               </p>
             </div>
           </div>

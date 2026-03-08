@@ -25,6 +25,7 @@ import {
   BookCheck,
   AlertTriangle,
   History,
+  AlertOctagon,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isPast, differenceInDays } from 'date-fns';
 import { supabase } from '@/lib/firebase';
@@ -103,6 +104,9 @@ export default function UnitDetailPage() {
   const [approvalAction, setApprovalAction] = useState<'approve' | 'reject'>('approve');
   const [rejectionReason, setRejectionReason] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [showEscalationDialog, setShowEscalationDialog] = useState(false);
+  const [escalationReason, setEscalationReason] = useState('');
+  const [escalating, setEscalating] = useState(false);
 
   useEffect(() => {
     if (unitId) {
@@ -202,6 +206,33 @@ export default function UnitDetailPage() {
   function openZoomDialog(proof: Proof) {
     setSelectedProof(proof);
     setShowZoomDialog(true);
+  }
+
+  async function handleEscalate() {
+    if (!escalationReason.trim()) {
+      toast.error('Please provide a reason for escalation');
+      return;
+    }
+    setEscalating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const response = await fetch(`/api/units/${unitId}/escalate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: escalationReason }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to escalate unit');
+      toast.success(`Escalation sent to ${data.notifications_sent} users`);
+      setShowEscalationDialog(false);
+      setEscalationReason('');
+      await fetchAuditEvents();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to escalate unit');
+    } finally {
+      setEscalating(false);
+    }
   }
 
   const canApproveProofs =
@@ -419,6 +450,16 @@ export default function UnitDetailPage() {
                 <FileText className="w-4 h-4 mr-2" />
                 Upload Document
               </Button>
+              {canApproveProofs && !isGreen && (
+                <Button
+                  onClick={() => setShowEscalationDialog(true)}
+                  variant="outline"
+                  className="bg-[#db6d28]/10 border-[#db6d28]/40 text-[#db6d28] hover:bg-[#db6d28]/20"
+                >
+                  <AlertOctagon className="w-4 h-4 mr-2" />
+                  Escalate
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -689,6 +730,53 @@ export default function UnitDetailPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Escalation Dialog */}
+      <Dialog open={showEscalationDialog} onOpenChange={setShowEscalationDialog}>
+        <DialogContent className="bg-gray-950 border-gray-800 max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-white">Manual Escalation</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="bg-[#db6d28]/10 border border-[#db6d28]/30 rounded p-3">
+              <div className="flex items-start gap-2">
+                <AlertOctagon className="w-5 h-5 text-[#db6d28] mt-0.5 shrink-0" />
+                <p className="text-sm text-[#db6d28] font-medium">
+                  This will immediately notify Program Owners and Platform Administrators
+                </p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="unit_escalation_reason" className="text-gray-300">
+                Reason for Escalation <span className="text-red-400">*</span>
+              </Label>
+              <Textarea
+                id="unit_escalation_reason"
+                value={escalationReason}
+                onChange={(e) => setEscalationReason(e.target.value)}
+                placeholder="Describe the issue or blocker that requires escalation..."
+                className="bg-black/40 border-gray-700 text-white min-h-[120px]"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => { setShowEscalationDialog(false); setEscalationReason(''); }}
+              className="bg-black/25 border-gray-700 text-gray-300"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEscalate}
+              disabled={!escalationReason.trim() || escalating}
+              className="bg-[#db6d28]/80 hover:bg-[#db6d28] text-white"
+            >
+              {escalating ? 'Escalating...' : 'Escalate Now'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

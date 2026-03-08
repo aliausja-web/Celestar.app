@@ -159,7 +159,7 @@ export default function WorkstreamBoard() {
         throw new Error(data.error || 'Failed to escalate unit');
       }
 
-      toast.success(`Escalation: ${data.emails_sent} emails sent, ${data.debug?.totalUsersToNotify} users found, key: ${data.debug?.resendKeyPrefix}`);
+      toast.success(`Escalation sent to ${data.notifications_sent} users`);
       if (data.email_errors) console.error('Email errors:', data.email_errors);
       console.log('ESCALATION DEBUG:', JSON.stringify(data, null, 2));
       setShowEscalationDialog(false);
@@ -224,11 +224,6 @@ export default function WorkstreamBoard() {
                 {isUnconfirmed && (
                   <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40 text-xs px-2 py-1">
                     Unconfirmed
-                  </Badge>
-                )}
-                {unit.current_escalation_level > 0 && (
-                  <Badge className="bg-orange-500/12 text-orange-400 border-orange-500/40 text-xs px-2 py-1">
-                    L{unit.current_escalation_level}
                   </Badge>
                 )}
               </div>
@@ -306,20 +301,11 @@ export default function WorkstreamBoard() {
             <div className="flex flex-col gap-2">
               <Button
                 size="sm"
-                onClick={() => router.push(`/units/${unit.id}/upload?type=photo`)}
+                onClick={() => router.push(`/units/${unit.id}/upload`)}
                 className="bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]"
               >
                 <Upload className="w-4 h-4 mr-2" />
-                Upload Photo/Video
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => router.push(`/units/${unit.id}/upload?type=document`)}
-                className="border-[#30363d] text-[#e6edf3] hover:bg-[#161b22]"
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                Upload Document
+                Submit Proof
               </Button>
               <Button
                 size="sm"
@@ -329,17 +315,6 @@ export default function WorkstreamBoard() {
               >
                 View Details
               </Button>
-              {(permissions.isPlatformAdmin || permissions.role === 'PROGRAM_OWNER' || permissions.role === 'WORKSTREAM_LEAD') && !isGreen && (
-                <Button
-                  size="sm"
-                  onClick={() => openEscalationDialog(unit)}
-                  disabled={escalating === unit.id}
-                  className="bg-[#db6d28]/80 hover:bg-[#db6d28] text-[#e6edf3]"
-                >
-                  <AlertOctagon className="w-4 h-4 mr-2" />
-                  {escalating === unit.id ? 'Escalating...' : 'Escalate'}
-                </Button>
-              )}
             </div>
           </div>
 

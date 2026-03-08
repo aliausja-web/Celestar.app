@@ -21,6 +21,7 @@ export default function NewUnitPage() {
 
   const [loading, setLoading] = useState(false);
   const [showAdvancedAlerts, setShowAdvancedAlerts] = useState(false);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -185,32 +186,6 @@ export default function NewUnitPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description" className="text-gray-300">
-                  Description
-                </Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Brief description of the unit..."
-                  className="bg-black/40 border-gray-700 text-white min-h-[100px]"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="owner" className="text-gray-300">
-                  Owner
-                </Label>
-                <Input
-                  id="owner"
-                  value={formData.owner}
-                  onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
-                  placeholder="Responsible person or team"
-                  className="bg-black/40 border-gray-700 text-white"
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="deadline" className="text-gray-300">
                   Deadline
                 </Label>
@@ -223,20 +198,66 @@ export default function NewUnitPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="acceptance_criteria" className="text-gray-300">
-                  Acceptance Criteria
-                </Label>
-                <Textarea
-                  id="acceptance_criteria"
-                  value={formData.acceptance_criteria}
-                  onChange={(e) => setFormData({ ...formData, acceptance_criteria: e.target.value })}
-                  placeholder="Define what needs to be done for this unit to be considered complete..."
-                  className="bg-black/40 border-gray-700 text-white min-h-[100px]"
-                />
-                <p className="text-xs text-gray-500">
-                  List the specific conditions or criteria that must be met for approval
-                </p>
+              {/* Advanced Options (collapsed by default) */}
+              <div className="pt-2 border-t border-gray-800">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-gray-400 hover:text-gray-300 transition-colors text-sm"
+                  onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                >
+                  {showAdvancedOptions ? (
+                    <ChevronUp className="w-4 h-4" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4" />
+                  )}
+                  Advanced Options
+                </button>
+
+                {showAdvancedOptions && (
+                  <div className="mt-4 space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="description" className="text-gray-300">
+                        Description
+                      </Label>
+                      <Textarea
+                        id="description"
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        placeholder="Brief description of the unit..."
+                        className="bg-black/40 border-gray-700 text-white min-h-[100px]"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="acceptance_criteria" className="text-gray-300">
+                        Completion Conditions
+                      </Label>
+                      <Textarea
+                        id="acceptance_criteria"
+                        value={formData.acceptance_criteria}
+                        onChange={(e) => setFormData({ ...formData, acceptance_criteria: e.target.value })}
+                        placeholder="Describe what must be true for this unit to be marked complete..."
+                        className="bg-black/40 border-gray-700 text-white min-h-[100px]"
+                      />
+                      <p className="text-xs text-gray-500">
+                        List the specific conditions or criteria that must be met for approval
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="owner" className="text-gray-300">
+                        Owner
+                      </Label>
+                      <Input
+                        id="owner"
+                        value={formData.owner}
+                        onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
+                        placeholder="Responsible person or team"
+                        className="bg-black/40 border-gray-700 text-white"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Proof Requirements Section */}
@@ -318,7 +339,7 @@ export default function NewUnitPage() {
               <div className="pt-6 border-t border-gray-800">
                 <div className="flex items-center gap-2 mb-4">
                   <Shield className="w-4 h-4 text-purple-400" />
-                  <h3 className="text-white font-semibold">Governance Validation</h3>
+                  <h3 className="text-white font-semibold">Proof Validation Rules</h3>
                 </div>
                 <p className="text-sm text-gray-400 mb-4">
                   Configure additional evidence requirements for this unit. These settings determine what
@@ -449,80 +470,26 @@ export default function NewUnitPage() {
 
                 {showAdvancedAlerts && formData.urgency_alerts_enabled && (
                   <div className="space-y-4 bg-black/20 p-4 rounded-lg border border-gray-700">
-                    <div className="space-y-2">
-                      <Label htmlFor="urgency_level_1" className="text-gray-300 flex items-center gap-2">
+                    <div className="flex items-center gap-6 text-sm text-gray-300">
+                      <div className="flex items-center gap-2">
                         <span className="w-6 h-6 rounded-full bg-yellow-500/20 text-yellow-400 text-xs flex items-center justify-center font-bold">1</span>
-                        First Alert (Workstream Lead)
-                      </Label>
-                      <div className="flex items-center gap-3">
-                        <Input
-                          id="urgency_level_1"
-                          type="number"
-                          min="10"
-                          max="90"
-                          step="5"
-                          value={formData.urgency_level_1}
-                          onChange={(e) => setFormData({ ...formData, urgency_level_1: parseInt(e.target.value) || 50 })}
-                          className="bg-black/40 border-gray-700 text-white w-24"
-                        />
-                        <span className="text-gray-400 text-sm">% of time elapsed</span>
+                        <span>First Alert: <strong>50%</strong></span>
                       </div>
-                      <p className="text-xs text-gray-500">
-                        Alert when {formData.urgency_level_1}% of the time between creation and deadline has passed
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="urgency_level_2" className="text-gray-300 flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                         <span className="w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 text-xs flex items-center justify-center font-bold">2</span>
-                        Second Alert (Program Owner + Lead)
-                      </Label>
-                      <div className="flex items-center gap-3">
-                        <Input
-                          id="urgency_level_2"
-                          type="number"
-                          min="10"
-                          max="95"
-                          step="5"
-                          value={formData.urgency_level_2}
-                          onChange={(e) => setFormData({ ...formData, urgency_level_2: parseInt(e.target.value) || 75 })}
-                          className="bg-black/40 border-gray-700 text-white w-24"
-                        />
-                        <span className="text-gray-400 text-sm">% of time elapsed</span>
+                        <span>Second Alert: <strong>75%</strong></span>
                       </div>
-                      <p className="text-xs text-gray-500">
-                        Alert when {formData.urgency_level_2}% of the time between creation and deadline has passed
-                      </p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="urgency_level_3" className="text-gray-300 flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                         <span className="w-6 h-6 rounded-full bg-red-500/20 text-red-400 text-xs flex items-center justify-center font-bold">3</span>
-                        Critical Alert (Platform Admin + Owner)
-                      </Label>
-                      <div className="flex items-center gap-3">
-                        <Input
-                          id="urgency_level_3"
-                          type="number"
-                          min="10"
-                          max="100"
-                          step="5"
-                          value={formData.urgency_level_3}
-                          onChange={(e) => setFormData({ ...formData, urgency_level_3: parseInt(e.target.value) || 90 })}
-                          className="bg-black/40 border-gray-700 text-white w-24"
-                        />
-                        <span className="text-gray-400 text-sm">% of time elapsed</span>
+                        <span>Critical Alert: <strong>90%</strong></span>
                       </div>
-                      <p className="text-xs text-gray-500">
-                        Alert when {formData.urgency_level_3}% of the time between creation and deadline has passed
-                      </p>
                     </div>
 
-                    <div className="bg-blue-500/10 border border-blue-500/30 rounded p-3 mt-4">
+                    <div className="bg-blue-500/10 border border-blue-500/30 rounded p-3">
                       <div className="flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
                         <p className="text-xs text-blue-300">
-                          Alerts are sent via email and in-app notifications. Each level notifies progressively higher authority to ensure timely attention.
+                          Alerts escalate to higher authority at 50%, 75%, and 90% of elapsed time.
                         </p>
                       </div>
                     </div>

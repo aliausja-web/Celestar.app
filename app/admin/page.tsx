@@ -193,17 +193,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Info Box */}
-        <div className="bg-[#161b22] border border-[#30363d] rounded p-6 shadow-sm">
-          <h3 className="text-[#e6edf3] font-medium mb-2 flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-[#58a6ff]/70" />
-            Multi-Client Management
-          </h3>
-          <p className="text-[#7d8590] text-sm leading-relaxed">
-            This admin dashboard allows you to onboard unlimited clients. Each client organization has its own isolated data, users, and programs.
-            Users automatically see only their client's data when they log in. No SQL commands needed - everything is managed through this interface.
-          </p>
-        </div>
       </div>
     </div>
   );
