@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
 import { authorize } from '@/lib/auth-utils';
+import { proofUploadLimiter, applyRateLimit } from '@/lib/rate-limit';
 
 // POST /api/units/[id]/proofs - Upload proof for a unit
 export async function POST(
@@ -13,6 +14,18 @@ export async function POST(
 
     if (!authorized) {
       return NextResponse.json({ error: authError }, { status: 401 });
+    }
+
+    // Rate limiting: 10 proof uploads per user per minute
+    const { limited, headers: rlHeaders } = await applyRateLimit(
+      proofUploadLimiter,
+      context!.user_id
+    );
+    if (limited) {
+      return NextResponse.json(
+        { error: 'Too many requests — please slow down and try again shortly.' },
+        { status: 429, headers: rlHeaders }
+      );
     }
 
     // CLIENT_VIEWER cannot upload proofs, all other roles can

@@ -1,28 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { getSupabaseServer } from '@/lib/supabase-server';
+
+// Create Supabase admin client (needed to write to cron_runs bypassing RLS)
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  );
+}
 
 // POST /api/cron/deadline-reminders - Check for approaching deadlines and send notifications
 // This endpoint should be called by a cron job (e.g., daily at 9 AM)
 export async function POST(request: NextRequest) {
+  // Verify cron secret to prevent unauthorized access (mandatory)
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (!cronSecret) {
+    console.error('CRON_SECRET not configured - rejecting request for security');
+    return NextResponse.json({ error: 'Server misconfiguration: CRON_SECRET not set' }, { status: 500 });
+  }
+
+  // Allow if CRON_SECRET matches OR if called from Supabase Edge Function with service role key
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (authHeader !== `Bearer ${supabaseServiceKey}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+  }
+
+  const supabaseAdmin = getSupabaseAdmin();
+  const supabase = getSupabaseServer();
+  const runId = crypto.randomUUID();
+
+  // Insert run start record
+  await supabaseAdmin.from('cron_runs').insert({
+    id: runId,
+    job_name: 'deadline-reminders',
+    status: 'running',
+  });
+
   try {
-    // Verify cron secret to prevent unauthorized access (mandatory)
-    const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-
-    if (!cronSecret) {
-      console.error('CRON_SECRET not configured - rejecting request for security');
-      return NextResponse.json({ error: 'Server misconfiguration: CRON_SECRET not set' }, { status: 500 });
-    }
-
-    // Allow if CRON_SECRET matches OR if called from Supabase Edge Function with service role key
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (authHeader !== `Bearer ${supabaseServiceKey}`) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-    }
-
-    const supabase = getSupabaseServer();
     const now = new Date();
     const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
@@ -209,6 +234,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert notifications (dedupe by email + unit)
+    let notificationsQueued = 0;
+
     if (notifications.length > 0) {
       // Simple dedupe by recipient + subject
       const seen = new Set();
@@ -220,6 +247,7 @@ export async function POST(request: NextRequest) {
       });
 
       await supabase.from('escalation_notifications').insert(uniqueNotifications);
+      notificationsQueued = uniqueNotifications.length;
 
       // Insert in-app notifications
       if (inAppNotifications.length > 0) {
@@ -248,24 +276,38 @@ export async function POST(request: NextRequest) {
       } catch (emailError) {
         console.warn('Failed to trigger email function:', emailError);
       }
-
-      return NextResponse.json({
-        success: true,
-        approaching_deadlines: approachingUnits?.length || 0,
-        overdue_units: overdueUnits?.length || 0,
-        notifications_queued: uniqueNotifications.length,
-      });
     }
+
+    // Update run record on success
+    await supabaseAdmin
+      .from('cron_runs')
+      .update({
+        status: 'success',
+        completed_at: new Date().toISOString(),
+        records_processed: notificationsQueued,
+      })
+      .eq('id', runId);
 
     return NextResponse.json({
       success: true,
-      approaching_deadlines: 0,
-      overdue_units: 0,
-      notifications_queued: 0,
-      message: 'No deadline reminders needed',
+      approaching_deadlines: approachingUnits?.length || 0,
+      overdue_units: overdueUnits?.length || 0,
+      notifications_queued: notificationsQueued,
+      ...(notificationsQueued === 0 && { message: 'No deadline reminders needed' }),
     });
   } catch (error: any) {
     console.error('Deadline reminder error:', error);
+
+    // Update run record on failure
+    await supabaseAdmin
+      .from('cron_runs')
+      .update({
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+      })
+      .eq('id', runId);
+
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

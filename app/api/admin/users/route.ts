@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
 import { authorize } from '@/lib/auth-utils';
 import { createClient } from '@supabase/supabase-js';
+import { authLimiter, applyRateLimit } from '@/lib/rate-limit';
 
 // GET /api/admin/users - List all users with organization info
 export async function GET(request: NextRequest) {
@@ -56,12 +57,24 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
-    const { authorized, error: authError } = await authorize(authHeader, {
+    const { authorized, context, error: authError } = await authorize(authHeader, {
       requireRole: ['PLATFORM_ADMIN'],
     });
 
     if (!authorized) {
       return NextResponse.json({ error: authError }, { status: 403 });
+    }
+
+    // Rate limiting: 20 user-creation requests per admin per minute
+    const { limited, headers: rlHeaders } = await applyRateLimit(
+      authLimiter,
+      context!.user_id
+    );
+    if (limited) {
+      return NextResponse.json(
+        { error: 'Too many requests — please slow down and try again shortly.' },
+        { status: 429, headers: rlHeaders }
+      );
     }
 
     const body = await request.json();
