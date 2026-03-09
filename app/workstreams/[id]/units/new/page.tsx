@@ -427,12 +427,11 @@ export default function NewUnitPage() {
                 >
                   <div className="flex items-center gap-2">
                     <Bell className="w-4 h-4 text-orange-400" />
-                    <h3 className="text-white font-semibold">Urgency Alert Settings</h3>
-                    <span className="text-xs text-gray-500">(Optional - Click to customize)</span>
+                    <h3 className="text-white font-semibold">Deadline Alerts</h3>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-gray-400">
-                      {formData.urgency_alerts_enabled ? 'Enabled (50%, 75%, 90%)' : 'Disabled'}
+                      {formData.urgency_alerts_enabled ? 'On' : 'Off'}
                     </span>
                     {showAdvancedAlerts ? (
                       <ChevronUp className="w-4 h-4 text-gray-400" />
@@ -444,11 +443,6 @@ export default function NewUnitPage() {
 
                 {showAdvancedAlerts && (
                   <>
-                    <p className="text-sm text-gray-400 mb-4">
-                      Automatic notifications will be sent to team leads and managers as the deadline approaches.
-                      Set when alerts should trigger based on percentage of time elapsed.
-                    </p>
-
                     <div className="flex items-center gap-2 mb-4">
                       <Checkbox
                         id="urgency_alerts_enabled"
@@ -469,29 +463,40 @@ export default function NewUnitPage() {
                 )}
 
                 {showAdvancedAlerts && formData.urgency_alerts_enabled && (
-                  <div className="space-y-4 bg-black/20 p-4 rounded-lg border border-gray-700">
-                    <div className="flex items-center gap-6 text-sm text-gray-300">
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-yellow-500/20 text-yellow-400 text-xs flex items-center justify-center font-bold">1</span>
-                        <span>First Alert: <strong>50%</strong></span>
+                  <div className="space-y-3 bg-black/20 p-4 rounded-lg border border-gray-700">
+                    {/* Alert timeline */}
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-yellow-500/20 text-yellow-400 flex items-center justify-center font-bold shrink-0">1</span>
+                          <span className="text-gray-300 font-medium">Workstream Lead</span>
+                        </div>
+                        <p className="text-gray-500 pl-6">When half the time to deadline has passed</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 text-xs flex items-center justify-center font-bold">2</span>
-                        <span>Second Alert: <strong>75%</strong></span>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold shrink-0">2</span>
+                          <span className="text-gray-300 font-medium">Program Owner</span>
+                        </div>
+                        <p className="text-gray-500 pl-6">When three-quarters of the time has passed</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-red-500/20 text-red-400 text-xs flex items-center justify-center font-bold">3</span>
-                        <span>Critical Alert: <strong>90%</strong></span>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-5 h-5 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center font-bold shrink-0">3</span>
+                          <span className="text-gray-300 font-medium">Platform Admin</span>
+                        </div>
+                        <p className="text-gray-500 pl-6">When 90% of the time has passed</p>
                       </div>
                     </div>
 
-                    <div className="bg-blue-500/10 border border-blue-500/30 rounded p-3">
-                      <div className="flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-                        <p className="text-xs text-blue-300">
-                          Alerts escalate to higher authority at 50%, 75%, and 90% of elapsed time.
-                        </p>
-                      </div>
+                    <div className="bg-black/30 border border-gray-700 rounded p-3 space-y-1.5">
+                      <p className="text-xs text-gray-400 font-medium">How this works for your unit</p>
+                      <p className="text-xs text-gray-500">
+                        Alert timing is calculated from unit creation to the deadline you set above — so alerts fire at the right moment regardless of whether the deadline is 3 days or 3 months away.
+                      </p>
+                      <p className="text-xs text-gray-600 italic">
+                        e.g. 10-day deadline → alerts on day 5, day 7.5, day 9 &nbsp;·&nbsp; 60-day deadline → alerts on day 30, day 45, day 54
+                      </p>
                     </div>
                   </div>
                 )}
