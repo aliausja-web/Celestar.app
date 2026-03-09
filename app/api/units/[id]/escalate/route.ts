@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
 import { authorize } from '@/lib/auth-utils';
+import { escalationLimiter, applyRateLimit } from '@/lib/rate-limit';
 
 // POST /api/units/[id]/escalate - Manually escalate a unit
 // Manual escalation = someone raises a real-world issue (e.g. water damage, broken equipment)
@@ -17,6 +18,18 @@ export async function POST(
 
     if (!authorized) {
       return NextResponse.json({ error: authError }, { status: 403 });
+    }
+
+    // Rate limiting: 5 escalations per user per minute
+    const { limited, headers: rlHeaders } = await applyRateLimit(
+      escalationLimiter,
+      context!.user_id
+    );
+    if (limited) {
+      return NextResponse.json(
+        { error: 'Too many requests — please slow down and try again shortly.' },
+        { status: 429, headers: rlHeaders }
+      );
     }
 
     const supabase = getSupabaseServer();

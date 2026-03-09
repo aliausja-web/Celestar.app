@@ -2,9 +2,38 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, FolderKanban, Bell, ArrowLeft } from 'lucide-react';
+import { Building2, Users, FolderKanban, Bell, ArrowLeft, Activity, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
 import { NotificationBell } from '@/components/notification-bell';
+
+interface CronRun {
+  id: string;
+  job_name: string;
+  started_at: string;
+  completed_at: string | null;
+  status: 'running' | 'success' | 'failed';
+  records_processed: number;
+  error_message: string | null;
+}
+
+function formatRelativeTime(isoString: string): string {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${diffDays}d ago`;
+}
+
+const JOB_LABELS: Record<string, string> = {
+  'check-escalations': 'Escalation Checker',
+  'deadline-reminders': 'Deadline Reminders',
+};
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -15,9 +44,12 @@ export default function AdminDashboard() {
     pendingNotifications: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [cronRuns, setCronRuns] = useState<CronRun[]>([]);
+  const [cronLoading, setCronLoading] = useState(true);
 
   useEffect(() => {
     fetchStats();
+    fetchCronRuns();
   }, []);
 
   const fetchStats = async () => {
@@ -47,6 +79,37 @@ export default function AdminDashboard() {
       console.error('Error fetching stats:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCronRuns = async () => {
+    try {
+      // Fetch latest run per job_name
+      const { data, error } = await supabase
+        .from('cron_runs')
+        .select('*')
+        .order('started_at', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error('Error fetching cron runs:', error);
+        setCronLoading(false);
+        return;
+      }
+
+      // Keep only the most recent run per job
+      const latestByJob = new Map<string, CronRun>();
+      for (const run of (data || []) as CronRun[]) {
+        if (!latestByJob.has(run.job_name)) {
+          latestByJob.set(run.job_name, run);
+        }
+      }
+
+      setCronRuns(Array.from(latestByJob.values()));
+    } catch (error) {
+      console.error('Error fetching cron runs:', error);
+    } finally {
+      setCronLoading(false);
     }
   };
 
@@ -191,6 +254,70 @@ export default function AdminDashboard() {
               <p className="text-sm text-[#7d8590] mt-1">Link programs to clients</p>
             </button>
           </div>
+        </div>
+
+        {/* System Health */}
+        <div className="bg-[#161b22] rounded border border-[#30363d] p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity className="w-5 h-5 text-[#7d8590]" />
+            <h2 className="text-lg font-medium text-[#e6edf3]">System Health</h2>
+          </div>
+
+          {cronLoading ? (
+            <p className="text-[#7d8590] text-sm">Loading cron status...</p>
+          ) : cronRuns.length === 0 ? (
+            <p className="text-[#7d8590] text-sm italic">No cron runs recorded yet.</p>
+          ) : (
+            <div className="divide-y divide-[#21262d]">
+              {cronRuns.map((run) => {
+                const label = JOB_LABELS[run.job_name] ?? run.job_name;
+                const lastRunAt = run.completed_at ?? run.started_at;
+
+                return (
+                  <div key={run.id} className="py-4 first:pt-0 last:pb-0">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {run.status === 'success' && (
+                          <CheckCircle2 className="w-4 h-4 text-[#3fb950] flex-shrink-0 mt-0.5" />
+                        )}
+                        {run.status === 'failed' && (
+                          <XCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                        )}
+                        {run.status === 'running' && (
+                          <Clock className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5 animate-pulse" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-[#e6edf3] text-sm font-medium">{label}</p>
+                          {run.status === 'failed' && run.error_message && (
+                            <p className="text-red-400 text-xs mt-0.5 truncate">{run.error_message}</p>
+                          )}
+                          {run.status === 'success' && (
+                            <p className="text-[#7d8590] text-xs mt-0.5">
+                              {run.records_processed} record{run.records_processed !== 1 ? 's' : ''} processed
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
+                            run.status === 'success'
+                              ? 'text-[#3fb950] bg-[#3fb950]/10 border-[#3fb950]/30'
+                              : run.status === 'failed'
+                              ? 'text-red-400 bg-red-400/10 border-red-400/30'
+                              : 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30'
+                          }`}
+                        >
+                          {run.status.toUpperCase()}
+                        </span>
+                        <span className="text-[#7d8590] text-xs">{formatRelativeTime(lastRunAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
       </div>

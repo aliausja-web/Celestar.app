@@ -159,9 +159,12 @@ export default function WorkstreamBoard() {
         throw new Error(data.error || 'Failed to escalate unit');
       }
 
-      toast.success(`Escalation sent to ${data.notifications_sent} users`);
+      if (data.notifications_sent) {
+        toast.success(`Escalation sent to ${data.notifications_sent} recipient(s)`);
+      } else {
+        toast.success('Escalation recorded — no recipients currently assigned');
+      }
       if (data.email_errors) console.error('Email errors:', data.email_errors);
-      console.log('ESCALATION DEBUG:', JSON.stringify(data, null, 2));
       setShowEscalationDialog(false);
 
       // Refresh units to show updated escalation level

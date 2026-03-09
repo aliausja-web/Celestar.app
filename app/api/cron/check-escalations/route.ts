@@ -31,30 +31,38 @@ function getSupabaseAdmin() {
  * Security: Use CRON_SECRET to prevent unauthorized calls
  */
 export async function GET(request: NextRequest) {
+  // Verify cron secret (mandatory - reject if not configured)
+  const authHeader = request.headers.get('authorization');
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (!cronSecret) {
+    console.error('CRON_SECRET not configured - rejecting request for security');
+    return NextResponse.json(
+      { error: 'Server misconfiguration: CRON_SECRET not set' },
+      { status: 500 }
+    );
+  }
+
+  if (authHeader !== `Bearer ${cronSecret}`) {
+    console.error('Unauthorized cron request - invalid secret');
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
+
+  const supabaseAdmin = getSupabaseAdmin();
+  const runId = crypto.randomUUID();
+
+  // Insert run start record
+  await supabaseAdmin.from('cron_runs').insert({
+    id: runId,
+    job_name: 'check-escalations',
+    status: 'running',
+  });
+
   try {
-    // Verify cron secret (mandatory - reject if not configured)
-    const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-
-    if (!cronSecret) {
-      console.error('CRON_SECRET not configured - rejecting request for security');
-      return NextResponse.json(
-        { error: 'Server misconfiguration: CRON_SECRET not set' },
-        { status: 500 }
-      );
-    }
-
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      console.error('Unauthorized cron request - invalid secret');
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     console.log('[CRON] Starting escalation check...', new Date().toISOString());
-
-    const supabaseAdmin = getSupabaseAdmin();
 
     // Call the new hierarchical model escalation engine
     const { data: unitData, error: unitError } = await supabaseAdmin.rpc(
@@ -75,11 +83,26 @@ export async function GET(request: NextRequest) {
     const zoneResult = zoneData?.[0] || { zones_checked: 0, escalations_created: 0 };
     const expiryResult = expiryData?.[0] || { proofs_expired: 0, units_reverted: 0 };
 
+    const recordsProcessed =
+      (unitResult.units_checked || 0) +
+      (zoneResult.zones_checked || 0) +
+      (expiryResult.proofs_expired || 0);
+
     console.log('[CRON] Escalation check completed:', {
       units: unitResult,
       zones: zoneResult,
       expiry: expiryResult,
     });
+
+    // Update run record on success
+    await supabaseAdmin
+      .from('cron_runs')
+      .update({
+        status: 'success',
+        completed_at: new Date().toISOString(),
+        records_processed: recordsProcessed,
+      })
+      .eq('id', runId);
 
     return NextResponse.json({
       success: true,
@@ -98,10 +121,21 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('[CRON] Fatal error in escalation check:', error);
+
+    // Update run record on failure
+    await supabaseAdmin
+      .from('cron_runs')
+      .update({
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+      })
+      .eq('id', runId);
+
     return NextResponse.json(
       {
-        success: false,
-        error: error.message || 'Internal server error',
+        error: 'Cron job failed',
+        details: error instanceof Error ? error.message : 'Unknown',
         timestamp: new Date().toISOString(),
       },
       { status: 500 }
