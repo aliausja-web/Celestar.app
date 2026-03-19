@@ -400,7 +400,7 @@ export default function ProgramDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0E1116] p-6">
+      <div className="min-h-screen bg-[#0E1116] p-3 sm:p-6">
         <div className="max-w-7xl mx-auto space-y-6">
           <Skeleton className="h-12 w-64 bg-gray-800" />
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -414,7 +414,7 @@ export default function ProgramDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0E1116] p-6">
+    <div className="min-h-screen bg-[#0E1116] p-3 sm:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -514,7 +514,7 @@ export default function ProgramDashboard() {
                 </CardDescription>
               )}
             </CardHeader>
-            <CardContent className="flex gap-6 text-sm">
+            <CardContent className="flex flex-wrap gap-4 sm:gap-6 text-sm">
               <div>
                 <span className="text-gray-500">Owner Org:</span>
                 <span className="text-white ml-2 font-medium">{selectedProgram.owner_org}</span>
