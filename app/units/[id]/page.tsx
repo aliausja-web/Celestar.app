@@ -347,21 +347,21 @@ export default function UnitDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 p-3 sm:p-6">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <Button
             onClick={() => router.back()}
             variant="outline"
-            className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
+            className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40 shrink-0"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back
           </Button>
-          <div className="flex-1">
-            <h1 className="text-3xl font-black text-white">{unit.title}</h1>
-            <p className="text-gray-500">Owner: {unit.owner_party_name}</p>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl sm:text-3xl font-black text-white truncate">{unit.title}</h1>
+            <p className="text-gray-500 text-sm">Owner: {unit.owner_party_name}</p>
           </div>
           <NotificationBell />
           <Badge

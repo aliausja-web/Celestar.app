@@ -210,9 +210,9 @@ export default function WorkstreamBoard() {
     return (
       <Card className={`border-[#30363d] bg-[#161b22] transition-all ${isUnconfirmed ? 'opacity-75 border-dashed' : ''}`}>
         <CardContent className="p-4">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             {/* Left: Unit Info */}
-            <div className="flex-1 space-y-2">
+            <div className="flex-1 min-w-0 space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge
                   className={`${statusColor} font-black text-xs px-3 py-1.5 flex items-center gap-1.5`}
@@ -233,7 +233,7 @@ export default function WorkstreamBoard() {
 
               <h3 className="text-[#e6edf3] font-medium text-lg">{unit.title}</h3>
 
-              <div className="flex items-center gap-4 text-xs text-[#7d8590]">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[#7d8590]">
                 <span>Owner: {unit.owner_party_name}</span>
                 {unit.required_green_by && (
                   <span
@@ -301,11 +301,11 @@ export default function WorkstreamBoard() {
             </div>
 
             {/* Right: Actions */}
-            <div className="flex flex-col gap-2">
+            <div className="flex gap-2 sm:flex-col sm:shrink-0">
               <Button
                 size="sm"
                 onClick={() => router.push(`/units/${unit.id}/upload`)}
-                className="bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]"
+                className="flex-1 sm:flex-none bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]"
               >
                 <Upload className="w-4 h-4 mr-2" />
                 Submit Proof
@@ -314,7 +314,7 @@ export default function WorkstreamBoard() {
                 size="sm"
                 variant="outline"
                 onClick={() => router.push(`/units/${unit.id}`)}
-                className="border-[#30363d] text-[#e6edf3] hover:bg-[#161b22]"
+                className="flex-1 sm:flex-none border-[#30363d] text-[#e6edf3] hover:bg-[#161b22]"
               >
                 View Details
               </Button>
@@ -346,19 +346,19 @@ export default function WorkstreamBoard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0E1116] p-6">
+    <div className="min-h-screen bg-[#0E1116] p-3 sm:p-6">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             onClick={() => router.push('/programs')}
-            className="text-[#7d8590] hover:text-[#e6edf3]"
+            className="text-[#7d8590] hover:text-[#e6edf3] shrink-0"
           >
             <ChevronLeft className="w-5 h-5" />
           </Button>
-          <div className="flex-1">
-            <h1 className="text-2xl font-semibold text-[#e6edf3] mb-1">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg sm:text-2xl font-semibold text-[#e6edf3] mb-1 truncate">
               {workstream?.name || 'Workstream'}
             </h1>
             {workstream?.type && (
