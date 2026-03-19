@@ -120,7 +120,7 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Camera className="w-4 h-4 text-[#58a6ff]/70 flex-shrink-0" />
-                  <p className="text-xs text-[#7d8590] whitespace-nowrap">Timestamped proof capture with approval workflow</p>
+                  <p className="text-xs text-[#7d8590]">Timestamped proof capture with approval workflow</p>
                 </div>
                 <div className="flex items-start gap-2">
                   <Shield className="w-4 h-4 text-[#3fb950]/70 mt-0.5 flex-shrink-0" />

@@ -417,7 +417,7 @@ export default function ProgramDashboard() {
     <div className="min-h-screen bg-[#0E1116] p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-4">
             {/* Celestar Logo - muted */}
             <div className="relative">
@@ -439,7 +439,7 @@ export default function ProgramDashboard() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <NotificationBell />
             {permissions.isPlatformAdmin && (
               <Button
