@@ -144,6 +144,10 @@ export default function UploadProofPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function startCamera() {
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      toast.error('Camera requires HTTPS. Access this page via https:// or localhost.');
+      return;
+    }
     try {
       const constraints: MediaStreamConstraints = {
         video: {
@@ -168,7 +172,15 @@ export default function UploadProofPage() {
       }
     } catch (error) {
       console.error('Error accessing camera:', error);
-      toast.error('Failed to access camera. Please grant camera permissions.');
+      if (!window.isSecureContext) {
+        toast.error('Camera requires HTTPS. Access this page via https:// or localhost.');
+      } else if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        toast.error('Camera access denied. Please grant camera permissions in your browser.');
+      } else if (error instanceof DOMException && error.name === 'NotFoundError') {
+        toast.error('No camera found. Please connect a camera and try again.');
+      } else {
+        toast.error('Failed to access camera. Please grant camera permissions.');
+      }
     }
   }
 
