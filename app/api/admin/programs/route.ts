@@ -22,9 +22,9 @@ export async function GET(request: NextRequest) {
         id,
         name,
         description,
-        client_organization_id,
+        org_id,
         created_at,
-        organizations (
+        orgs (
           name
         )
       `)
@@ -37,8 +37,8 @@ export async function GET(request: NextRequest) {
       id: program.id,
       name: program.name,
       description: program.description,
-      client_organization_id: program.client_organization_id,
-      organization_name: program.organizations?.name,
+      client_organization_id: program.org_id,
+      organization_name: (program.orgs as any)?.name,
       created_at: program.created_at,
     }));
 
