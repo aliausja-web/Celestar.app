@@ -23,10 +23,10 @@ export async function POST(
 
     const supabase = getSupabaseServer();
 
-    // Update program with organization assignment
+    // Update program with organization assignment (org_id is the FK to orgs table)
     const { error } = await supabase
       .from('programs')
-      .update({ client_organization_id: organization_id })
+      .update({ org_id: organization_id })
       .eq('id', programId);
 
     if (error) throw error;

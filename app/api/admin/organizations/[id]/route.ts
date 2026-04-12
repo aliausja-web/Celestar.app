@@ -20,22 +20,27 @@ export async function DELETE(
     const supabase = getSupabaseServer();
     const organizationId = params.id;
 
-    // Don't allow deleting Platform Admin Organization
-    const { data: org } = await supabase
-      .from('organizations')
-      .select('name')
-      .eq('id', organizationId)
-      .single();
-
-    if (org?.name === 'Platform Admin Organization') {
+    // Don't allow deleting the Platform Admin org
+    if (organizationId === 'org_celestar') {
       return NextResponse.json(
-        { error: 'Cannot delete Platform Admin Organization' },
+        { error: 'Cannot delete the Platform Admin organization' },
         { status: 403 }
       );
     }
 
+    // Verify org exists before attempting delete
+    const { data: org } = await supabase
+      .from('orgs')
+      .select('id')
+      .eq('id', organizationId)
+      .single();
+
+    if (!org) {
+      return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
+    }
+
     const { error } = await supabase
-      .from('organizations')
+      .from('orgs')
       .delete()
       .eq('id', organizationId);
 

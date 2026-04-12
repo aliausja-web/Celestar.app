@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FolderKanban, ArrowLeft, Building2, Link as LinkIcon, Unlink } from 'lucide-react';
+import { supabase } from '@/lib/firebase';
 
 interface Program {
   id: string;
@@ -34,15 +35,20 @@ export default function ProgramsManagement() {
 
   const fetchData = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       // Fetch programs
-      const programsRes = await fetch('/api/admin/programs');
+      const programsRes = await fetch('/api/admin/programs', { headers });
       if (programsRes.ok) {
         const programsData = await programsRes.json();
         setPrograms(programsData.programs || []);
       }
 
       // Fetch organizations
-      const orgsRes = await fetch('/api/admin/organizations');
+      const orgsRes = await fetch('/api/admin/organizations', { headers });
       if (orgsRes.ok) {
         const orgsData = await orgsRes.json();
         setOrganizations(orgsData.organizations || []);
@@ -62,9 +68,15 @@ export default function ProgramsManagement() {
 
     setAssigning(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch(`/api/admin/programs/${selectedProgram}/assign`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
         body: JSON.stringify({ organization_id: selectedOrganization }),
       });
 
@@ -91,9 +103,15 @@ export default function ProgramsManagement() {
     }
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       const response = await fetch(`/api/admin/programs/${programId}/assign`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
         body: JSON.stringify({ organization_id: null }),
       });
 
