@@ -129,10 +129,39 @@ export async function PATCH(
       return NextResponse.json(unit);
     }
 
-    // Non-FIELD roles can update any field
+    // Higher-privileged roles can update these fields only
+    // computed_status, is_blocked, status_computed_at, current_escalation_level
+    // are NEVER manually settable — they are driven by DB triggers and the escalation API
+    const PRIVILEGED_ALLOWED_FIELDS = [
+      'title',
+      'owner_party_name',
+      'required_green_by',
+      'acceptance_criteria',
+      'proof_requirements',
+      'escalation_config',
+      'requires_reviewer_approval',
+      'requires_reference_number',
+      'requires_expiry_date',
+      'ordering',
+      'description',
+    ];
+    const filteredBody: Record<string, any> = {};
+    for (const key of PRIVILEGED_ALLOWED_FIELDS) {
+      if (body[key] !== undefined) {
+        filteredBody[key] = body[key];
+      }
+    }
+
+    if (Object.keys(filteredBody).length === 0) {
+      return NextResponse.json({
+        error: 'No allowed fields provided',
+        allowed_fields: PRIVILEGED_ALLOWED_FIELDS,
+      }, { status: 400 });
+    }
+
     const { data: unit, error } = await supabase
       .from('units')
-      .update(body)
+      .update(filteredBody)
       .eq('id', params.id)
       .select()
       .single();

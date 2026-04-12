@@ -50,6 +50,14 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseServer();
     const body = await request.json();
 
+    if (!body.name || typeof body.name !== 'string' || body.name.trim().length === 0) {
+      return NextResponse.json({ error: 'Program name is required' }, { status: 400 });
+    }
+    if (body.name.trim().length > 255) {
+      return NextResponse.json({ error: 'Program name must be 255 characters or fewer' }, { status: 400 });
+    }
+    body.name = body.name.trim();
+
     // Program owners can only create programs in their own org
     const org_id = context!.role === 'PLATFORM_ADMIN'
       ? (body.org_id || context!.org_id)

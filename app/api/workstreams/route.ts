@@ -68,6 +68,18 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseServer();
     const body = await request.json();
 
+    if (!body.name || typeof body.name !== 'string' || body.name.trim().length === 0) {
+      return NextResponse.json({ error: 'Workstream name is required' }, { status: 400 });
+    }
+    if (body.name.trim().length > 255) {
+      return NextResponse.json({ error: 'Workstream name must be 255 characters or fewer' }, { status: 400 });
+    }
+    body.name = body.name.trim();
+
+    if (!body.program_id) {
+      return NextResponse.json({ error: 'program_id is required' }, { status: 400 });
+    }
+
     // TENANT SAFETY: Verify program belongs to user's organization
     const { data: progCheck } = await supabase
       .from('programs')
