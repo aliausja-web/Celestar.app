@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
 import { authorize } from '@/lib/auth-utils';
+import { createClient } from '@supabase/supabase-js';
+
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 // GET /api/units?workstream_id=xxx - List units for a workstream
 export async function GET(request: NextRequest) {
@@ -39,12 +48,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
-    // Simple query without governance columns
-    const { data: units, error } = await supabase
+    // FIELD_CONTRIBUTOR: only return units they are explicitly assigned to
+    let unitsQuery = supabase
       .from('units')
       .select('*')
       .eq('workstream_id', workstreamId)
       .order('created_at', { ascending: true });
+
+    if (context!.role === 'FIELD_CONTRIBUTOR') {
+      // Fetch this user's assigned unit ids first
+      const { data: assignments } = await getSupabaseAdmin()
+        .from('unit_assignments')
+        .select('unit_id')
+        .eq('user_id', context!.user_id);
+
+      const assignedIds = (assignments ?? []).map((a: any) => a.unit_id);
+      if (assignedIds.length === 0) {
+        return NextResponse.json([]); // no assignments → no units
+      }
+      unitsQuery = unitsQuery.in('id', assignedIds);
+    }
+
+    const { data: units, error } = await unitsQuery;
 
     if (error) throw error;
 
