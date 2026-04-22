@@ -450,6 +450,15 @@ export default function ProgramDashboard() {
                 Admin Dashboard
               </Button>
             )}
+            {(permissions.role === 'PROGRAM_OWNER' || permissions.role === 'WORKSTREAM_LEAD' || permissions.isPlatformAdmin) && (
+              <Button
+                onClick={() => router.push('/team')}
+                className="bg-[#1f2937] hover:bg-[#374151] text-[#e6edf3] border border-[#374151]"
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Field Team
+              </Button>
+            )}
             {permissions.canCreateProgram && (
               <Button
                 onClick={() => router.push('/programs/new')}
