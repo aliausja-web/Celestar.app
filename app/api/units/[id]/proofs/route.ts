@@ -215,12 +215,14 @@ export async function POST(
 
     // Notify WORKSTREAM_LEAD and PROGRAM_OWNER about the new proof submission
     try {
-      const workstreamId = (unitCheck as any).workstreams?.id;
-      const programId = (unitCheck as any).workstreams?.programs?.id;
+      // Use the direct workstream_id column (already selected above) — most reliable
+      const workstreamId = (unitCheck as any).workstream_id as string | undefined;
+      const programId = (unitCheck as any).workstreams?.programs?.id as string | undefined;
       const unitTitle = (unitCheck as any).title || 'Unknown Unit';
 
       const recipientIds = new Set<string>();
 
+      // 1. Specific workstream members with WORKSTREAM_LEAD role
       if (workstreamId) {
         const { data: wsLeads } = await supabase
           .from('workstream_members')
@@ -230,6 +232,7 @@ export async function POST(
         wsLeads?.forEach(m => { if (m.user_id !== context!.user_id) recipientIds.add(m.user_id); });
       }
 
+      // 2. Specific program members with PROGRAM_OWNER role
       if (programId) {
         const { data: programOwners } = await supabase
           .from('program_members')
@@ -239,16 +242,15 @@ export async function POST(
         programOwners?.forEach(m => { if (m.user_id !== context!.user_id) recipientIds.add(m.user_id); });
       }
 
-      // Fall back to org-level role holders if no specific assignments found
-      if (recipientIds.size === 0) {
-        const { data: orgRoleHolders } = await supabase
-          .from('profiles')
-          .select('user_id')
-          .eq('org_id', context!.org_id)
-          .in('role', ['WORKSTREAM_LEAD', 'PROGRAM_OWNER'])
-          .neq('user_id', context!.user_id);
-        orgRoleHolders?.forEach(p => recipientIds.add(p.user_id));
-      }
+      // 3. Always include org-level role holders — catches users assigned roles directly
+      //    in profiles without specific workstream/program membership entries
+      const { data: orgRoleHolders } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .eq('org_id', context!.org_id)
+        .in('role', ['WORKSTREAM_LEAD', 'PROGRAM_OWNER'])
+        .neq('user_id', context!.user_id);
+      orgRoleHolders?.forEach(p => recipientIds.add(p.user_id));
 
       if (recipientIds.size > 0) {
         const notifications = Array.from(recipientIds).map(userId => ({
@@ -265,7 +267,12 @@ export async function POST(
             proof_type: proofType,
           },
         }));
-        await supabase.from('in_app_notifications').insert(notifications);
+        const { error: notifInsertError } = await supabase
+          .from('in_app_notifications')
+          .insert(notifications);
+        if (notifInsertError) {
+          console.warn('Failed to insert proof submission notifications:', notifInsertError.message);
+        }
       }
     } catch (notifyError) {
       // Non-fatal — proof is already saved; notification failure must not roll back the upload
