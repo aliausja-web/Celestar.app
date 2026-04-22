@@ -127,6 +127,8 @@ export function NotificationBell() {
         return '✅';
       case 'proof_rejected':
         return '❌';
+      case 'proof_submitted':
+        return '📎';
       case 'deadline_approaching':
         return '⏰';
       default:
