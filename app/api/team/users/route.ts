@@ -13,7 +13,7 @@ function getSupabaseAdmin() {
   );
 }
 
-// GET /api/team/users - List FIELD_CONTRIBUTOR users in caller's org
+// GET /api/team/users - List FIELD_CONTRIBUTOR users in caller's org with assignment counts
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -27,7 +27,6 @@ export async function GET(request: NextRequest) {
 
     const supabaseAdmin = getSupabaseAdmin();
 
-    // PLATFORM_ADMIN sees all field contributors; others see only their org
     let query = supabaseAdmin
       .from('profiles')
       .select('user_id, email, full_name, role, org_id, created_at, orgs(id, name)')
@@ -41,6 +40,26 @@ export async function GET(request: NextRequest) {
     const { data: users, error } = await query;
     if (error) throw error;
 
+    // Fetch assignment info for each user
+    const userIds = (users ?? []).map((u: any) => u.user_id);
+    let assignmentsByUser: Record<string, { unit_id: string; unit_title: string }[]> = {};
+
+    if (userIds.length > 0) {
+      const { data: assignments } = await supabaseAdmin
+        .from('unit_assignments')
+        .select('user_id, unit_id, units(id, title)')
+        .in('user_id', userIds);
+
+      for (const a of assignments ?? []) {
+        const uid = (a as any).user_id;
+        if (!assignmentsByUser[uid]) assignmentsByUser[uid] = [];
+        assignmentsByUser[uid].push({
+          unit_id: (a as any).unit_id,
+          unit_title: (a as any).units?.title ?? 'Unknown unit',
+        });
+      }
+    }
+
     const formatted = (users ?? []).map((u: any) => ({
       user_id: u.user_id,
       username: u.email.endsWith('@field.celestar.internal')
@@ -51,6 +70,7 @@ export async function GET(request: NextRequest) {
       organization_id: u.org_id,
       organization_name: u.orgs?.name,
       created_at: u.created_at,
+      assigned_units: assignmentsByUser[u.user_id] ?? [],
     }));
 
     return NextResponse.json({ users: formatted });
@@ -59,7 +79,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/team/users - Create a FIELD_CONTRIBUTOR in caller's org
+// POST /api/team/users - Create a FIELD_CONTRIBUTOR in caller's org with optional unit assignments
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
@@ -80,16 +100,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { username, password, full_name } = body;
+    const { username, password, full_name, unit_ids } = body;
 
     if (!username || !password) {
       return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
     }
 
-    // Username: lowercase letters, numbers, underscores, hyphens; 3–30 chars
     if (!/^[a-z0-9_-]{3,30}$/.test(username)) {
       return NextResponse.json(
-        { error: 'Username must be 3–30 characters and contain only lowercase letters, numbers, underscores, or hyphens' },
+        { error: 'Username must be 3–30 characters: lowercase letters, numbers, underscores, or hyphens only' },
         { status: 400 }
       );
     }
@@ -98,12 +117,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
     }
 
-    // Synthetic email — Supabase auth requires one but labourers don't have email
-    const syntheticEmail = `${username}@field.celestar.internal`;
+    const assignedUnitIds: string[] = Array.isArray(unit_ids) ? unit_ids : [];
 
     const supabaseAdmin = getSupabaseAdmin();
 
-    // Always create as FIELD_CONTRIBUTOR in caller's own org
+    // Verify all specified unit_ids belong to the caller's org
+    if (assignedUnitIds.length > 0) {
+      const { data: unitCheck } = await supabaseAdmin
+        .from('units')
+        .select('id, workstreams!inner(programs!inner(org_id))')
+        .in('id', assignedUnitIds);
+
+      const badUnit = (unitCheck ?? []).find(
+        (u: any) => u.workstreams?.programs?.org_id !== context.org_id
+      );
+      if (badUnit || (unitCheck ?? []).length !== assignedUnitIds.length) {
+        return NextResponse.json(
+          { error: 'One or more selected units do not belong to your organisation' },
+          { status: 400 }
+        );
+      }
+    }
+
+    const syntheticEmail = `${username}@field.celestar.internal`;
+
     const { data: authData, error: createAuthError } = await supabaseAdmin.auth.admin.createUser({
       email: syntheticEmail,
       password,
@@ -111,15 +148,16 @@ export async function POST(request: NextRequest) {
     });
 
     if (createAuthError) {
-      // Surface a friendlier duplicate-username error
       if (createAuthError.message.includes('already registered')) {
         return NextResponse.json({ error: 'Username already taken — choose a different one' }, { status: 409 });
       }
       throw createAuthError;
     }
 
+    const newUserId = authData.user.id;
+
     const { error: profileError } = await supabaseAdmin.from('profiles').insert([{
-      user_id: authData.user.id,
+      user_id: newUserId,
       email: syntheticEmail,
       full_name: full_name?.trim() || username,
       role: 'FIELD_CONTRIBUTOR',
@@ -127,12 +165,30 @@ export async function POST(request: NextRequest) {
     }]);
 
     if (profileError) {
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      await supabaseAdmin.auth.admin.deleteUser(newUserId);
       throw profileError;
     }
 
+    // Create unit assignments if any were specified
+    if (assignedUnitIds.length > 0) {
+      const assignmentRows = assignedUnitIds.map((unit_id) => ({
+        unit_id,
+        user_id: newUserId,
+        assigned_by: context.user_id,
+      }));
+
+      const { error: assignError } = await supabaseAdmin
+        .from('unit_assignments')
+        .insert(assignmentRows);
+
+      if (assignError) {
+        // Don't roll back the user — assignments can be added later; just report the issue
+        console.error('[POST /api/team/users] Failed to create unit assignments:', assignError);
+      }
+    }
+
     return NextResponse.json(
-      { user_id: authData.user.id, username },
+      { user_id: newUserId, username, assigned_unit_count: assignedUnitIds.length },
       { status: 201 }
     );
   } catch (error: any) {
