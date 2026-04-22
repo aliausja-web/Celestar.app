@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, Plus, Trash2, ArrowLeft, Mail, Shield, AlertCircle } from 'lucide-react';
+import { Users, Plus, Trash2, ArrowLeft, User, Shield, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
 import { usePermissions } from '@/hooks/use-permissions';
 import { NotificationBell } from '@/components/notification-bell';
 
 interface FieldUser {
   user_id: string;
-  email: string;
-  full_name: string;
+  username: string | null;
+  display_name: string;
   role: string;
   organization_id: string;
   organization_name?: string;
@@ -29,7 +29,7 @@ export default function TeamManagementPage() {
   const [error, setError] = useState('');
 
   const [formData, setFormData] = useState({
-    email: '',
+    username: '',
     password: '',
     full_name: '',
   });
@@ -40,7 +40,7 @@ export default function TeamManagementPage() {
     permissions.role === 'WORKSTREAM_LEAD';
 
   useEffect(() => {
-    if (permissions.role === null) return; // still loading
+    if (permissions.role === null) return;
     if (!canManage) {
       router.replace('/programs');
       return;
@@ -71,12 +71,17 @@ export default function TeamManagementPage() {
   }
 
   async function handleCreate() {
-    if (!formData.email || !formData.password) {
-      setError('Email and password are required');
+    const username = formData.username.trim().toLowerCase();
+    if (!username || !formData.password) {
+      setError('Username and password are required');
       return;
     }
     if (formData.password.length < 6) {
       setError('Password must be at least 6 characters');
+      return;
+    }
+    if (!/^[a-z0-9_-]{3,30}$/.test(username)) {
+      setError('Username must be 3–30 characters: lowercase letters, numbers, underscores, or hyphens only');
       return;
     }
 
@@ -87,7 +92,7 @@ export default function TeamManagementPage() {
       const res = await fetch('/api/team/users', {
         method: 'POST',
         headers,
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, username }),
       });
 
       if (!res.ok) {
@@ -97,7 +102,7 @@ export default function TeamManagementPage() {
 
       await fetchUsers();
       setShowCreateDialog(false);
-      setFormData({ email: '', password: '', full_name: '' });
+      setFormData({ username: '', password: '', full_name: '' });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -105,8 +110,9 @@ export default function TeamManagementPage() {
     }
   }
 
-  async function handleDelete(userId: string, email: string) {
-    if (!confirm(`Remove login for "${email}"? This cannot be undone.`)) return;
+  async function handleDelete(userId: string, username: string | null) {
+    const label = username ?? userId;
+    if (!confirm(`Remove login for "${label}"? This cannot be undone.`)) return;
 
     setDeletingId(userId);
     setError('');
@@ -127,7 +133,7 @@ export default function TeamManagementPage() {
 
   function closeDialog() {
     setShowCreateDialog(false);
-    setFormData({ email: '', password: '', full_name: '' });
+    setFormData({ username: '', password: '', full_name: '' });
     setError('');
   }
 
@@ -198,7 +204,7 @@ export default function TeamManagementPage() {
           </div>
         ) : (
           <div className="bg-gray-800/60 rounded-xl border border-gray-700 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-gray-700">
               <span className="text-gray-300 text-sm font-medium">
                 {users.length} field contributor{users.length !== 1 ? 's' : ''}
               </span>
@@ -206,7 +212,8 @@ export default function TeamManagementPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-700 bg-gray-800/40">
-                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">User</th>
+                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">Username</th>
+                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">Display Name</th>
                   <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">Role</th>
                   <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">Added</th>
                   <th className="text-right py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">Actions</th>
@@ -221,15 +228,15 @@ export default function TeamManagementPage() {
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
                         <div className="p-2 rounded-lg bg-yellow-600/20">
-                          <Mail className="w-4 h-4 text-yellow-400" />
+                          <User className="w-4 h-4 text-yellow-400" />
                         </div>
-                        <div>
-                          <div className="text-white font-medium text-sm">
-                            {user.full_name || user.email}
-                          </div>
-                          <div className="text-gray-400 text-xs">{user.email}</div>
-                        </div>
+                        <span className="text-white font-mono text-sm font-medium">
+                          {user.username ?? '—'}
+                        </span>
                       </div>
+                    </td>
+                    <td className="py-4 px-6 text-gray-300 text-sm">
+                      {user.display_name}
                     </td>
                     <td className="py-4 px-6">
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border bg-yellow-500/10 text-yellow-300 border-yellow-500/20">
@@ -242,7 +249,7 @@ export default function TeamManagementPage() {
                     </td>
                     <td className="py-4 px-6 text-right">
                       <button
-                        onClick={() => handleDelete(user.user_id, user.email)}
+                        onClick={() => handleDelete(user.user_id, user.username)}
                         disabled={deletingId === user.user_id}
                         className="p-2 hover:bg-red-500/10 rounded-lg text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
                         title="Remove login"
@@ -279,15 +286,20 @@ export default function TeamManagementPage() {
 
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-1.5">
-                  Email address <span className="text-red-400">*</span>
+                  Username <span className="text-red-400">*</span>
                 </label>
                 <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="field.worker@example.com"
-                  className="w-full px-4 py-2.5 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+                  type="text"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase() })}
+                  placeholder="e.g. john_doe"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  className="w-full px-4 py-2.5 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm font-mono"
                 />
+                <p className="text-gray-500 text-xs mt-1">
+                  3–30 chars · lowercase letters, numbers, _ or - only
+                </p>
               </div>
 
               <div>
@@ -305,7 +317,7 @@ export default function TeamManagementPage() {
 
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-1.5">
-                  Full name <span className="text-gray-500">(optional)</span>
+                  Display name <span className="text-gray-500">(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -327,7 +339,7 @@ export default function TeamManagementPage() {
               </button>
               <button
                 onClick={handleCreate}
-                disabled={saving || !formData.email || !formData.password}
+                disabled={saving || !formData.username || !formData.password}
                 className="flex-1 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? 'Creating...' : 'Create Login'}

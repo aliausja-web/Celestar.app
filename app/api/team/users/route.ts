@@ -43,8 +43,10 @@ export async function GET(request: NextRequest) {
 
     const formatted = (users ?? []).map((u: any) => ({
       user_id: u.user_id,
-      email: u.email,
-      full_name: u.full_name,
+      username: u.email.endsWith('@field.celestar.internal')
+        ? u.email.replace('@field.celestar.internal', '')
+        : null,
+      display_name: u.full_name,
       role: u.role,
       organization_id: u.org_id,
       organization_name: u.orgs?.name,
@@ -78,36 +80,48 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { email, password, full_name } = body;
+    const { username, password, full_name } = body;
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
+    if (!username || !password) {
+      return NextResponse.json({ error: 'Username and password are required' }, { status: 400 });
+    }
+
+    // Username: lowercase letters, numbers, underscores, hyphens; 3–30 chars
+    if (!/^[a-z0-9_-]{3,30}$/.test(username)) {
+      return NextResponse.json(
+        { error: 'Username must be 3–30 characters and contain only lowercase letters, numbers, underscores, or hyphens' },
+        { status: 400 }
+      );
     }
 
     if (password.length < 6) {
       return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
     }
 
-    // Email basic validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json({ error: 'Invalid email address' }, { status: 400 });
-    }
+    // Synthetic email — Supabase auth requires one but labourers don't have email
+    const syntheticEmail = `${username}@field.celestar.internal`;
 
     const supabaseAdmin = getSupabaseAdmin();
 
     // Always create as FIELD_CONTRIBUTOR in caller's own org
     const { data: authData, error: createAuthError } = await supabaseAdmin.auth.admin.createUser({
-      email,
+      email: syntheticEmail,
       password,
       email_confirm: true,
     });
 
-    if (createAuthError) throw createAuthError;
+    if (createAuthError) {
+      // Surface a friendlier duplicate-username error
+      if (createAuthError.message.includes('already registered')) {
+        return NextResponse.json({ error: 'Username already taken — choose a different one' }, { status: 409 });
+      }
+      throw createAuthError;
+    }
 
     const { error: profileError } = await supabaseAdmin.from('profiles').insert([{
       user_id: authData.user.id,
-      email,
-      full_name: full_name?.trim() || 'Field Contributor',
+      email: syntheticEmail,
+      full_name: full_name?.trim() || username,
       role: 'FIELD_CONTRIBUTOR',
       org_id: context.org_id,
     }]);
@@ -118,7 +132,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { user_id: authData.user.id, email: authData.user.email },
+      { user_id: authData.user.id, username },
       { status: 201 }
     );
   } catch (error: any) {

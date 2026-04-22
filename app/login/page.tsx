@@ -50,7 +50,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await signIn(email, password);
+      // Support username login for field contributors (no @ in input)
+      const loginEmail = email.includes('@')
+        ? email
+        : `${email.trim().toLowerCase()}@field.celestar.internal`;
+      await signIn(loginEmail, password);
       toast.success('Logged in successfully');
     } catch (error: any) {
       console.error('Login error:', error);
@@ -87,14 +91,16 @@ export default function LoginPage() {
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-[#e6edf3] text-sm">Email</Label>
+                <Label htmlFor="email" className="text-[#e6edf3] text-sm">Email or Username</Label>
                 <Input
                   id="email"
-                  type="email"
-                  placeholder="admin@celestar.com"
+                  type="text"
+                  placeholder="admin@celestar.com or username"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   className="bg-[#0d1117] border-[#30363d] text-[#e6edf3] placeholder:text-[#7d8590]"
                 />
               </div>
