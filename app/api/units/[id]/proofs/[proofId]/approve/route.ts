@@ -110,7 +110,9 @@ export async function POST(
 
       try {
         // Create in-app notification for the uploader
-        if (proof.uploaded_by) {
+        // uploaded_by is stored as text; only insert if it looks like a valid UUID
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (proof.uploaded_by && uuidRegex.test(proof.uploaded_by)) {
           await supabase.from('in_app_notifications').insert([{
             user_id: proof.uploaded_by,
             title: isApproved ? 'Proof Approved' : 'Proof Rejected',

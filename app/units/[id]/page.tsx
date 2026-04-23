@@ -584,14 +584,20 @@ export default function UnitDetailPage() {
                         )}
 
                         {/* Approval info */}
-                        {proof.approved_at && (
+                        {proof.approval_status === 'approved' && proof.approved_at && (
                           <p className="text-green-400">
                             Approved: {format(new Date(proof.approved_at), 'MMM d, yyyy HH:mm')}
                             {proof.approved_by_email && ` by ${proof.approved_by_email}`}
                           </p>
                         )}
-                        {proof.rejection_reason && (
-                          <p className="text-red-400">Rejection: {proof.rejection_reason}</p>
+                        {proof.approval_status === 'rejected' && proof.approved_by_email && (
+                          <p className="text-red-400">
+                            Rejected by: {proof.approved_by_email}
+                            {proof.approved_at && ` on ${format(new Date(proof.approved_at), 'MMM d, yyyy HH:mm')}`}
+                          </p>
+                        )}
+                        {proof.approval_status === 'rejected' && proof.rejection_reason && (
+                          <p className="text-red-400">Reason: {proof.rejection_reason}</p>
                         )}
 
                         {/* Notes */}
