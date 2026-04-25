@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +19,7 @@ import {
   AlertCircle,
   Video,
   Play,
+  Pause,
   FileText,
   Hash,
   CalendarClock,
@@ -26,6 +27,11 @@ import {
   AlertTriangle,
   History,
   AlertOctagon,
+  MessageSquare,
+  Mic,
+  Square,
+  Trash2,
+  Pencil,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isPast, differenceInDays } from 'date-fns';
 import { supabase } from '@/lib/firebase';
@@ -89,6 +95,9 @@ interface Unit {
   requires_reviewer_approval?: boolean;
   requires_reference_number?: boolean;
   requires_expiry_date?: boolean;
+  // Management notes
+  management_notes?: string;
+  voice_note_signed_url?: string;
 }
 
 export default function UnitDetailPage() {
@@ -111,6 +120,24 @@ export default function UnitDetailPage() {
   const [escalationReason, setEscalationReason] = useState('');
   const [escalating, setEscalating] = useState(false);
 
+  // Notes from Management — view/edit
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesText, setNotesText] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+  // voice recorder (new recording while editing)
+  const [isRecordingNote, setIsRecordingNote] = useState(false);
+  const [audioBlobNote, setAudioBlobNote] = useState<Blob | null>(null);
+  const [audioUrlNote, setAudioUrlNote] = useState<string | null>(null);
+  const [recordingSecsNote, setRecordingSecsNote] = useState(0);
+  const [isPlayingNewNote, setIsPlayingNewNote] = useState(false);
+  const mediaRecorderNoteRef = useRef<MediaRecorder | null>(null);
+  const chunksNoteRef = useRef<BlobPart[]>([]);
+  const timerNoteRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const newAudioRef = useRef<HTMLAudioElement | null>(null);
+  // playback of existing saved voice note
+  const [isPlayingExisting, setIsPlayingExisting] = useState(false);
+  const existingAudioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     if (unitId) {
       fetchUnit();
@@ -131,6 +158,7 @@ export default function UnitDetailPage() {
 
       const data = await response.json();
       setUnit(data);
+      setNotesText(data.management_notes ?? '');
     } catch (error) {
       console.error('Error fetching unit:', error);
       toast.error(t('units.unitNotFound'));
@@ -238,7 +266,102 @@ export default function UnitDetailPage() {
     }
   }
 
+  // Voice recorder helpers for notes editing
+  async function startRecordingNote() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      chunksNoteRef.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksNoteRef.current.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunksNoteRef.current, { type: 'audio/webm' });
+        setAudioBlobNote(blob);
+        setAudioUrlNote(URL.createObjectURL(blob));
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      recorder.start();
+      mediaRecorderNoteRef.current = recorder;
+      setIsRecordingNote(true);
+      setRecordingSecsNote(0);
+      timerNoteRef.current = setInterval(() => setRecordingSecsNote((s) => s + 1), 1000);
+    } catch {
+      toast.error('Microphone access denied.');
+    }
+  }
+
+  function stopRecordingNote() {
+    mediaRecorderNoteRef.current?.stop();
+    setIsRecordingNote(false);
+    if (timerNoteRef.current) clearInterval(timerNoteRef.current);
+  }
+
+  function deleteNewRecording() {
+    if (audioUrlNote) URL.revokeObjectURL(audioUrlNote);
+    setAudioBlobNote(null);
+    setAudioUrlNote(null);
+    setRecordingSecsNote(0);
+    setIsPlayingNewNote(false);
+  }
+
+  function formatSecs(s: number) {
+    return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+  }
+
+  async function saveNotes() {
+    setSavingNotes(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+
+      let voiceNotePath: string | null = unit?.voice_note_url ?? null;
+
+      // Upload new recording if one was made
+      if (audioBlobNote) {
+        const fd = new FormData();
+        fd.append('file', new File([audioBlobNote], 'voice-note.webm', { type: 'audio/webm' }));
+        fd.append('workstream_id', unit!.workstream_id);
+        const res = await fetch('/api/voice-notes/upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        if (res.ok) {
+          const { path } = await res.json();
+          voiceNotePath = path;
+        } else {
+          toast.warning('Voice note upload failed — saving text notes only.');
+        }
+      }
+
+      const patchRes = await fetch(`/api/units/${unitId}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          management_notes: notesText || null,
+          voice_note_url: voiceNotePath,
+        }),
+      });
+
+      if (!patchRes.ok) throw new Error((await patchRes.json()).error || 'Save failed');
+
+      toast.success('Notes saved');
+      setEditingNotes(false);
+      deleteNewRecording();
+      await fetchUnit(); // reload to get fresh signed URLs
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save notes');
+    } finally {
+      setSavingNotes(false);
+    }
+  }
+
   const canApproveProofs =
+    permissions.isPlatformAdmin ||
+    permissions.role === 'PROGRAM_OWNER' ||
+    permissions.role === 'WORKSTREAM_LEAD';
+
+  const canEditNotes =
     permissions.isPlatformAdmin ||
     permissions.role === 'PROGRAM_OWNER' ||
     permissions.role === 'WORKSTREAM_LEAD';
@@ -467,6 +590,210 @@ export default function UnitDetailPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Notes from Management */}
+        {(unit.management_notes || unit.voice_note_signed_url || canEditNotes) && (
+          <Card className="bg-black/25 border-gray-800">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-blue-400" />
+                  Notes from Management
+                </CardTitle>
+                {canEditNotes && !editingNotes && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setEditingNotes(true)}
+                    className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
+                  >
+                    <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                    {unit.management_notes || unit.voice_note_signed_url ? 'Edit' : 'Add Notes'}
+                  </Button>
+                )}
+              </div>
+              {!editingNotes && (
+                <CardDescription className="text-gray-500">
+                  Requirements, acceptance criteria and guidelines from your workstream lead.
+                </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-4">
+
+              {/* View mode */}
+              {!editingNotes && (
+                <>
+                  {/* Existing voice note player */}
+                  {unit.voice_note_signed_url && (
+                    <div className="bg-black/30 border border-gray-700 rounded-lg p-4">
+                      <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">Voice Note</p>
+                      <audio
+                        ref={existingAudioRef}
+                        src={unit.voice_note_signed_url}
+                        onEnded={() => setIsPlayingExisting(false)}
+                        className="hidden"
+                      />
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => {
+                            if (!existingAudioRef.current) return;
+                            if (isPlayingExisting) {
+                              existingAudioRef.current.pause();
+                              setIsPlayingExisting(false);
+                            } else {
+                              existingAudioRef.current.play();
+                              setIsPlayingExisting(true);
+                            }
+                          }}
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600/15 border border-blue-500/35 text-blue-400 hover:bg-blue-600/25 transition-colors text-sm font-medium"
+                        >
+                          {isPlayingExisting
+                            ? <><Pause className="w-4 h-4" /> Pause</>
+                            : <><Play className="w-4 h-4" /> Play Voice Note</>}
+                        </button>
+                        <span className="text-xs text-gray-500">Tap to listen</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Written notes */}
+                  {unit.management_notes ? (
+                    <div className="bg-black/20 border border-gray-700/60 rounded-lg p-4">
+                      <p className="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">
+                        {unit.management_notes}
+                      </p>
+                    </div>
+                  ) : !unit.voice_note_signed_url && canEditNotes ? (
+                    <p className="text-gray-600 text-sm italic">
+                      No notes added yet. Click Edit to add a voice note or written instructions.
+                    </p>
+                  ) : null}
+                </>
+              )}
+
+              {/* Edit mode (leads/owners only) */}
+              {editingNotes && (
+                <div className="space-y-4">
+
+                  {/* Voice recorder */}
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Voice Note</p>
+                    <div className="bg-black/30 border border-gray-700 rounded-lg p-4">
+                      <div className="flex items-center gap-3 flex-wrap">
+
+                        {/* Idle — keep existing or record new */}
+                        {!audioUrlNote && !isRecordingNote && (
+                          <div className="flex items-center gap-3 flex-wrap">
+                            {unit.voice_note_signed_url && (
+                              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-600/10 border border-green-500/25">
+                                <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                                <span className="text-green-400 text-sm">Existing note saved</span>
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={startRecordingNote}
+                              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600/15 border border-blue-500/35 text-blue-400 hover:bg-blue-600/25 transition-colors text-sm font-medium"
+                            >
+                              <Mic className="w-4 h-4" />
+                              {unit.voice_note_signed_url ? 'Record New Note' : 'Record Voice Note'}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Recording */}
+                        {isRecordingNote && (
+                          <div className="flex items-center gap-3">
+                            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+                            <span className="text-red-400 font-mono text-sm tabular-nums">{formatSecs(recordingSecsNote)}</span>
+                            <button
+                              type="button"
+                              onClick={stopRecordingNote}
+                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-600/20 border border-red-500/40 text-red-400 hover:bg-red-600/30 transition-colors text-sm"
+                            >
+                              <Square className="w-3.5 h-3.5 fill-current" />
+                              Stop
+                            </button>
+                          </div>
+                        )}
+
+                        {/* New recording ready */}
+                        {audioUrlNote && !isRecordingNote && (
+                          <div className="flex items-center gap-3">
+                            <audio
+                              ref={newAudioRef}
+                              src={audioUrlNote}
+                              onEnded={() => setIsPlayingNewNote(false)}
+                              className="hidden"
+                            />
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/10 border border-blue-500/25">
+                              <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                              <span className="text-blue-400 text-sm font-medium">New note recorded</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!newAudioRef.current) return;
+                                if (isPlayingNewNote) { newAudioRef.current.pause(); setIsPlayingNewNote(false); }
+                                else { newAudioRef.current.play(); setIsPlayingNewNote(true); }
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-300 hover:bg-gray-700 transition-colors text-sm"
+                            >
+                              {isPlayingNewNote ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                              {isPlayingNewNote ? 'Pause' : 'Play'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={deleteNewRecording}
+                              title="Discard new recording"
+                              className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Written notes */}
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Written Notes</p>
+                    <Textarea
+                      value={notesText}
+                      onChange={(e) => setNotesText(e.target.value)}
+                      placeholder="Requirements, acceptance criteria, guidelines for the field team..."
+                      className="bg-black/40 border-gray-700 text-white min-h-[100px]"
+                    />
+                  </div>
+
+                  {/* Save / Cancel */}
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      onClick={saveNotes}
+                      disabled={savingNotes}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {savingNotes ? 'Saving...' : 'Save Notes'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditingNotes(false);
+                        setNotesText(unit.management_notes ?? '');
+                        deleteNewRecording();
+                      }}
+                      disabled={savingNotes}
+                      className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Proofs Grid */}
         <Card className="bg-black/25 border-gray-800">
