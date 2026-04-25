@@ -33,7 +33,22 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading), system-ui, sans-serif;
+    font-feature-settings: "ss01" 1;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  /* Tighten large display headings further */
+  h1 {
+    letter-spacing: -0.03em;
   }
 
   html {
