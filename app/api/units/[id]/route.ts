@@ -76,36 +76,14 @@ export async function GET(
       .eq('unit_id', params.id)
       .order('uploaded_at', { ascending: false });
 
-    // Generate a signed URL for the voice note (private voice-notes bucket)
-    let voiceNoteSignedUrl: string | null = null;
-    if ((unit as any).voice_note_url) {
-      const { data: vnSigned } = await admin.storage
-        .from('voice-notes')
-        .createSignedUrl((unit as any).voice_note_url, 3600);
-      if (vnSigned) voiceNoteSignedUrl = vnSigned.signedUrl;
-    }
-
-    // Replace stored public URLs with short-lived signed URLs so the private
-    // proofs bucket stays confidential (signed URLs expire after 1 hour).
-    const admin = getSupabaseAdmin();
-    const proofsWithSignedUrls = await Promise.all(
-      (proofs || []).map(async (proof: any) => {
-        const path = proof.file_path;
-        if (!path) return proof;
-        const { data: signed } = await admin.storage
-          .from('proofs')
-          .createSignedUrl(path, 3600);
-        if (!signed) return proof;
-        return { ...proof, url: signed.signedUrl };
-      })
-    );
-
     return NextResponse.json({
       ...unit,
-      voice_note_signed_url: voiceNoteSignedUrl,
-      proofs: proofsWithSignedUrls,
-      proof_count: proofsWithSignedUrls.length,
-      last_proof_time: proofsWithSignedUrls[0]?.uploaded_at || null,
+      // voice_note_url already stores the full public URL; expose as
+      // voice_note_signed_url for the detail page to consume uniformly
+      voice_note_signed_url: (unit as any).voice_note_url ?? null,
+      proofs: proofs || [],
+      proof_count: proofs?.length || 0,
+      last_proof_time: proofs?.[0]?.uploaded_at || null,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

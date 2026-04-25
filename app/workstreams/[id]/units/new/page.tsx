@@ -102,22 +102,16 @@ export default function NewUnitPage() {
     return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
   }
 
-  async function uploadVoiceNote(token: string): Promise<string | null> {
+  async function uploadVoiceNote(): Promise<string | null> {
     if (!audioBlob || !workstreamId) return null;
     try {
-      const fd = new FormData();
-      fd.append('file', new File([audioBlob], 'voice-note.webm', { type: 'audio/webm' }));
-      fd.append('workstream_id', workstreamId);
-
-      const res = await fetch('/api/voice-notes/upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: fd,
-      });
-
-      if (!res.ok) throw new Error((await res.json()).error);
-      const { path } = await res.json();
-      return path;
+      const filename = `${workstreamId}/${Date.now()}.webm`;
+      const { error } = await supabase.storage
+        .from('voice-notes')
+        .upload(filename, audioBlob, { contentType: 'audio/webm' });
+      if (error) throw error;
+      const { data } = supabase.storage.from('voice-notes').getPublicUrl(filename);
+      return data.publicUrl;
     } catch {
       toast.warning('Voice note could not be saved — unit will be created without it.');
       return null;
@@ -142,7 +136,7 @@ export default function NewUnitPage() {
       if (sessionError || !session) throw new Error('Not authenticated. Please log in again.');
 
       const token = session.access_token;
-      const voiceNoteUrl = await uploadVoiceNote(token);
+      const voiceNoteUrl = await uploadVoiceNote();
 
       const response = await fetch('/api/units', {
         method: 'POST',

@@ -314,22 +314,19 @@ export default function UnitDetailPage() {
       const token = session?.access_token;
       if (!token) throw new Error('Not authenticated');
 
-      let voiceNotePath: string | null = unit?.voice_note_url ?? null;
+      let voiceNotePath: string | null = (unit as any).voice_note_url ?? null;
 
       // Upload new recording if one was made
       if (audioBlobNote) {
-        const fd = new FormData();
-        fd.append('file', new File([audioBlobNote], 'voice-note.webm', { type: 'audio/webm' }));
-        fd.append('workstream_id', unit!.workstream_id);
-        const res = await fetch('/api/voice-notes/upload', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: fd,
-        });
-        if (res.ok) {
-          const { path } = await res.json();
-          voiceNotePath = path;
-        } else {
+        try {
+          const filename = `${unit!.workstream_id}/${Date.now()}.webm`;
+          const { error: uploadErr } = await supabase.storage
+            .from('voice-notes')
+            .upload(filename, audioBlobNote, { contentType: 'audio/webm' });
+          if (uploadErr) throw uploadErr;
+          const { data: urlData } = supabase.storage.from('voice-notes').getPublicUrl(filename);
+          voiceNotePath = urlData.publicUrl;
+        } catch {
           toast.warning('Voice note upload failed — saving text notes only.');
         }
       }

@@ -2,15 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
 import { authorize } from '@/lib/auth-utils';
 import { proofUploadLimiter, applyRateLimit } from '@/lib/rate-limit';
-import { createClient } from '@supabase/supabase-js';
-
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
 
 // POST /api/units/[id]/proofs - Upload proof for a unit
 export async function POST(
@@ -348,21 +339,7 @@ export async function GET(
 
     if (error) throw error;
 
-    // Replace stored public URLs with signed URLs (private bucket — 1 hour expiry)
-    const admin = getSupabaseAdmin();
-    const proofsWithSignedUrls = await Promise.all(
-      (proofs || []).map(async (proof: any) => {
-        const path = proof.file_path;
-        if (!path) return proof;
-        const { data: signed } = await admin.storage
-          .from('proofs')
-          .createSignedUrl(path, 3600);
-        if (!signed) return proof;
-        return { ...proof, url: signed.signedUrl };
-      })
-    );
-
-    return NextResponse.json(proofsWithSignedUrls);
+    return NextResponse.json(proofs);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
