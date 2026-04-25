@@ -18,6 +18,9 @@ const spaceGrotesk = Space_Grotesk({
   display: 'swap',
 });
 
+// All pages use Supabase auth at runtime — prevent static prerendering
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Celestar - Execution Readiness Portal',
   description: 'Proof-first execution verification system',
