@@ -9,6 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { Shield, Clock, Camera, AlertTriangle } from 'lucide-react';
+import { useLocale } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/language-switcher';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -16,22 +18,20 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { signIn, user, userData, loading: authLoading } = useAuth();
+  const { t } = useLocale();
 
   useEffect(() => {
     if (user && userData) {
-      // RBAC: Route based on new role system
       const role = userData.role?.toLowerCase();
-
       if (role === 'platform_admin' || role === 'program_owner') {
-        router.push('/programs'); // Main programs page for admins and owners
+        router.push('/programs');
       } else if (role === 'workstream_lead') {
-        router.push('/programs'); // Workstream leads also see programs (filtered by RLS)
+        router.push('/programs');
       } else if (role === 'field_contributor') {
-        router.push('/programs'); // Field contributors see programs (read-only mostly)
+        router.push('/programs');
       } else if (role === 'client_viewer') {
-        router.push('/programs'); // Clients see assigned programs only
+        router.push('/programs');
       } else {
-        // Fallback for legacy roles
         if (role === 'admin') {
           router.push('/admin');
         } else if (role === 'supervisor') {
@@ -41,8 +41,6 @@ export default function LoginPage() {
         }
       }
     }
-    // Note: Removed "account setup incomplete" notification
-    // Profile loading is async and redirects automatically when ready
   }, [user, userData, authLoading, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -50,15 +48,14 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Support username login for field contributors (no @ in input)
       const loginEmail = email.includes('@')
         ? email
         : `${email.trim().toLowerCase()}@field.celestar.internal`;
       await signIn(loginEmail, password);
-      toast.success('Logged in successfully');
+      toast.success(t('login.successToast'));
     } catch (error: any) {
       console.error('Login error:', error);
-      toast.error(error.message || 'Failed to log in');
+      toast.error(error.message || t('login.errorToast'));
     } finally {
       setLoading(false);
     }
@@ -66,9 +63,13 @@ export default function LoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-[#0E1116]">
+      {/* Language switcher - top right */}
+      <div className="absolute top-4 end-4">
+        <LanguageSwitcher />
+      </div>
+
       <div className="w-full max-w-md px-4">
         <div className="flex items-center justify-center gap-3 mb-8">
-          {/* Celestar Logo - muted */}
           <div className="w-14 h-14 rounded bg-[#1a1f26] flex items-center justify-center border border-[#21262d]">
             <div className="grid grid-cols-2 gap-0.5 w-8 h-8">
               <div className="bg-red-500/70 rounded-tl"></div>
@@ -78,24 +79,24 @@ export default function LoginPage() {
             </div>
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-[#e6edf3]">CELESTAR PORTAL</h1>
-            <p className="text-sm text-[#7d8590]">Execution Readiness Verification</p>
+            <h1 className="text-2xl font-semibold text-[#e6edf3]">{t('login.title')}</h1>
+            <p className="text-sm text-[#7d8590]">{t('login.subtitle')}</p>
           </div>
         </div>
 
         <Card className="border-[#30363d] bg-[#161b22]">
           <CardHeader>
-            <CardTitle className="text-[#e6edf3] font-medium">Login</CardTitle>
-            <CardDescription className="text-[#7d8590]">Enter your credentials to access the portal</CardDescription>
+            <CardTitle className="text-[#e6edf3] font-medium">{t('login.heading')}</CardTitle>
+            <CardDescription className="text-[#7d8590]">{t('login.description')}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-[#e6edf3] text-sm">Email or Username</Label>
+                <Label htmlFor="email" className="text-[#e6edf3] text-sm">{t('login.emailLabel')}</Label>
                 <Input
                   id="email"
                   type="text"
-                  placeholder="admin@celestar.com or username"
+                  placeholder={t('login.emailPlaceholder')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -105,11 +106,11 @@ export default function LoginPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-[#e6edf3] text-sm">Password</Label>
+                <Label htmlFor="password" className="text-[#e6edf3] text-sm">{t('login.passwordLabel')}</Label>
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Enter password"
+                  placeholder={t('login.passwordPlaceholder')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -117,28 +118,28 @@ export default function LoginPage() {
                 />
               </div>
               <Button type="submit" className="w-full bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]" disabled={loading}>
-                {loading ? 'Logging in...' : 'Login'}
+                {loading ? t('login.loggingIn') : t('login.loginButton')}
               </Button>
             </form>
 
             <div className="mt-6 p-4 bg-[#0d1117] rounded border border-[#30363d]">
-              <p className="text-xs text-[#7d8590] mb-3">Key Features:</p>
+              <p className="text-xs text-[#7d8590] mb-3">{t('login.featuresHeading')}</p>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Camera className="w-4 h-4 text-[#58a6ff]/70 flex-shrink-0" />
-                  <p className="text-xs text-[#7d8590]">Timestamped proof capture with approval workflow</p>
+                  <p className="text-xs text-[#7d8590]">{t('login.feature1')}</p>
                 </div>
                 <div className="flex items-start gap-2">
                   <Shield className="w-4 h-4 text-[#3fb950]/70 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-[#7d8590]">Separation of duties enforcement for proof validation</p>
+                  <p className="text-xs text-[#7d8590]">{t('login.feature2')}</p>
                 </div>
                 <div className="flex items-start gap-2">
                   <Clock className="w-4 h-4 text-[#d29922]/70 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-[#7d8590]">Real-time status tracking with deadline monitoring</p>
+                  <p className="text-xs text-[#7d8590]">{t('login.feature3')}</p>
                 </div>
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-[#db6d28]/70 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-[#7d8590]">Automated escalation system for at-risk deliverables</p>
+                  <p className="text-xs text-[#7d8590]">{t('login.feature4')}</p>
                 </div>
               </div>
             </div>
@@ -146,7 +147,7 @@ export default function LoginPage() {
         </Card>
 
         <div className="mt-6 text-center">
-          <p className="text-xs text-[#7d8590]">Proof-first • Append-only audit • Rule-based escalation</p>
+          <p className="text-xs text-[#7d8590]">{t('login.footer')}</p>
         </div>
       </div>
     </div>

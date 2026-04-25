@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/firebase';
 import { formatDistanceToNow } from 'date-fns';
+import { useLocale } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/language-switcher';
 
 interface Notification {
   id: string;
@@ -21,22 +23,17 @@ interface Notification {
 
 export default function NotificationsPage() {
   const router = useRouter();
+  const { t } = useLocale();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
   useEffect(() => {
     fetchNotifications();
-
     const channel = supabase
       .channel('notifications_page')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'in_app_notifications' },
-        () => fetchNotifications()
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'in_app_notifications' }, () => fetchNotifications())
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, []);
 
@@ -44,14 +41,12 @@ export default function NotificationsPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-
       const query = supabase
         .from('in_app_notifications')
         .select('*')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false })
         .limit(100);
-
       const { data, error } = await query;
       if (error) throw error;
       setNotifications(data || []);
@@ -66,7 +61,6 @@ export default function NotificationsPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-
       await fetch(`/api/notifications/${notificationId}/read`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${session.access_token}` },
@@ -81,7 +75,6 @@ export default function NotificationsPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-
       const unread = notifications.filter(n => !n.is_read);
       for (const n of unread) {
         await fetch(`/api/notifications/${n.id}/read`, {
@@ -96,12 +89,8 @@ export default function NotificationsPage() {
   }
 
   function handleNotificationClick(notification: Notification) {
-    if (!notification.is_read) {
-      markAsRead(notification.id);
-    }
-    if (notification.action_url) {
-      router.push(notification.action_url);
-    }
+    if (!notification.is_read) markAsRead(notification.id);
+    if (notification.action_url) router.push(notification.action_url);
   }
 
   function getPriorityColor(priority: string) {
@@ -134,10 +123,7 @@ export default function NotificationsPage() {
     }
   }
 
-  const filteredNotifications = filter === 'unread'
-    ? notifications.filter(n => !n.is_read)
-    : notifications;
-
+  const filteredNotifications = filter === 'unread' ? notifications.filter(n => !n.is_read) : notifications;
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   return (
@@ -146,30 +132,22 @@ export default function NotificationsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              onClick={() => router.push('/programs')}
-              className="text-[#7d8590] hover:text-[#e6edf3]"
-            >
+            <Button variant="ghost" onClick={() => router.push('/programs')} className="text-[#7d8590] hover:text-[#e6edf3]">
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>
-              <h1 className="text-2xl font-semibold text-[#e6edf3]">Notifications</h1>
+              <h1 className="text-2xl font-semibold text-[#e6edf3]">{t('notifications.title')}</h1>
               <p className="text-sm text-[#7d8590]">
-                {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}
+                {unreadCount > 0 ? t('notifications.unread', { count: unreadCount }) : t('notifications.allCaughtUp')}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <LanguageSwitcher />
             {unreadCount > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={markAllAsRead}
-                className="text-gray-400 border-gray-700 hover:text-white hover:bg-gray-800"
-              >
-                <CheckCheck className="w-4 h-4 mr-2" />
-                Mark all read
+              <Button variant="outline" size="sm" onClick={markAllAsRead} className="text-gray-400 border-gray-700 hover:text-white hover:bg-gray-800">
+                <CheckCheck className="w-4 h-4 me-2" />
+                {t('notifications.markAllRead')}
               </Button>
             )}
           </div>
@@ -183,7 +161,7 @@ export default function NotificationsPage() {
             onClick={() => setFilter('all')}
             className={filter === 'all' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white'}
           >
-            All ({notifications.length})
+            {t('notifications.all')} ({notifications.length})
           </Button>
           <Button
             variant={filter === 'unread' ? 'default' : 'ghost'}
@@ -191,7 +169,7 @@ export default function NotificationsPage() {
             onClick={() => setFilter('unread')}
             className={filter === 'unread' ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white'}
           >
-            Unread ({unreadCount})
+            {t('notifications.unreadFilter')} ({unreadCount})
           </Button>
         </div>
 
@@ -199,12 +177,12 @@ export default function NotificationsPage() {
         {loading ? (
           <div className="text-center py-12 text-gray-500">
             <Bell className="w-8 h-8 mx-auto mb-3 opacity-50" />
-            <p>Loading notifications...</p>
+            <p>{t('notifications.loading')}</p>
           </div>
         ) : filteredNotifications.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <Bell className="w-8 h-8 mx-auto mb-3 opacity-50" />
-            <p>{filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}</p>
+            <p>{filter === 'unread' ? t('notifications.noUnread') : t('notifications.noNotifications')}</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -218,16 +196,9 @@ export default function NotificationsPage() {
                     : 'bg-[#0d1117] border-[#21262d] hover:bg-[#161b22]'
                 }`}
               >
-                {/* Priority dot */}
                 <div className="flex-shrink-0 mt-1.5">
-                  <div
-                    className={`w-2.5 h-2.5 rounded-full ${
-                      !notification.is_read ? getPriorityColor(notification.priority) : 'bg-gray-700'
-                    }`}
-                  />
+                  <div className={`w-2.5 h-2.5 rounded-full ${!notification.is_read ? getPriorityColor(notification.priority) : 'bg-gray-700'}`} />
                 </div>
-
-                {/* Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span>{getTypeIcon(notification.type)}</span>
@@ -238,27 +209,20 @@ export default function NotificationsPage() {
                       {notification.priority}
                     </Badge>
                   </div>
-                  <p className="text-sm text-[#7d8590] line-clamp-2 mb-1">
-                    {notification.message}
-                  </p>
+                  <p className="text-sm text-[#7d8590] line-clamp-2 mb-1">{notification.message}</p>
                   <p className="text-xs text-[#484f58]">
                     {notification.created_at && !isNaN(new Date(notification.created_at).getTime())
                       ? formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })
                       : 'Just now'}
                   </p>
                 </div>
-
-                {/* Mark as read button */}
                 {!notification.is_read && (
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      markAsRead(notification.id);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); markAsRead(notification.id); }}
                     className="flex-shrink-0 text-gray-500 hover:text-white hover:bg-gray-800"
-                    title="Mark as read"
+                    title={t('notifications.markAsRead')}
                   >
                     <Check className="w-4 h-4" />
                   </Button>

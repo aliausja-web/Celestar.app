@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Building2, Users, FolderKanban, Bell, ArrowLeft, Activity, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
 import { NotificationBell } from '@/components/notification-bell';
+import { useLocale } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/language-switcher';
 
 interface CronRun {
   id: string;
@@ -37,6 +39,7 @@ const JOB_LABELS: Record<string, string> = {
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const { t } = useLocale();
   const [stats, setStats] = useState({
     totalClients: 0,
     totalUsers: 0,
@@ -115,47 +118,47 @@ export default function AdminDashboard() {
 
   const cards = [
     {
-      title: 'Client Organizations',
+      title: t('admin.clients'),
       value: stats.totalClients,
       icon: Building2,
       iconColor: 'text-[#58a6ff]/70',
       bgColor: 'bg-[#58a6ff]/10',
       link: '/admin/clients',
-      description: 'Manage client organizations',
+      description: t('admin.clientsDesc'),
     },
     {
-      title: 'Users',
+      title: t('admin.users'),
       value: stats.totalUsers,
       icon: Users,
       iconColor: 'text-[#3fb950]/70',
       bgColor: 'bg-[#3fb950]/10',
       link: '/admin/users',
-      description: 'Manage user accounts',
+      description: t('admin.usersDesc'),
     },
     {
-      title: 'Programs',
+      title: t('admin.programs'),
       value: stats.totalPrograms,
       icon: FolderKanban,
       iconColor: 'text-[#a371f7]/70',
       bgColor: 'bg-[#a371f7]/10',
       link: '/admin/programs',
-      description: 'Assign programs to clients',
+      description: t('admin.programsDesc'),
     },
     {
-      title: 'Notifications',
+      title: t('admin.notificationsLabel'),
       value: stats.pendingNotifications,
       icon: Bell,
       iconColor: 'text-[#db6d28]/70',
       bgColor: 'bg-[#db6d28]/10',
       link: '/admin/notifications',
-      description: 'System notifications',
+      description: t('admin.notificationsDesc'),
     },
   ];
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0E1116] flex items-center justify-center">
-        <div className="text-[#e6edf3]">Loading dashboard...</div>
+        <div className="text-[#e6edf3]">{t('admin.loadingDashboard')}</div>
       </div>
     );
   }
@@ -177,18 +180,19 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div>
-                <h1 className="text-2xl font-semibold text-[#e6edf3] mb-1">Admin Dashboard</h1>
-                <p className="text-[#7d8590] text-sm">Platform administration and client management</p>
+                <h1 className="text-2xl font-semibold text-[#e6edf3] mb-1">{t('admin.title')}</h1>
+                <p className="text-[#7d8590] text-sm">{t('admin.subtitle')}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <LanguageSwitcher />
               <NotificationBell />
               <button
                 onClick={() => router.push('/programs')}
                 className="flex items-center gap-2 px-4 py-2 bg-[#1f2937] hover:bg-[#374151] text-[#e6edf3] rounded border border-[#30363d] transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" />
-                Back to Programs
+                {t('admin.backToPrograms')}
               </button>
             </div>
           </div>
@@ -225,33 +229,33 @@ export default function AdminDashboard() {
 
         {/* Quick Actions */}
         <div className="bg-[#161b22] rounded border border-[#30363d] p-6 mb-6 shadow-sm">
-          <h2 className="text-lg font-medium text-[#e6edf3] mb-4">Quick Actions</h2>
+          <h2 className="text-lg font-medium text-[#e6edf3] mb-4">{t('admin.quickActions')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button
               onClick={() => router.push('/admin/clients?action=create')}
-              className="p-4 bg-[#58a6ff]/10 hover:bg-[#58a6ff]/15 border border-[#58a6ff]/30 text-[#e6edf3] rounded transition-colors text-left"
+              className="p-4 bg-[#58a6ff]/10 hover:bg-[#58a6ff]/15 border border-[#58a6ff]/30 text-[#e6edf3] rounded transition-colors text-start"
             >
               <Building2 className="w-5 h-5 mb-2 text-[#58a6ff]/70" />
-              <p className="font-medium">Add New Client</p>
-              <p className="text-sm text-[#7d8590] mt-1">Create a new client organization</p>
+              <p className="font-medium">{t('admin.addNewClient')}</p>
+              <p className="text-sm text-[#7d8590] mt-1">{t('admin.addNewClientDesc')}</p>
             </button>
 
             <button
               onClick={() => router.push('/admin/users?action=create')}
-              className="p-4 bg-[#3fb950]/10 hover:bg-[#3fb950]/15 border border-[#3fb950]/30 text-[#e6edf3] rounded transition-colors text-left"
+              className="p-4 bg-[#3fb950]/10 hover:bg-[#3fb950]/15 border border-[#3fb950]/30 text-[#e6edf3] rounded transition-colors text-start"
             >
               <Users className="w-5 h-5 mb-2 text-[#3fb950]/70" />
-              <p className="font-medium">Add New User</p>
-              <p className="text-sm text-[#7d8590] mt-1">Create a user and assign to client</p>
+              <p className="font-medium">{t('admin.addNewUser')}</p>
+              <p className="text-sm text-[#7d8590] mt-1">{t('admin.addNewUserDesc')}</p>
             </button>
 
             <button
               onClick={() => router.push('/admin/programs')}
-              className="p-4 bg-[#a371f7]/10 hover:bg-[#a371f7]/15 border border-[#a371f7]/30 text-[#e6edf3] rounded transition-colors text-left"
+              className="p-4 bg-[#a371f7]/10 hover:bg-[#a371f7]/15 border border-[#a371f7]/30 text-[#e6edf3] rounded transition-colors text-start"
             >
               <FolderKanban className="w-5 h-5 mb-2 text-[#a371f7]/70" />
-              <p className="font-medium">Assign Programs</p>
-              <p className="text-sm text-[#7d8590] mt-1">Link programs to clients</p>
+              <p className="font-medium">{t('admin.assignPrograms')}</p>
+              <p className="text-sm text-[#7d8590] mt-1">{t('admin.assignProgramsDesc')}</p>
             </button>
           </div>
         </div>
@@ -260,13 +264,13 @@ export default function AdminDashboard() {
         <div className="bg-[#161b22] rounded border border-[#30363d] p-6 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <Activity className="w-5 h-5 text-[#7d8590]" />
-            <h2 className="text-lg font-medium text-[#e6edf3]">System Health</h2>
+            <h2 className="text-lg font-medium text-[#e6edf3]">{t('admin.systemHealth')}</h2>
           </div>
 
           {cronLoading ? (
-            <p className="text-[#7d8590] text-sm">Loading cron status...</p>
+            <p className="text-[#7d8590] text-sm">{t('admin.loadingCron')}</p>
           ) : cronRuns.length === 0 ? (
-            <p className="text-[#7d8590] text-sm italic">No cron runs recorded yet.</p>
+            <p className="text-[#7d8590] text-sm italic">{t('admin.noCronRuns')}</p>
           ) : (
             <div className="divide-y divide-[#21262d]">
               {cronRuns.map((run) => {
@@ -293,7 +297,7 @@ export default function AdminDashboard() {
                           )}
                           {run.status === 'success' && (
                             <p className="text-[#7d8590] text-xs mt-0.5">
-                              {run.records_processed} record{run.records_processed !== 1 ? 's' : ''} processed
+                              {t('admin.recordsProcessed', { count: run.records_processed })}
                             </p>
                           )}
                         </div>

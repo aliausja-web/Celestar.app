@@ -32,6 +32,8 @@ import { supabase } from '@/lib/firebase';
 import { toast } from 'sonner';
 import { usePermissions } from '@/hooks/use-permissions';
 import { NotificationBell } from '@/components/notification-bell';
+import { useLocale } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/language-switcher';
 
 interface Proof {
   id: string;
@@ -94,6 +96,7 @@ export default function UnitDetailPage() {
   const router = useRouter();
   const unitId = params.id as string;
   const permissions = usePermissions();
+  const { t } = useLocale();
 
   const [unit, setUnit] = useState<Unit | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
@@ -130,7 +133,7 @@ export default function UnitDetailPage() {
       setUnit(data);
     } catch (error) {
       console.error('Error fetching unit:', error);
-      toast.error('Failed to load unit');
+      toast.error(t('units.unitNotFound'));
     } finally {
       setLoading(false);
     }
@@ -159,7 +162,7 @@ export default function UnitDetailPage() {
   async function handleApprovalAction() {
     if (!selectedProof) return;
     if (approvalAction === 'reject' && !rejectionReason.trim()) {
-      toast.error('Please provide a reason for rejection');
+      toast.error(t('workstream.errorNoReason'));
       return;
     }
 
@@ -183,7 +186,7 @@ export default function UnitDetailPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `Failed to ${approvalAction} proof`);
 
-      toast.success(`Proof ${approvalAction}d successfully`);
+      toast.success(approvalAction === 'approve' ? t('units.confirmApproval') : t('units.confirmRejection'));
       setShowApprovalDialog(false);
       setSelectedProof(null);
       setRejectionReason('');
@@ -191,7 +194,7 @@ export default function UnitDetailPage() {
       await fetchAuditEvents();
     } catch (error: any) {
       console.error(`Error ${approvalAction}ing proof:`, error);
-      toast.error(error.message || `Failed to ${approvalAction} proof`);
+      toast.error(error.message || t('units.cancelButton'));
     } finally {
       setProcessing(false);
     }
@@ -210,7 +213,7 @@ export default function UnitDetailPage() {
 
   async function handleEscalate() {
     if (!escalationReason.trim()) {
-      toast.error('Please provide a reason for escalation');
+      toast.error(t('workstream.errorNoReason'));
       return;
     }
     setEscalating(true);
@@ -224,7 +227,7 @@ export default function UnitDetailPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to escalate unit');
-      toast.success(`Escalation sent to ${data.notifications_sent} users`);
+      toast.success(t('workstream.successEscalation', { count: data.notifications_sent }));
       setShowEscalationDialog(false);
       setEscalationReason('');
       await fetchAuditEvents();
@@ -255,7 +258,7 @@ export default function UnitDetailPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 p-6">
         <div className="max-w-4xl mx-auto">
-          <p className="text-white">Unit not found</p>
+          <p className="text-white">{t('units.unitNotFound')}</p>
         </div>
       </div>
     );
@@ -340,7 +343,7 @@ export default function UnitDetailPage() {
           onClick={e => e.stopPropagation()}
           className="text-blue-400 hover:text-blue-300 text-xs underline"
         >
-          Open document
+          {t('units.openDocument')}
         </a>
       </div>
     );
@@ -356,13 +359,14 @@ export default function UnitDetailPage() {
             variant="outline"
             className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40 shrink-0"
           >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
+            <ArrowLeft className="w-4 h-4 me-2" />
+            {t('units.back')}
           </Button>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl sm:text-3xl font-black text-white truncate">{unit.title}</h1>
-            <p className="text-gray-500 text-sm">Owner: {unit.owner_party_name}</p>
+            <p className="text-gray-500 text-sm">{t('units.owner')} {unit.owner_party_name}</p>
           </div>
+          <LanguageSwitcher />
           <NotificationBell />
           <Badge
             className={`${
@@ -378,28 +382,28 @@ export default function UnitDetailPage() {
         {/* Unit Info Card */}
         <Card className="bg-black/25 border-gray-800">
           <CardHeader>
-            <CardTitle className="text-white">Unit Information</CardTitle>
+            <CardTitle className="text-white">{t('units.unitInfo')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {unit.required_green_by && (
               <div className="flex items-center gap-2 text-sm">
                 <Clock className="w-4 h-4 text-gray-400" />
                 <span className={isPastDeadline ? 'text-red-400 font-bold' : 'text-gray-300'}>
-                  Required GREEN by: {format(new Date(unit.required_green_by), 'MMM d, yyyy HH:mm')}
-                  {isPastDeadline && ' ⚠️ OVERDUE'}
+                  {t('units.requiredGreenBy')} {format(new Date(unit.required_green_by), 'MMM d, yyyy HH:mm')}
+                  {isPastDeadline && ` ${t('units.overdue')}`}
                 </span>
               </div>
             )}
 
             <div className="space-y-2">
-              <p className="text-sm text-gray-400">Proof Requirements:</p>
+              <p className="text-sm text-gray-400">{t('units.proofRequirements')}</p>
               <div className="flex items-center gap-4 text-sm flex-wrap">
                 <span className="text-white">
-                  <strong>{approvedCount}</strong> / {unit.proof_requirements?.required_count || 1} approved proofs
+                  <strong>{approvedCount}</strong> / {unit.proof_requirements?.required_count || 1} {t('units.approvedProofs')}
                 </span>
                 {unit.proof_requirements?.required_types?.length > 0 && (
                   <span className="text-gray-400">
-                    Required types: {unit.proof_requirements.required_types.join(', ')}
+                    {t('units.requiredTypes')} {unit.proof_requirements.required_types.join(', ')}
                   </span>
                 )}
               </div>
@@ -408,28 +412,28 @@ export default function UnitDetailPage() {
               <div className="flex flex-wrap gap-2 mt-2">
                 {unit.requires_reviewer_approval !== false && (
                   <Badge className="bg-blue-900/40 text-blue-300 border border-blue-700/50 text-xs">
-                    <BookCheck className="w-3 h-3 mr-1" />
-                    Reviewer approval required
+                    <BookCheck className="w-3 h-3 me-1" />
+                    {t('units.reviewerApproval')}
                   </Badge>
                 )}
                 {unit.requires_reference_number && (
                   <Badge className="bg-purple-900/40 text-purple-300 border border-purple-700/50 text-xs">
-                    <Hash className="w-3 h-3 mr-1" />
-                    Reference number required
+                    <Hash className="w-3 h-3 me-1" />
+                    {t('units.referenceRequired')}
                   </Badge>
                 )}
                 {unit.requires_expiry_date && (
                   <Badge className="bg-orange-900/40 text-orange-300 border border-orange-700/50 text-xs">
-                    <CalendarClock className="w-3 h-3 mr-1" />
-                    Expiry date required
+                    <CalendarClock className="w-3 h-3 me-1" />
+                    {t('units.expiryRequired')}
                   </Badge>
                 )}
               </div>
 
               {pendingCount > 0 && (
                 <p className="text-sm text-yellow-400">
-                  <AlertCircle className="w-4 h-4 inline mr-1" />
-                  {pendingCount} proof{pendingCount > 1 ? 's' : ''} pending approval
+                  <AlertCircle className="w-4 h-4 inline me-1" />
+                  {pendingCount} {pendingCount > 1 ? t('units.pendingApprovalPlural') : t('units.pendingApproval')}
                 </p>
               )}
             </div>
@@ -439,16 +443,16 @@ export default function UnitDetailPage() {
                 onClick={() => router.push(`/units/${unitId}/upload?type=photo`)}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
-                <Upload className="w-4 h-4 mr-2" />
-                Upload Photo / Video
+                <Upload className="w-4 h-4 me-2" />
+                {t('units.uploadPhoto')}
               </Button>
               <Button
                 onClick={() => router.push(`/units/${unitId}/upload?type=document`)}
                 variant="outline"
                 className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
               >
-                <FileText className="w-4 h-4 mr-2" />
-                Upload Document
+                <FileText className="w-4 h-4 me-2" />
+                {t('units.uploadDocument')}
               </Button>
               {canApproveProofs && !isGreen && (
                 <Button
@@ -456,8 +460,8 @@ export default function UnitDetailPage() {
                   variant="outline"
                   className="bg-[#db6d28]/10 border-[#db6d28]/40 text-[#db6d28] hover:bg-[#db6d28]/20"
                 >
-                  <AlertOctagon className="w-4 h-4 mr-2" />
-                  Escalate
+                  <AlertOctagon className="w-4 h-4 me-2" />
+                  {t('units.escalate')}
                 </Button>
               )}
             </div>
@@ -467,16 +471,16 @@ export default function UnitDetailPage() {
         {/* Proofs Grid */}
         <Card className="bg-black/25 border-gray-800">
           <CardHeader>
-            <CardTitle className="text-white">Proofs ({unit.proofs.length})</CardTitle>
+            <CardTitle className="text-white">{t('units.proofsCount', { count: unit.proofs.length })}</CardTitle>
             <CardDescription className="text-gray-400">
-              Click on a photo or video proof to view full size. Documents open in a new tab.
+              {t('units.proofsDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             {unit.proofs.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <ImageIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No proofs uploaded yet</p>
+                <p>{t('units.noProofs')}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -524,7 +528,7 @@ export default function UnitDetailPage() {
                         {proof.is_superseded && (
                           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                             <span className="text-gray-400 text-xs font-medium bg-black/70 px-2 py-1 rounded">
-                              Superseded
+                              {t('units.superseded')}
                             </span>
                           </div>
                         )}
@@ -543,11 +547,11 @@ export default function UnitDetailPage() {
 
                       {/* Proof Metadata */}
                       <div className="space-y-1 text-xs text-gray-400">
-                        <p>Uploaded: {format(new Date(proof.uploaded_at), 'MMM d, yyyy HH:mm')}</p>
-                        <p>By: {proof.uploaded_by_email || proof.uploaded_by}</p>
+                        <p>{t('units.uploaded')} {format(new Date(proof.uploaded_at), 'MMM d, yyyy HH:mm')}</p>
+                        <p>{t('units.by')} {proof.uploaded_by_email || proof.uploaded_by}</p>
 
                         {proof.captured_at && proof.type !== 'document' && (
-                          <p>Captured: {format(new Date(proof.captured_at), 'MMM d, yyyy HH:mm:ss')}</p>
+                          <p>{t('units.captured')} {format(new Date(proof.captured_at), 'MMM d, yyyy HH:mm:ss')}</p>
                         )}
 
                         {/* Document category badge */}
@@ -564,14 +568,14 @@ export default function UnitDetailPage() {
                         {proof.reference_number && (
                           <p className="flex items-center gap-1">
                             <Hash className="w-3 h-3 text-purple-400" />
-                            <span className="text-purple-300">Ref: {proof.reference_number}</span>
+                            <span className="text-purple-300">{t('units.reference')} {proof.reference_number}</span>
                           </p>
                         )}
 
                         {proof.expiry_date && (
                           <p className={`flex items-center gap-1 ${proof.is_expired ? 'text-red-400' : differenceInDays(new Date(proof.expiry_date), new Date()) <= 30 ? 'text-orange-400' : 'text-gray-400'}`}>
                             <CalendarClock className="w-3 h-3" />
-                            Expires: {format(new Date(proof.expiry_date), 'MMM d, yyyy')}
+                            {t('units.expires')} {format(new Date(proof.expiry_date), 'MMM d, yyyy')}
                           </p>
                         )}
 
@@ -586,18 +590,18 @@ export default function UnitDetailPage() {
                         {/* Approval info */}
                         {proof.approval_status === 'approved' && proof.approved_at && (
                           <p className="text-green-400">
-                            Approved: {format(new Date(proof.approved_at), 'MMM d, yyyy HH:mm')}
+                            {t('units.approvedLabel')} {format(new Date(proof.approved_at), 'MMM d, yyyy HH:mm')}
                             {proof.approved_by_email && ` by ${proof.approved_by_email}`}
                           </p>
                         )}
                         {proof.approval_status === 'rejected' && proof.approved_by_email && (
                           <p className="text-red-400">
-                            Rejected by: {proof.approved_by_email}
+                            {t('units.rejectedBy')} {proof.approved_by_email}
                             {proof.approved_at && ` on ${format(new Date(proof.approved_at), 'MMM d, yyyy HH:mm')}`}
                           </p>
                         )}
                         {proof.approval_status === 'rejected' && proof.rejection_reason && (
-                          <p className="text-red-400">Reason: {proof.rejection_reason}</p>
+                          <p className="text-red-400">{t('units.reason')} {proof.rejection_reason}</p>
                         )}
 
                         {/* Notes */}
@@ -606,7 +610,7 @@ export default function UnitDetailPage() {
                         )}
 
                         {proof.validation_notes && (
-                          <p className="text-gray-400">Notes: {proof.validation_notes}</p>
+                          <p className="text-gray-400">{t('units.notes')} {proof.validation_notes}</p>
                         )}
                       </div>
 
@@ -618,16 +622,16 @@ export default function UnitDetailPage() {
                             onClick={() => openApprovalDialog(proof, 'approve')}
                             className="flex-1 bg-green-600 hover:bg-green-700 text-white"
                           >
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                            Approve
+                            <CheckCircle className="w-4 h-4 me-1" />
+                            {t('units.approve')}
                           </Button>
                           <Button
                             size="sm"
                             onClick={() => openApprovalDialog(proof, 'reject')}
                             className="flex-1 bg-red-600 hover:bg-red-700 text-white"
                           >
-                            <XCircle className="w-4 h-4 mr-1" />
-                            Reject
+                            <XCircle className="w-4 h-4 me-1" />
+                            {t('units.reject')}
                           </Button>
                         </div>
                       )}
@@ -645,10 +649,10 @@ export default function UnitDetailPage() {
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
                 <History className="w-5 h-5 text-gray-400" />
-                Audit Trail
+                {t('units.auditTrail')}
               </CardTitle>
               <CardDescription className="text-gray-400">
-                Immutable record of all status changes for this unit
+                {t('units.auditDesc')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -702,7 +706,7 @@ export default function UnitDetailPage() {
       <Dialog open={showZoomDialog} onOpenChange={setShowZoomDialog}>
         <DialogContent className="max-w-4xl bg-gray-950 border-gray-800">
           <DialogHeader>
-            <DialogTitle className="text-white">Proof Detail</DialogTitle>
+            <DialogTitle className="text-white">{t('units.proofDetail')}</DialogTitle>
           </DialogHeader>
           {selectedProof && (
             <div className="space-y-4">
@@ -712,27 +716,27 @@ export default function UnitDetailPage() {
                 <video src={selectedProof.url} controls autoPlay className="w-full rounded-lg" preload="auto" />
               ) : null}
               <div className="text-sm text-gray-400 space-y-1">
-                <p>Status: <Badge className={
+                <p>{t('units.status')} <Badge className={
                   selectedProof.approval_status === 'approved' ? 'bg-green-600' :
                   selectedProof.approval_status === 'rejected' ? 'bg-red-600' :
                   'bg-yellow-600 text-black'
                 }>{selectedProof.approval_status}</Badge></p>
                 {selectedProof.captured_at && (
-                  <p>Captured: {format(new Date(selectedProof.captured_at), 'MMM d, yyyy HH:mm:ss')}</p>
+                  <p>{t('units.captured')} {format(new Date(selectedProof.captured_at), 'MMM d, yyyy HH:mm:ss')}</p>
                 )}
-                <p>Uploaded: {format(new Date(selectedProof.uploaded_at), 'MMM d, yyyy HH:mm')}</p>
-                <p>By: {selectedProof.uploaded_by_email || selectedProof.uploaded_by}</p>
+                <p>{t('units.uploaded')} {format(new Date(selectedProof.uploaded_at), 'MMM d, yyyy HH:mm')}</p>
+                <p>{t('units.by')} {selectedProof.uploaded_by_email || selectedProof.uploaded_by}</p>
                 {selectedProof.reference_number && (
-                  <p>Reference: {selectedProof.reference_number}</p>
+                  <p>{t('units.reference')} {selectedProof.reference_number}</p>
                 )}
                 {selectedProof.expiry_date && (
-                  <p>Expires: {format(new Date(selectedProof.expiry_date), 'MMM d, yyyy')}</p>
+                  <p>{t('units.expires')} {format(new Date(selectedProof.expiry_date), 'MMM d, yyyy')}</p>
                 )}
                 {selectedProof.file_hash && (
                   <p className="font-mono text-xs">SHA-256: {selectedProof.file_hash.slice(0, 32)}…</p>
                 )}
-                {selectedProof.notes && <p>Notes: {selectedProof.notes}</p>}
-                {selectedProof.validation_notes && <p>Validation: {selectedProof.validation_notes}</p>}
+                {selectedProof.notes && <p>{t('units.notes')} {selectedProof.notes}</p>}
+                {selectedProof.validation_notes && <p>{t('units.validation')} {selectedProof.validation_notes}</p>}
               </div>
             </div>
           )}
@@ -743,26 +747,26 @@ export default function UnitDetailPage() {
       <Dialog open={showEscalationDialog} onOpenChange={setShowEscalationDialog}>
         <DialogContent className="bg-gray-950 border-gray-800 max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-white">Manual Escalation</DialogTitle>
+            <DialogTitle className="text-white">{t('units.escalationTitle')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="bg-[#db6d28]/10 border border-[#db6d28]/30 rounded p-3">
               <div className="flex items-start gap-2">
                 <AlertOctagon className="w-5 h-5 text-[#db6d28] mt-0.5 shrink-0" />
                 <p className="text-sm text-[#db6d28] font-medium">
-                  This will immediately notify Program Owners and Platform Administrators
+                  {t('units.escalationWarning')}
                 </p>
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="unit_escalation_reason" className="text-gray-300">
-                Reason for Escalation <span className="text-red-400">*</span>
+                {t('units.escalationReasonLabel')} <span className="text-red-400">*</span>
               </Label>
               <Textarea
                 id="unit_escalation_reason"
                 value={escalationReason}
                 onChange={(e) => setEscalationReason(e.target.value)}
-                placeholder="Describe the issue or blocker that requires escalation..."
+                placeholder={t('units.escalationPlaceholder')}
                 className="bg-black/40 border-gray-700 text-white min-h-[120px]"
               />
             </div>
@@ -773,14 +777,14 @@ export default function UnitDetailPage() {
               onClick={() => { setShowEscalationDialog(false); setEscalationReason(''); }}
               className="bg-black/25 border-gray-700 text-gray-300"
             >
-              Cancel
+              {t('units.cancelButton')}
             </Button>
             <Button
               onClick={handleEscalate}
               disabled={!escalationReason.trim() || escalating}
               className="bg-[#db6d28]/80 hover:bg-[#db6d28] text-white"
             >
-              {escalating ? 'Escalating...' : 'Escalate Now'}
+              {escalating ? t('units.escalatingButton') : t('units.escalateButton')}
             </Button>
           </div>
         </DialogContent>
@@ -791,22 +795,20 @@ export default function UnitDetailPage() {
         <DialogContent className="bg-gray-950 border-gray-800">
           <DialogHeader>
             <DialogTitle className="text-white">
-              {approvalAction === 'approve' ? 'Approve Proof' : 'Reject Proof'}
+              {approvalAction === 'approve' ? t('units.approveProof') : t('units.rejectProof')}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-gray-400">
-              {approvalAction === 'approve'
-                ? "Are you sure you want to approve this proof? This will count toward the unit's GREEN status."
-                : 'Are you sure you want to reject this proof? Please provide a reason.'}
+              {approvalAction === 'approve' ? t('units.approveConfirm') : t('units.rejectConfirm')}
             </p>
 
             {/* Show governance fields for reviewer awareness */}
             {selectedProof?.reference_number && (
               <div className="bg-gray-900 rounded p-3 text-sm">
-                <p className="text-gray-400">Reference: <span className="text-white">{selectedProof.reference_number}</span></p>
+                <p className="text-gray-400">{t('units.reference')} <span className="text-white">{selectedProof.reference_number}</span></p>
                 {selectedProof.expiry_date && (
-                  <p className="text-gray-400">Expires: <span className="text-white">{format(new Date(selectedProof.expiry_date), 'MMM d, yyyy')}</span></p>
+                  <p className="text-gray-400">{t('units.expires')} <span className="text-white">{format(new Date(selectedProof.expiry_date), 'MMM d, yyyy')}</span></p>
                 )}
               </div>
             )}
@@ -814,13 +816,13 @@ export default function UnitDetailPage() {
             {approvalAction === 'reject' && (
               <div className="space-y-2">
                 <Label htmlFor="rejection_reason" className="text-gray-300">
-                  Rejection Reason <span className="text-red-400">*</span>
+                  {t('units.rejectionReason')} <span className="text-red-400">*</span>
                 </Label>
                 <Textarea
                   id="rejection_reason"
                   value={rejectionReason}
                   onChange={(e) => setRejectionReason(e.target.value)}
-                  placeholder="Explain why this proof is being rejected..."
+                  placeholder={t('units.rejectionPlaceholder')}
                   className="bg-black/40 border-gray-700 text-white"
                   rows={3}
                 />
@@ -837,7 +839,7 @@ export default function UnitDetailPage() {
                     : 'bg-red-600 hover:bg-red-700'
                 } text-white`}
               >
-                {processing ? 'Processing...' : `Confirm ${approvalAction === 'approve' ? 'Approval' : 'Rejection'}`}
+                {processing ? t('units.processing') : approvalAction === 'approve' ? t('units.confirmApproval') : t('units.confirmRejection')}
               </Button>
               <Button
                 onClick={() => {
@@ -848,7 +850,7 @@ export default function UnitDetailPage() {
                 className="flex-1 bg-black/25 border-gray-700 text-gray-300"
                 disabled={processing}
               >
-                Cancel
+                {t('units.cancelButton')}
               </Button>
             </div>
           </div>

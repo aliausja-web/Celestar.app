@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Users, Plus, Trash2, ArrowLeft, Mail, Shield, Building2, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
+import { useLocale } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/language-switcher';
 
 interface User {
   user_id: string;
@@ -24,6 +26,7 @@ interface Organization {
 export default function UsersManagement() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useLocale();
   const [users, setUsers] = useState<User[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,12 +81,12 @@ export default function UsersManagement() {
 
   const handleCreate = async () => {
     if (!formData.email || !formData.password || !formData.organization_id) {
-      alert('Please fill in required fields (Email, Password, and Organization)');
+      alert(t('adminUsers.requiredFieldsError'));
       return;
     }
 
     if (formData.password.length < 6) {
-      alert('Password must be at least 6 characters');
+      alert(t('adminUsers.passwordLengthError'));
       return;
     }
 
@@ -111,14 +114,14 @@ export default function UsersManagement() {
           role: 'FIELD_CONTRIBUTOR',
           organization_id: '',
         });
-        alert('User created successfully! Escalation emails will be sent to this address.');
+        alert(t('adminUsers.successCreate'));
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to create user');
+        alert(error.error || t('adminUsers.createUserFailed'));
       }
     } catch (error) {
       console.error('Error creating user:', error);
-      alert('Failed to create user');
+      alert(t('adminUsers.createUserFailed'));
     } finally {
       setSaving(false);
     }
@@ -158,18 +161,18 @@ export default function UsersManagement() {
         setEditingUser(null);
       } else {
         const err = await response.json();
-        alert(err.error || 'Failed to update user');
+        alert(err.error || t('adminUsers.updateUserFailed'));
       }
     } catch (error) {
       console.error('Error updating user:', error);
-      alert('Failed to update user');
+      alert(t('adminUsers.updateUserFailed'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (userId: string, email: string) => {
-    if (!confirm(`Are you sure you want to delete user "${email}"?`)) {
+    if (!confirm(t('adminUsers.deleteConfirm').replace('{email}', email))) {
       return;
     }
 
@@ -187,13 +190,13 @@ export default function UsersManagement() {
 
       if (response.ok) {
         await fetchData();
-        alert('User deleted successfully');
+        alert(t('adminUsers.userDeletedSuccess'));
       } else {
-        alert('Failed to delete user');
+        alert(t('adminUsers.deleteUserFailed'));
       }
     } catch (error) {
       console.error('Error deleting user:', error);
-      alert('Failed to delete user');
+      alert(t('adminUsers.deleteUserFailed'));
     }
   };
 
@@ -215,7 +218,7 @@ export default function UsersManagement() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading...</div>
+        <div className="text-white">{t('adminUsers.loading')}</div>
       </div>
     );
   }
@@ -234,17 +237,20 @@ export default function UsersManagement() {
                 <ArrowLeft className="w-5 h-5 text-gray-400" />
               </button>
               <div>
-                <h1 className="text-3xl font-bold text-white mb-1">User Management</h1>
-                <p className="text-gray-400">Create and manage user accounts</p>
+                <h1 className="text-3xl font-bold text-white mb-1">{t('adminUsers.title')}</h1>
+                <p className="text-gray-400">{t('adminUsers.subtitle')}</p>
               </div>
             </div>
-            <button
-              onClick={() => setShowCreateDialog(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              Add New User
-            </button>
+            <div className="flex items-center gap-3">
+              <LanguageSwitcher />
+              <button
+                onClick={() => setShowCreateDialog(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                {t('adminUsers.addNewUser')}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -254,13 +260,13 @@ export default function UsersManagement() {
         {users.length === 0 ? (
           <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-12 border border-gray-700 text-center">
             <Users className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">No users yet</h3>
-            <p className="text-gray-400 mb-6">Create your first user account to get started</p>
+            <h3 className="text-xl font-semibold text-white mb-2">{t('adminUsers.noUsers')}</h3>
+            <p className="text-gray-400 mb-6">{t('adminUsers.noUsersDesc')}</p>
             <button
               onClick={() => setShowCreateDialog(true)}
               className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
             >
-              Create First User
+              {t('adminUsers.createFirstUser')}
             </button>
           </div>
         ) : (
@@ -269,11 +275,11 @@ export default function UsersManagement() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-700 bg-gray-800/50">
-                    <th className="text-left py-4 px-6 text-gray-400 font-semibold text-sm">User</th>
-                    <th className="text-left py-4 px-6 text-gray-400 font-semibold text-sm">Role</th>
-                    <th className="text-left py-4 px-6 text-gray-400 font-semibold text-sm">Organization</th>
-                    <th className="text-left py-4 px-6 text-gray-400 font-semibold text-sm">Created</th>
-                    <th className="text-right py-4 px-6 text-gray-400 font-semibold text-sm">Actions</th>
+                    <th className="text-start py-4 px-6 text-gray-400 font-semibold text-sm">{t('adminUsers.userColumn')}</th>
+                    <th className="text-start py-4 px-6 text-gray-400 font-semibold text-sm">{t('adminUsers.roleColumn')}</th>
+                    <th className="text-start py-4 px-6 text-gray-400 font-semibold text-sm">{t('adminUsers.orgColumn')}</th>
+                    <th className="text-start py-4 px-6 text-gray-400 font-semibold text-sm">{t('adminUsers.createdColumn')}</th>
+                    <th className="text-end py-4 px-6 text-gray-400 font-semibold text-sm">{t('adminUsers.actionsColumn')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -310,7 +316,7 @@ export default function UsersManagement() {
                           <button
                             onClick={() => openEdit(user)}
                             className="p-2 hover:bg-blue-500/10 rounded-lg text-blue-400 hover:text-blue-300 transition-colors"
-                            title="Edit user"
+                            title={t('adminUsers.editUser')}
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
@@ -318,7 +324,7 @@ export default function UsersManagement() {
                             <button
                               onClick={() => handleDelete(user.user_id, user.email)}
                               className="p-2 hover:bg-red-500/10 rounded-lg text-red-400 hover:text-red-300 transition-colors"
-                              title="Delete user"
+                              title={t('adminUsers.deleteUser')}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -338,12 +344,12 @@ export default function UsersManagement() {
       {editingUser && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
-            <h2 className="text-2xl font-bold text-white mb-1">Edit User</h2>
+            <h2 className="text-2xl font-bold text-white mb-1">{t('adminUsers.editTitle')}</h2>
             <p className="text-gray-400 text-sm mb-4">{editingUser.email}</p>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-gray-300 text-sm font-medium mb-2">Full Name</label>
+                <label className="block text-gray-300 text-sm font-medium mb-2">{t('adminUsers.editFullNameLabel')}</label>
                 <input
                   type="text"
                   value={editForm.full_name}
@@ -353,7 +359,7 @@ export default function UsersManagement() {
               </div>
 
               <div>
-                <label className="block text-gray-300 text-sm font-medium mb-2">Role</label>
+                <label className="block text-gray-300 text-sm font-medium mb-2">{t('adminUsers.editRoleLabel')}</label>
                 <select
                   value={editForm.role}
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
@@ -368,13 +374,13 @@ export default function UsersManagement() {
               </div>
 
               <div>
-                <label className="block text-gray-300 text-sm font-medium mb-2">Organization</label>
+                <label className="block text-gray-300 text-sm font-medium mb-2">{t('adminUsers.editOrgLabel')}</label>
                 <select
                   value={editForm.organization_id}
                   onChange={(e) => setEditForm({ ...editForm, organization_id: e.target.value })}
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">Select Organization...</option>
+                  <option value="">{t('adminUsers.orgPlaceholder')}</option>
                   {organizations.map((org) => (
                     <option key={org.id} value={org.id}>
                       {org.name} ({org.client_code})
@@ -382,7 +388,7 @@ export default function UsersManagement() {
                   ))}
                 </select>
                 <p className="text-gray-500 text-xs mt-1">
-                  Current: {editingUser.organization_name || editingUser.organization_id || 'None'}
+                  {t('adminUsers.editCurrent')} {editingUser.organization_name || editingUser.organization_id || 'None'}
                 </p>
               </div>
             </div>
@@ -393,14 +399,14 @@ export default function UsersManagement() {
                 disabled={saving}
                 className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
               >
-                Cancel
+                {t('adminUsers.cancel')}
               </button>
               <button
                 onClick={handleEdit}
                 disabled={saving || !editForm.organization_id}
                 className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? t('adminUsers.saving') : t('adminUsers.saveChanges')}
               </button>
             </div>
           </div>
@@ -411,26 +417,26 @@ export default function UsersManagement() {
       {showCreateDialog && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold text-white mb-4">Create New User</h2>
+            <h2 className="text-2xl font-bold text-white mb-4">{t('adminUsers.createTitle')}</h2>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Email Address * (For Login & Alerts)
+                  {t('adminUsers.emailLabel')}
                 </label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="e.g., john@apple.com"
+                  placeholder={t('adminUsers.emailPlaceholder')}
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
-                <p className="text-gray-500 text-xs mt-1">Escalation emails will be sent to this address</p>
+                <p className="text-gray-500 text-xs mt-1">{t('adminUsers.emailHelp')}</p>
               </div>
 
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Password * (Minimum 6 characters)
+                  {t('adminUsers.passwordLabel')}
                 </label>
                 <input
                   type="password"
@@ -443,50 +449,50 @@ export default function UsersManagement() {
 
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Full Name (Optional)
+                  {t('adminUsers.fullNameLabel')}
                 </label>
                 <input
                   type="text"
                   value={formData.full_name}
                   onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                  placeholder="e.g., John Smith"
+                  placeholder={t('adminUsers.fullNamePlaceholder')}
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
               </div>
 
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Role *
+                  {t('adminUsers.roleLabel')}
                 </label>
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
-                  <option value="PROGRAM_OWNER">Program Owner - Manages entire program</option>
-                  <option value="WORKSTREAM_LEAD">Workstream Lead - Manages workstreams</option>
-                  <option value="FIELD_CONTRIBUTOR">Field Contributor - Uploads proof</option>
-                  <option value="CLIENT_VIEWER">Client Viewer - Read-only access</option>
+                  <option value="PROGRAM_OWNER">{t('adminUsers.roleProgramOwner')}</option>
+                  <option value="WORKSTREAM_LEAD">{t('adminUsers.roleWorkstreamLead')}</option>
+                  <option value="FIELD_CONTRIBUTOR">{t('adminUsers.roleFieldContributor')}</option>
+                  <option value="CLIENT_VIEWER">{t('adminUsers.roleClientViewer')}</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Assign to Organization *
+                  {t('adminUsers.orgLabel')}
                 </label>
                 <select
                   value={formData.organization_id}
                   onChange={(e) => setFormData({ ...formData, organization_id: e.target.value })}
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
-                  <option value="">Select Organization...</option>
+                  <option value="">{t('adminUsers.orgPlaceholder')}</option>
                   {organizations.map((org) => (
                     <option key={org.id} value={org.id}>
                       {org.name} ({org.client_code})
                     </option>
                   ))}
                 </select>
-                <p className="text-gray-500 text-xs mt-1">User will only see this organization's data</p>
+                <p className="text-gray-500 text-xs mt-1">{t('adminUsers.orgHelp')}</p>
               </div>
             </div>
 
@@ -505,14 +511,14 @@ export default function UsersManagement() {
                 className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
                 disabled={saving}
               >
-                Cancel
+                {t('adminUsers.cancel')}
               </button>
               <button
                 onClick={handleCreate}
                 disabled={saving || !formData.email || !formData.password || !formData.organization_id}
                 className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? 'Creating...' : 'Create User'}
+                {saving ? t('adminUsers.creating') : t('adminUsers.createUser')}
               </button>
             </div>
           </div>
