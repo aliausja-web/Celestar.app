@@ -155,6 +155,8 @@ export async function POST(request: NextRequest) {
           owner_party_name: body.owner || 'Unassigned',
           required_green_by: body.deadline || null,
           acceptance_criteria: body.acceptance_criteria || null,
+          management_notes: body.management_notes || null,
+          voice_note_url: body.voice_note_url || null,
           proof_requirements: proofRequirements,
           escalation_config: escalationConfig,
           // Enhanced proof configuration (optional — all default to backward-compat values)
