@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { NotificationBell } from '@/components/notification-bell';
+import { useLocale } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/language-switcher';
 
 interface AttentionItem {
   type: 'proof_pending' | 'unit_at_risk' | 'unit_blocked' | 'manual_escalation';
@@ -32,6 +34,7 @@ interface AttentionQueueData {
 
 export default function AttentionQueue() {
   const router = useRouter();
+  const { t } = useLocale();
   const [data, setData] = useState<AttentionQueueData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +61,7 @@ export default function AttentionQueue() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] p-8 flex items-center justify-center">
-        <div className="text-gray-400">Loading attention queue...</div>
+        <div className="text-gray-400">{t('attentionQueue.loading')}</div>
       </div>
     );
   }
@@ -79,31 +82,34 @@ export default function AttentionQueue() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Attention Queue</h1>
-            <p className="text-gray-400">Items requiring immediate action</p>
+            <h1 className="text-3xl font-bold text-white mb-2">{t('attentionQueue.title')}</h1>
+            <p className="text-gray-400">{t('attentionQueue.subtitle')}</p>
           </div>
-          <NotificationBell />
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher />
+            <NotificationBell />
+          </div>
         </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <SummaryCard
-            title="Pending Proofs"
+            title={t('attentionQueue.pendingProofs')}
             count={summary.pending_proofs}
             color="blue"
           />
           <SummaryCard
-            title="Units at Risk"
+            title={t('attentionQueue.unitsAtRisk')}
             count={summary.units_at_risk}
             color="orange"
           />
           <SummaryCard
-            title="Units Blocked"
+            title={t('attentionQueue.unitsBlocked')}
             count={summary.units_blocked}
             color="red"
           />
           <SummaryCard
-            title="Manual Escalations"
+            title={t('attentionQueue.manualEscalations')}
             count={summary.manual_escalations}
             color="purple"
           />
@@ -112,8 +118,8 @@ export default function AttentionQueue() {
         {/* Items List */}
         {items.length === 0 ? (
           <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg p-12 text-center">
-            <div className="text-gray-500 text-lg mb-2">✓ All Clear</div>
-            <div className="text-gray-600">No items requiring attention</div>
+            <div className="text-gray-500 text-lg mb-2">{t('attentionQueue.allClear')}</div>
+            <div className="text-gray-600">{t('attentionQueue.noItems')}</div>
           </div>
         ) : (
           <div className="space-y-3">
@@ -122,6 +128,7 @@ export default function AttentionQueue() {
                 key={item.id}
                 item={item}
                 onClick={() => router.push(item.action_url)}
+                t={t}
               />
             ))}
           </div>
@@ -158,29 +165,31 @@ function SummaryCard({
 function AttentionItemCard({
   item,
   onClick,
+  t,
 }: {
   item: AttentionItem;
   onClick: () => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const typeConfig = {
     proof_pending: {
       icon: '📝',
-      label: 'Proof Pending Approval',
+      label: t('attentionQueue.proofPendingLabel'),
       color: 'border-blue-500/30 hover:border-blue-500/50',
     },
     unit_at_risk: {
       icon: '⚠️',
-      label: 'Unit At Risk',
+      label: t('attentionQueue.unitAtRiskLabel'),
       color: 'border-orange-500/30 hover:border-orange-500/50',
     },
     unit_blocked: {
       icon: '🚫',
-      label: 'Unit Blocked',
+      label: t('attentionQueue.unitBlockedLabel'),
       color: 'border-red-500/30 hover:border-red-500/50',
     },
     manual_escalation: {
       icon: '🚨',
-      label: 'Manual Escalation',
+      label: t('attentionQueue.manualEscalationLabel'),
       color: 'border-purple-500/30 hover:border-purple-500/50',
     },
   };
@@ -190,7 +199,7 @@ function AttentionItemCard({
   return (
     <button
       onClick={onClick}
-      className={`w-full bg-[#1a1a1a] border ${config.color} rounded-lg p-4 text-left transition-all hover:bg-[#222]`}
+      className={`w-full bg-[#1a1a1a] border ${config.color} rounded-lg p-4 text-start transition-all hover:bg-[#222]`}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
@@ -212,19 +221,19 @@ function AttentionItemCard({
           <div className="text-sm text-gray-400">
             {item.type === 'proof_pending' && (
               <div>
-                Uploaded by {item.details.uploaded_by} •{' '}
+                {t('attentionQueue.uploadedBy')} {item.details.uploaded_by} •{' '}
                 {item.details.proof_type}
                 {item.details.high_criticality && (
-                  <span className="ml-2 text-red-400">⚠️ High Criticality</span>
+                  <span className="ms-2 text-red-400">{t('attentionQueue.highCriticality')}</span>
                 )}
               </div>
             )}
             {item.type === 'unit_at_risk' && (
               <div>
-                Escalation Level {item.details.escalation_level} •{' '}
+                {t('attentionQueue.escalationLevel')} {item.details.escalation_level} •{' '}
                 {item.hours_until_deadline && item.hours_until_deadline < 0
-                  ? `${Math.abs(Math.round(item.hours_until_deadline))}h overdue`
-                  : `${Math.round(item.hours_until_deadline || 0)}h remaining`}
+                  ? t('attentionQueue.hoursOverdue').replace('{h}', String(Math.abs(Math.round(item.hours_until_deadline))))
+                  : t('attentionQueue.hoursRemaining').replace('{h}', String(Math.round(item.hours_until_deadline || 0)))}
               </div>
             )}
             {item.type === 'unit_blocked' && (
@@ -252,8 +261,8 @@ function AttentionItemCard({
               }`}
             >
               {item.hours_until_deadline < 0
-                ? `${Math.abs(Math.round(item.hours_until_deadline))}h past`
-                : `${Math.round(item.hours_until_deadline)}h left`}
+                ? t('attentionQueue.hPast').replace('{h}', String(Math.abs(Math.round(item.hours_until_deadline))))
+                : t('attentionQueue.hLeft').replace('{h}', String(Math.round(item.hours_until_deadline)))}
             </div>
           )}
       </div>

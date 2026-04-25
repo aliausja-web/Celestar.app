@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Building2, Plus, Edit2, Trash2, ArrowLeft } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
+import { useLocale } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/language-switcher';
 
 interface ClientOrganization {
   id: string;
@@ -17,6 +19,7 @@ interface ClientOrganization {
 export default function ClientsManagement() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useLocale();
   const [clients, setClients] = useState<ClientOrganization[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -58,7 +61,7 @@ export default function ClientsManagement() {
 
   const handleCreate = async () => {
     if (!formData.name || !formData.client_code) {
-      alert('Please fill in required fields (Name and Client Code)');
+      alert(t('adminClients.requiredFieldsError'));
       return;
     }
 
@@ -80,21 +83,21 @@ export default function ClientsManagement() {
         await fetchClients();
         setShowCreateDialog(false);
         setFormData({ name: '', client_code: '', industry: '', contact_email: '' });
-        alert('Client organization created successfully!');
+        alert(t('adminClients.createdSuccess'));
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to create client');
+        alert(error.error || t('adminClients.createFailed'));
       }
     } catch (error) {
       console.error('Error creating client:', error);
-      alert('Failed to create client');
+      alert(t('adminClients.createFailed'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"? This will remove all associated users and programs.`)) {
+    if (!confirm(t('adminClients.deleteConfirm').replace('{name}', name))) {
       return;
     }
 
@@ -111,20 +114,20 @@ export default function ClientsManagement() {
 
       if (response.ok) {
         await fetchClients();
-        alert('Client deleted successfully');
+        alert(t('adminClients.deleteSuccess'));
       } else {
-        alert('Failed to delete client');
+        alert(t('adminClients.deleteFailed'));
       }
     } catch (error) {
       console.error('Error deleting client:', error);
-      alert('Failed to delete client');
+      alert(t('adminClients.deleteFailed'));
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading...</div>
+        <div className="text-white">{t('adminClients.loading')}</div>
       </div>
     );
   }
@@ -143,17 +146,20 @@ export default function ClientsManagement() {
                 <ArrowLeft className="w-5 h-5 text-gray-400" />
               </button>
               <div>
-                <h1 className="text-3xl font-bold text-white mb-1">Client Organizations</h1>
-                <p className="text-gray-400">Manage client accounts and organizations</p>
+                <h1 className="text-3xl font-bold text-white mb-1">{t('adminClients.title')}</h1>
+                <p className="text-gray-400">{t('adminClients.subtitle')}</p>
               </div>
             </div>
-            <button
-              onClick={() => setShowCreateDialog(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              Add New Client
-            </button>
+            <div className="flex items-center gap-3">
+              <LanguageSwitcher />
+              <button
+                onClick={() => setShowCreateDialog(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+                {t('adminClients.addNewClient')}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -163,13 +169,13 @@ export default function ClientsManagement() {
         {clients.length === 0 ? (
           <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-12 border border-gray-700 text-center">
             <Building2 className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">No clients yet</h3>
-            <p className="text-gray-400 mb-6">Create your first client organization to get started</p>
+            <h3 className="text-xl font-semibold text-white mb-2">{t('adminClients.noClients')}</h3>
+            <p className="text-gray-400 mb-6">{t('adminClients.noClientsDesc')}</p>
             <button
               onClick={() => setShowCreateDialog(true)}
               className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
-              Create First Client
+              {t('adminClients.createFirstClient')}
             </button>
           </div>
         ) : (
@@ -194,23 +200,23 @@ export default function ClientsManagement() {
                 <h3 className="text-xl font-semibold text-white mb-2">{client.name}</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2">
-                    <span className="text-gray-500">Client Code:</span>
+                    <span className="text-gray-500">{t('adminClients.clientCode')}</span>
                     <span className="text-blue-400 font-mono">{client.client_code}</span>
                   </div>
                   {client.industry && (
                     <div className="flex items-center gap-2">
-                      <span className="text-gray-500">Industry:</span>
+                      <span className="text-gray-500">{t('adminClients.industry')}</span>
                       <span className="text-gray-300">{client.industry}</span>
                     </div>
                   )}
                   {client.contact_email && (
                     <div className="flex items-center gap-2">
-                      <span className="text-gray-500">Contact:</span>
+                      <span className="text-gray-500">{t('adminClients.contact')}</span>
                       <span className="text-gray-300">{client.contact_email}</span>
                     </div>
                   )}
                   <div className="flex items-center gap-2 pt-2 border-t border-gray-700">
-                    <span className="text-gray-500 text-xs">Created:</span>
+                    <span className="text-gray-500 text-xs">{t('adminClients.created')}</span>
                     <span className="text-gray-400 text-xs">
                       {new Date(client.created_at).toLocaleDateString()}
                     </span>
@@ -226,58 +232,58 @@ export default function ClientsManagement() {
       {showCreateDialog && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
-            <h2 className="text-2xl font-bold text-white mb-4">Create New Client</h2>
+            <h2 className="text-2xl font-bold text-white mb-4">{t('adminClients.createTitle')}</h2>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Organization Name *
+                  {t('adminClients.orgNameLabel')}
                 </label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., Apple Inc"
+                  placeholder={t('adminClients.orgNamePlaceholder')}
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Client Code * (Unique ID)
+                  {t('adminClients.clientCodeLabel')}
                 </label>
                 <input
                   type="text"
                   value={formData.client_code}
                   onChange={(e) => setFormData({ ...formData, client_code: e.target.value.toUpperCase() })}
-                  placeholder="e.g., AA-001"
+                  placeholder={t('adminClients.clientCodePlaceholder')}
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                <p className="text-gray-500 text-xs mt-1">This will be used to identify the client (e.g., AA-001, BB-002)</p>
+                <p className="text-gray-500 text-xs mt-1">{t('adminClients.clientCodeHelp')}</p>
               </div>
 
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Industry (Optional)
+                  {t('adminClients.industryLabel')}
                 </label>
                 <input
                   type="text"
                   value={formData.industry}
                   onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                  placeholder="e.g., Technology"
+                  placeholder={t('adminClients.industryPlaceholder')}
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-2">
-                  Contact Email (Optional)
+                  {t('adminClients.contactEmailLabel')}
                 </label>
                 <input
                   type="email"
                   value={formData.contact_email}
                   onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                  placeholder="e.g., contact@apple.com"
+                  placeholder={t('adminClients.contactEmailPlaceholder')}
                   className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -292,14 +298,14 @@ export default function ClientsManagement() {
                 className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
                 disabled={saving}
               >
-                Cancel
+                {t('adminClients.cancel')}
               </button>
               <button
                 onClick={handleCreate}
                 disabled={saving || !formData.name || !formData.client_code}
                 className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? 'Creating...' : 'Create Client'}
+                {saving ? t('adminClients.creating') : t('adminClients.createClient')}
               </button>
             </div>
           </div>

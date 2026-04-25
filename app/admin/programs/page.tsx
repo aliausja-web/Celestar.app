@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FolderKanban, ArrowLeft, Building2, Link as LinkIcon, Unlink } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
+import { useLocale } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/language-switcher';
 
 interface Program {
   id: string;
@@ -22,6 +24,7 @@ interface Organization {
 
 export default function ProgramsManagement() {
   const router = useRouter();
+  const { t } = useLocale();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +65,7 @@ export default function ProgramsManagement() {
 
   const handleAssign = async () => {
     if (!selectedProgram || !selectedOrganization) {
-      alert('Please select both a program and an organization');
+      alert(t('adminPrograms.selectBothError'));
       return;
     }
 
@@ -84,21 +87,21 @@ export default function ProgramsManagement() {
         await fetchData();
         setSelectedProgram(null);
         setSelectedOrganization('');
-        alert('Program assigned successfully!');
+        alert(t('adminPrograms.assignSuccess'));
       } else {
         const error = await response.json();
-        alert(error.error || 'Failed to assign program');
+        alert(error.error || t('adminPrograms.assignFailed'));
       }
     } catch (error) {
       console.error('Error assigning program:', error);
-      alert('Failed to assign program');
+      alert(t('adminPrograms.assignFailed'));
     } finally {
       setAssigning(false);
     }
   };
 
   const handleUnassign = async (programId: string, programName: string) => {
-    if (!confirm(`Unassign "${programName}" from its current organization?`)) {
+    if (!confirm(t('adminPrograms.unassignConfirm').replace('{name}', programName))) {
       return;
     }
 
@@ -117,13 +120,13 @@ export default function ProgramsManagement() {
 
       if (response.ok) {
         await fetchData();
-        alert('Program unassigned successfully');
+        alert(t('adminPrograms.unassignSuccess'));
       } else {
-        alert('Failed to unassign program');
+        alert(t('adminPrograms.unassignFailed'));
       }
     } catch (error) {
       console.error('Error unassigning program:', error);
-      alert('Failed to unassign program');
+      alert(t('adminPrograms.unassignFailed'));
     }
   };
 
@@ -133,7 +136,7 @@ export default function ProgramsManagement() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading...</div>
+        <div className="text-white">{t('adminPrograms.loading')}</div>
       </div>
     );
   }
@@ -143,17 +146,20 @@ export default function ProgramsManagement() {
       {/* Header */}
       <div className="border-b border-gray-700 bg-gray-800/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push('/admin')}
-              className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5 text-gray-400" />
-            </button>
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-1">Program Assignment</h1>
-              <p className="text-gray-400">Link programs to client organizations</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push('/admin')}
+                className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-400" />
+              </button>
+              <div>
+                <h1 className="text-3xl font-bold text-white mb-1">{t('adminPrograms.title')}</h1>
+                <p className="text-gray-400">{t('adminPrograms.subtitle')}</p>
+              </div>
             </div>
+            <LanguageSwitcher />
           </div>
         </div>
       </div>
@@ -163,13 +169,13 @@ export default function ProgramsManagement() {
         {programs.length === 0 ? (
           <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-12 border border-gray-700 text-center">
             <FolderKanban className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">No programs yet</h3>
-            <p className="text-gray-400 mb-6">Create programs first to assign them to clients</p>
+            <h3 className="text-xl font-semibold text-white mb-2">{t('adminPrograms.noPrograms')}</h3>
+            <p className="text-gray-400 mb-6">{t('adminPrograms.noProgramsDesc')}</p>
             <button
               onClick={() => router.push('/programs')}
               className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
             >
-              Go to Programs
+              {t('adminPrograms.goToPrograms')}
             </button>
           </div>
         ) : (
@@ -178,20 +184,20 @@ export default function ProgramsManagement() {
             <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700">
               <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2">
                 <LinkIcon className="w-5 h-5 text-purple-400" />
-                Assign Program to Client
+                {t('adminPrograms.assignTitle')}
               </h2>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-gray-300 text-sm font-medium mb-2">
-                    Select Program
+                    {t('adminPrograms.selectProgram')}
                   </label>
                   <select
                     value={selectedProgram || ''}
                     onChange={(e) => setSelectedProgram(e.target.value)}
                     className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    <option value="">Choose a program...</option>
+                    <option value="">{t('adminPrograms.chooseProgram')}</option>
                     {unassignedPrograms.map((program) => (
                       <option key={program.id} value={program.id}>
                         {program.name}
@@ -199,20 +205,20 @@ export default function ProgramsManagement() {
                     ))}
                   </select>
                   <p className="text-gray-500 text-xs mt-1">
-                    {unassignedPrograms.length} unassigned program(s)
+                    {t('adminPrograms.unassignedCount', { count: unassignedPrograms.length })}
                   </p>
                 </div>
 
                 <div>
                   <label className="block text-gray-300 text-sm font-medium mb-2">
-                    Select Organization
+                    {t('adminPrograms.selectOrg')}
                   </label>
                   <select
                     value={selectedOrganization}
                     onChange={(e) => setSelectedOrganization(e.target.value)}
                     className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    <option value="">Choose an organization...</option>
+                    <option value="">{t('adminPrograms.chooseOrg')}</option>
                     {organizations.map((org) => (
                       <option key={org.id} value={org.id}>
                         {org.name} ({org.client_code})
@@ -226,25 +232,24 @@ export default function ProgramsManagement() {
                   disabled={assigning || !selectedProgram || !selectedOrganization}
                   className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
-                  {assigning ? 'Assigning...' : 'Assign Program'}
+                  {assigning ? t('adminPrograms.assigning') : t('adminPrograms.assignButton')}
                 </button>
               </div>
 
               <div className="mt-6 pt-6 border-t border-gray-700">
                 <p className="text-gray-400 text-sm leading-relaxed">
-                  Once assigned, users in that organization will see this program in their dashboard.
-                  Other organizations will not have access to it.
+                  {t('adminPrograms.assignInfo')}
                 </p>
               </div>
             </div>
 
             {/* Assigned Programs List */}
             <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-6 border border-gray-700">
-              <h2 className="text-xl font-semibold text-white mb-4">Assigned Programs</h2>
+              <h2 className="text-xl font-semibold text-white mb-4">{t('adminPrograms.assignedTitle')}</h2>
 
               {assignedPrograms.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-400 text-sm">No programs assigned yet</p>
+                  <p className="text-gray-400 text-sm">{t('adminPrograms.noAssigned')}</p>
                 </div>
               ) : (
                 <div className="space-y-3 max-h-[600px] overflow-y-auto">
@@ -287,14 +292,14 @@ export default function ProgramsManagement() {
         <div className="mt-8 bg-gradient-to-r from-purple-900/20 to-blue-900/20 border border-purple-800/30 rounded-xl p-6">
           <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
             <FolderKanban className="w-5 h-5 text-purple-400" />
-            How Program Assignment Works
+            {t('adminPrograms.howItWorks')}
           </h3>
           <ul className="text-gray-300 text-sm leading-relaxed space-y-2">
-            <li>• Assign programs to specific client organizations using the form above</li>
-            <li>• Users in that organization will see ONLY their assigned programs</li>
-            <li>• Platform Admins can see ALL programs across all organizations</li>
-            <li>• You can unassign and reassign programs at any time</li>
-            <li>• Workstreams and units within a program inherit the same access control</li>
+            <li>• {t('adminPrograms.howItWorks1')}</li>
+            <li>• {t('adminPrograms.howItWorks2')}</li>
+            <li>• {t('adminPrograms.howItWorks3')}</li>
+            <li>• {t('adminPrograms.howItWorks4')}</li>
+            <li>• {t('adminPrograms.howItWorks5')}</li>
           </ul>
         </div>
       </div>

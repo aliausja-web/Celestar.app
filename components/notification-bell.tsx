@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
+import { useLocale } from '@/lib/i18n/context';
 
 interface Notification {
   id: string;
@@ -27,6 +28,7 @@ interface Notification {
 
 export function NotificationBell() {
   const router = useRouter();
+  const { t } = useLocale();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -159,21 +161,21 @@ export function NotificationBell() {
         className="w-96 bg-gray-950 border-gray-800 max-h-[500px] overflow-y-auto"
       >
         <div className="px-4 py-3 border-b border-gray-800">
-          <h3 className="font-semibold text-white">Notifications</h3>
+          <h3 className="font-semibold text-white">{t('notificationBell.title')}</h3>
           <p className="text-xs text-gray-400">
-            {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}
+            {unreadCount > 0 ? t('notificationBell.unread', { count: unreadCount }) : t('notificationBell.allCaughtUp')}
           </p>
         </div>
 
         {loading ? (
           <div className="py-8 text-center text-gray-500">
             <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Loading notifications...</p>
+            <p className="text-sm">{t('notificationBell.loading')}</p>
           </div>
         ) : notifications.length === 0 ? (
           <div className="py-8 text-center text-gray-500">
             <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">No notifications yet</p>
+            <p className="text-sm">{t('notificationBell.empty')}</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-800">
@@ -223,7 +225,7 @@ export function NotificationBell() {
               className="w-full text-xs text-blue-400 hover:text-blue-300 hover:bg-gray-900"
               onClick={() => router.push('/notifications')}
             >
-              View all notifications
+              {t('notificationBell.viewAll')}
             </Button>
           </div>
         )}

@@ -11,6 +11,8 @@ import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
+import { useLocale } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/language-switcher';
 
 interface Org {
   id: string;
@@ -20,6 +22,7 @@ interface Org {
 export default function NewProgramPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useLocale();
   const [loading, setLoading] = useState(false);
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
@@ -39,12 +42,10 @@ export default function NewProgramPage() {
       if (!session) return;
       const token = session.access_token;
 
-      // Check role
-      const profileRes = await fetch('/api/auth/me', {
+      await fetch('/api/auth/me', {
         headers: { Authorization: `Bearer ${token}` },
       }).catch(() => null);
 
-      // Fall back: load orgs — only PLATFORM_ADMIN can access this endpoint
       const orgsRes = await fetch('/api/admin/organizations', {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -61,23 +62,19 @@ export default function NewProgramPage() {
     e.preventDefault();
 
     if (!formData.name || !formData.owner_org) {
-      toast.error('Program name and owner organization are required');
+      toast.error(t('programNew.errorRequired'));
       return;
     }
 
     if (isPlatformAdmin && !formData.org_id) {
-      toast.error('Please select a client organization to assign this program to');
+      toast.error(t('programNew.errorClient'));
       return;
     }
 
     setLoading(true);
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-      if (sessionError || !session) {
-        throw new Error('Not authenticated. Please log in again.');
-      }
-
+      if (sessionError || !session) throw new Error('Not authenticated. Please log in again.');
       const token = session.access_token;
 
       const response = await fetch('/api/programs', {
@@ -97,10 +94,7 @@ export default function NewProgramPage() {
       });
 
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create program');
-      }
+      if (!response.ok) throw new Error(data.error || 'Failed to create program');
 
       toast.success('Program created successfully');
       router.push('/programs');
@@ -117,76 +111,74 @@ export default function NewProgramPage() {
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Button
-            onClick={() => router.push('/programs')}
-            variant="outline"
-            className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-3xl font-black text-white">Create New Program</h1>
-            <p className="text-gray-500">Add a new program to track execution readiness</p>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => router.push('/programs')}
+              variant="outline"
+              className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
+            >
+              <ArrowLeft className="w-4 h-4 me-2" />
+              {t('common.back')}
+            </Button>
           </div>
+          <div className="flex-1">
+            <h1 className="text-3xl font-black text-white">{t('programNew.title')}</h1>
+            <p className="text-gray-500">{t('programNew.subtitle')}</p>
+          </div>
+          <LanguageSwitcher />
         </div>
 
         {/* Form */}
         <Card className="bg-black/25 border-gray-800">
           <CardHeader>
-            <CardTitle className="text-white">Program Details</CardTitle>
-            <CardDescription className="text-gray-400">
-              Enter the basic information for the new program
-            </CardDescription>
+            <CardTitle className="text-white">{t('programNew.formTitle')}</CardTitle>
+            <CardDescription className="text-gray-400">{t('programNew.formDesc')}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="name" className="text-gray-300">
-                  Program Name <span className="text-red-400">*</span>
+                  {t('programNew.nameLabel')} <span className="text-red-400">*</span>
                 </Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., Riyadh Season Launch Event"
+                  placeholder={t('programNew.namePlaceholder')}
                   className="bg-black/40 border-gray-700 text-white"
                   required
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description" className="text-gray-300">
-                  Description
-                </Label>
+                <Label htmlFor="description" className="text-gray-300">{t('programNew.descriptionLabel')}</Label>
                 <Textarea
                   id="description"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Brief description of the program..."
+                  placeholder={t('programNew.descriptionPlaceholder')}
                   className="bg-black/40 border-gray-700 text-white min-h-[100px]"
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="owner_org" className="text-gray-300">
-                  Owner Organization <span className="text-red-400">*</span>
+                  {t('programNew.ownerOrgLabel')} <span className="text-red-400">*</span>
                 </Label>
                 <Input
                   id="owner_org"
                   value={formData.owner_org}
                   onChange={(e) => setFormData({ ...formData, owner_org: e.target.value })}
-                  placeholder="e.g., Riyadh Season Authority"
+                  placeholder={t('programNew.ownerOrgPlaceholder')}
                   className="bg-black/40 border-gray-700 text-white"
                   required
                 />
               </div>
 
-              {/* Client org assignment — only shown to PLATFORM_ADMIN */}
               {isPlatformAdmin && (
                 <div className="space-y-2">
                   <Label htmlFor="org_id" className="text-gray-300">
-                    Assign to Client Organization <span className="text-red-400">*</span>
+                    {t('programNew.clientOrgLabel')} <span className="text-red-400">*</span>
                   </Label>
                   <select
                     id="org_id"
@@ -195,24 +187,18 @@ export default function NewProgramPage() {
                     className="w-full px-3 py-2 bg-black/40 border border-gray-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   >
-                    <option value="">Select client organization...</option>
+                    <option value="">{t('programNew.clientOrgPlaceholder')}</option>
                     {orgs.map((org) => (
-                      <option key={org.id} value={org.id}>
-                        {org.name}
-                      </option>
+                      <option key={org.id} value={org.id}>{org.name}</option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500">
-                    All users in this org will receive escalation emails for units in this program
-                  </p>
+                  <p className="text-xs text-gray-500">{t('programNew.clientOrgHelp')}</p>
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="start_time" className="text-gray-300">
-                    Start Date
-                  </Label>
+                  <Label htmlFor="start_time" className="text-gray-300">{t('programNew.startDateLabel')}</Label>
                   <Input
                     id="start_time"
                     type="datetime-local"
@@ -221,11 +207,8 @@ export default function NewProgramPage() {
                     className="bg-black/40 border-gray-700 text-white"
                   />
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="end_time" className="text-gray-300">
-                    End Date
-                  </Label>
+                  <Label htmlFor="end_time" className="text-gray-300">{t('programNew.endDateLabel')}</Label>
                   <Input
                     id="end_time"
                     type="datetime-local"
@@ -237,20 +220,11 @@ export default function NewProgramPage() {
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  {loading ? 'Creating...' : 'Create Program'}
+                <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
+                  {loading ? t('programNew.creatingButton') : t('programNew.createButton')}
                 </Button>
-                <Button
-                  type="button"
-                  onClick={() => router.push('/programs')}
-                  variant="outline"
-                  className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
-                >
-                  Cancel
+                <Button type="button" onClick={() => router.push('/programs')} variant="outline" className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40">
+                  {t('programNew.cancelButton')}
                 </Button>
               </div>
             </form>

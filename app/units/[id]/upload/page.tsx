@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/firebase';
+import { useLocale } from '@/lib/i18n/context';
+import { LanguageSwitcher } from '@/components/language-switcher';
 
 type ProofType = 'photo' | 'video' | 'document';
 
@@ -34,18 +36,6 @@ const DOCUMENT_MIME_TYPES: Record<string, string> = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
 
-const DOCUMENT_CATEGORIES: { value: string; label: string; description: string }[] = [
-  { value: 'permit',            label: 'Permit / Licence',           description: 'Government or authority-issued permit, operating licence, or regulatory approval' },
-  { value: 'rfp',               label: 'RFP / RFQ',                  description: 'Request for Proposal, Request for Quotation, or tender document' },
-  { value: 'pre_qualification', label: 'Pre-Qualification',          description: 'Vendor or contractor pre-qualification document' },
-  { value: 'terms_of_reference',label: 'Terms of Reference',         description: 'Project scope, terms of reference, or statement of work' },
-  { value: 'contract',          label: 'Contract / Agreement',       description: 'Signed contract, MOU, or formal agreement' },
-  { value: 'certificate',       label: 'Certificate / Accreditation',description: 'Professional certificate, compliance certificate, or accreditation' },
-  { value: 'insurance',         label: 'Insurance Document',         description: 'Liability, indemnity, or professional indemnity insurance certificate' },
-  { value: 'financial',         label: 'Financial Document',         description: 'BOQ, invoice, payment certificate, or financial schedule' },
-  { value: 'other',             label: 'Other Governance Document',  description: 'Any other document that serves as verifiable governance evidence' },
-];
-
 async function computeSHA256(buffer: ArrayBuffer): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -56,6 +46,7 @@ export default function UploadProofPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
+  const { t } = useLocale();
   const unitId = params.id as string;
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState('');
@@ -72,7 +63,6 @@ export default function UploadProofPage() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  // Tracks whether the user has explicitly activated the camera
   const [cameraActive, setCameraActive] = useState(false);
 
   // Document state
@@ -95,6 +85,19 @@ export default function UploadProofPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Document categories — defined inside component so t() is available
+  const DOCUMENT_CATEGORIES = [
+    { value: 'permit',             label: t('unitsUpload.docCatPermitLabel'),    description: t('unitsUpload.docCatPermitDesc') },
+    { value: 'rfp',                label: t('unitsUpload.docCatRfpLabel'),        description: t('unitsUpload.docCatRfpDesc') },
+    { value: 'pre_qualification',  label: t('unitsUpload.docCatPreQualLabel'),    description: t('unitsUpload.docCatPreQualDesc') },
+    { value: 'terms_of_reference', label: t('unitsUpload.docCatTorLabel'),        description: t('unitsUpload.docCatTorDesc') },
+    { value: 'contract',           label: t('unitsUpload.docCatContractLabel'),   description: t('unitsUpload.docCatContractDesc') },
+    { value: 'certificate',        label: t('unitsUpload.docCatCertLabel'),       description: t('unitsUpload.docCatCertDesc') },
+    { value: 'insurance',          label: t('unitsUpload.docCatInsuranceLabel'),  description: t('unitsUpload.docCatInsuranceDesc') },
+    { value: 'financial',          label: t('unitsUpload.docCatFinancialLabel'),  description: t('unitsUpload.docCatFinancialDesc') },
+    { value: 'other',              label: t('unitsUpload.docCatOtherLabel'),      description: t('unitsUpload.docCatOtherDesc') },
+  ];
 
   // Fetch unit configuration for proof requirements
   useEffect(() => {
@@ -145,7 +148,7 @@ export default function UploadProofPage() {
 
   async function startCamera() {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-      toast.error('Camera requires HTTPS. Access this page via https:// or localhost.');
+      toast.error(t('unitsUpload.errorHttps'));
       return;
     }
     try {
@@ -173,13 +176,13 @@ export default function UploadProofPage() {
     } catch (error) {
       console.error('Error accessing camera:', error);
       if (!window.isSecureContext) {
-        toast.error('Camera requires HTTPS. Access this page via https:// or localhost.');
+        toast.error(t('unitsUpload.errorHttps'));
       } else if (error instanceof DOMException && error.name === 'NotAllowedError') {
-        toast.error('Camera access denied. Please grant camera permissions in your browser.');
+        toast.error(t('unitsUpload.errorCameraDenied'));
       } else if (error instanceof DOMException && error.name === 'NotFoundError') {
-        toast.error('No camera found. Please connect a camera and try again.');
+        toast.error(t('unitsUpload.errorCameraNotFound'));
       } else {
-        toast.error('Failed to access camera. Please grant camera permissions.');
+        toast.error(t('unitsUpload.errorCameraFailed'));
       }
     }
   }
@@ -226,7 +229,7 @@ export default function UploadProofPage() {
     const imageData = canvas.toDataURL('image/jpeg', 0.95);
     setCapturedMedia(imageData);
     stopCamera();
-    toast.success('Photo captured with timestamp');
+    toast.success(t('unitsUpload.photoCaptured'));
   }
 
   function startVideoRecording() {
@@ -254,7 +257,7 @@ export default function UploadProofPage() {
         const videoURL = URL.createObjectURL(blob);
         setCapturedMedia(videoURL);
         stopCamera();
-        toast.success('Video recorded');
+        toast.success(t('unitsUpload.videoRecorded'));
       };
       mediaRecorder.start(100);
       setIsRecording(true);
@@ -264,7 +267,7 @@ export default function UploadProofPage() {
       }, 1000);
     } catch (error) {
       console.error('Error starting recording:', error);
-      toast.error('Failed to start video recording');
+      toast.error(t('unitsUpload.errorVideoRecord'));
     }
   }
 
@@ -283,7 +286,6 @@ export default function UploadProofPage() {
     setCapturedMedia(null);
     setRecordingDuration(0);
     setCameraActive(false);
-    // Camera will be restarted when user clicks the activate button again
   }
 
   function formatDuration(seconds: number): string {
@@ -303,37 +305,37 @@ export default function UploadProofPage() {
       const buffer = await file.arrayBuffer();
       const hash = await computeSHA256(buffer);
       setFileHash(hash);
-      toast.success('File integrity hash computed');
+      toast.success(t('unitsUpload.hashComputedToast'));
     } catch {
-      toast.error('Failed to compute file hash');
+      toast.error(t('unitsUpload.errorHashFailed'));
     } finally {
       setHashLoading(false);
     }
-  }, []);
+  }, [t]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     if (proofType !== 'document' && !capturedMedia) {
-      toast.error(`Please capture a ${proofType} first`);
+      toast.error(t('unitsUpload.errorNoMedia').replace('{type}', proofType));
       return;
     }
     if (proofType === 'document' && !selectedFile) {
-      toast.error('Please select a document file');
+      toast.error(t('unitsUpload.errorNoDocument'));
       return;
     }
     if (proofType === 'document' && !documentCategory) {
-      toast.error('Please select a document category (e.g. Permit, RFP, Pre-Qualification)');
+      toast.error(t('unitsUpload.errorNoCategory'));
       return;
     }
 
     // Validate required governance fields
     if (unitConfig?.requires_reference_number && !referenceNumber.trim()) {
-      toast.error('This unit requires a reference number for each proof');
+      toast.error(t('unitsUpload.errorRefRequired'));
       return;
     }
     if (unitConfig?.requires_expiry_date && !expiryDate) {
-      toast.error('This unit requires an expiry date for each proof');
+      toast.error(t('unitsUpload.errorExpiryRequired'));
       return;
     }
 
@@ -341,7 +343,7 @@ export default function UploadProofPage() {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
-        throw new Error('Not authenticated. Please log in again.');
+        throw new Error(t('unitsUpload.errorNotAuthenticated'));
       }
       const token = session.access_token;
 
@@ -387,12 +389,10 @@ export default function UploadProofPage() {
         file_path: uploadData.path,
         notes: notes || null,
         captured_at: proofType !== 'document' ? currentTime.toISOString() : null,
-        // Integrity fields
         file_name: originalFileName,
         file_size: fileForUpload.size,
         mime_type: fileMimeType,
         file_hash: fileHash || null,
-        // Governance structured fields
         document_category: proofType === 'document' ? documentCategory : null,
         reference_number: referenceNumber.trim() || null,
         expiry_date: expiryDate || null,
@@ -409,14 +409,14 @@ export default function UploadProofPage() {
 
       const data = await proofResponse.json();
       if (!proofResponse.ok) {
-        throw new Error(data.error || 'Failed to upload proof');
+        throw new Error(data.error || t('unitsUpload.errorUploadFailed'));
       }
 
-      toast.success('Proof uploaded successfully');
+      toast.success(t('unitsUpload.uploadSuccess'));
       router.back();
     } catch (error: any) {
       console.error('Error uploading proof:', error);
-      toast.error(error.message || 'Failed to upload proof');
+      toast.error(error.message || t('unitsUpload.errorUploadFailed'));
     } finally {
       setLoading(false);
     }
@@ -434,30 +434,33 @@ export default function UploadProofPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 p-6">
       <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex items-center gap-4">
-          <Button
-            onClick={handleCancel}
-            variant="outline"
-            className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-3xl font-black text-white">Upload Proof</h1>
-            <p className="text-gray-500">Capture timestamped evidence or upload a governance document</p>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Button
+              onClick={handleCancel}
+              variant="outline"
+              className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
+            >
+              <ArrowLeft className="w-4 h-4 me-2" />
+              {t('unitsUpload.back')}
+            </Button>
+            <div>
+              <h1 className="text-3xl font-black text-white">{t('unitsUpload.title')}</h1>
+              <p className="text-gray-500">{t('unitsUpload.subtitle')}</p>
+            </div>
           </div>
+          <LanguageSwitcher />
         </div>
 
         <Card className="bg-black/25 border-gray-800">
           <CardHeader>
-            <CardTitle className="text-white">Proof Submission</CardTitle>
+            <CardTitle className="text-white">{t('unitsUpload.cardTitle')}</CardTitle>
             <CardDescription className="text-gray-400">
               {isDocumentMode
-                ? 'Upload a PDF, Word, or Excel document as traceable governance evidence'
+                ? t('unitsUpload.descDocument')
                 : proofType === 'photo'
-                ? 'Photo will be automatically timestamped for verification'
-                : 'Video will be recorded with audio'}
+                ? t('unitsUpload.descPhoto')
+                : t('unitsUpload.descVideo')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -466,7 +469,7 @@ export default function UploadProofPage() {
               {!capturedMedia && !selectedFile && (
                 <div className="space-y-2">
                   <Label htmlFor="proofType" className="text-gray-300">
-                    Proof Type <span className="text-red-400">*</span>
+                    {t('unitsUpload.proofTypeLabel')} <span className="text-red-400">*</span>
                   </Label>
                   <Select
                     value={proofType}
@@ -487,19 +490,19 @@ export default function UploadProofPage() {
                       <SelectItem value="photo" className="text-white">
                         <div className="flex items-center gap-2">
                           <Camera className="w-4 h-4" />
-                          Photo
+                          {t('unitsUpload.photoOption')}
                         </div>
                       </SelectItem>
                       <SelectItem value="video" className="text-white">
                         <div className="flex items-center gap-2">
                           <VideoIcon className="w-4 h-4" />
-                          Video
+                          {t('unitsUpload.videoOption')}
                         </div>
                       </SelectItem>
                       <SelectItem value="document" className="text-white">
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4" />
-                          Document (PDF, DOCX, XLSX)
+                          {t('unitsUpload.documentOption')}
                         </div>
                       </SelectItem>
                     </SelectContent>
@@ -513,14 +516,14 @@ export default function UploadProofPage() {
                   {/* Document Category */}
                   <div className="space-y-2">
                     <Label htmlFor="document_category" className="text-gray-300">
-                      Document Category <span className="text-red-400">*</span>
+                      {t('unitsUpload.docCategoryLabel')} <span className="text-red-400">*</span>
                     </Label>
                     <Select
                       value={documentCategory}
                       onValueChange={setDocumentCategory}
                     >
                       <SelectTrigger className="bg-black/40 border-gray-700 text-white">
-                        <SelectValue placeholder="Select document type…" />
+                        <SelectValue placeholder={t('unitsUpload.docCategoryPlaceholder')} />
                       </SelectTrigger>
                       <SelectContent className="bg-gray-950 border-gray-700">
                         {DOCUMENT_CATEGORIES.map((cat) => (
@@ -534,13 +537,13 @@ export default function UploadProofPage() {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-gray-500">
-                      Governance documents include permits, RFPs, pre-qualification docs, contracts, certificates, and similar verifiable evidence.
+                      {t('unitsUpload.docCategoryHelp')}
                     </p>
                   </div>
 
                   <div className="space-y-2">
                     <Label className="text-gray-300">
-                      Document File <span className="text-red-400">*</span>
+                      {t('unitsUpload.docFileLabel')} <span className="text-red-400">*</span>
                     </Label>
                     {!selectedFile ? (
                       <div
@@ -548,8 +551,8 @@ export default function UploadProofPage() {
                         className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500/50 hover:bg-blue-500/5 transition-all"
                       >
                         <Upload className="w-10 h-10 text-gray-500 mx-auto mb-3" />
-                        <p className="text-gray-400">Click to select a PDF, DOCX, or XLSX file</p>
-                        <p className="text-gray-600 text-xs mt-1">Maximum 100MB</p>
+                        <p className="text-gray-400">{t('unitsUpload.docFileClick')}</p>
+                        <p className="text-gray-600 text-xs mt-1">{t('unitsUpload.docFileMax')}</p>
                         <input
                           ref={fileInputRef}
                           type="file"
@@ -579,22 +582,22 @@ export default function UploadProofPage() {
                             }}
                             className="bg-black/25 border-gray-700 text-gray-300"
                           >
-                            <RotateCcw className="w-3 h-3 mr-1" />
-                            Change
+                            <RotateCcw className="w-3 h-3 me-1" />
+                            {t('unitsUpload.changeFile')}
                           </Button>
                         </div>
 
                         {/* Hash display */}
                         {hashLoading && (
                           <p className="text-yellow-400 text-xs flex items-center gap-2">
-                            <span className="animate-pulse">Computing integrity hash...</span>
+                            <span className="animate-pulse">{t('unitsUpload.computingHash')}</span>
                           </p>
                         )}
                         {fileHash && !hashLoading && (
                           <div className="flex items-center gap-2 bg-green-900/20 border border-green-800/50 rounded p-2">
                             <ShieldCheck className="w-4 h-4 text-green-400 shrink-0" />
                             <div>
-                              <p className="text-green-400 text-xs font-medium">Integrity hash computed</p>
+                              <p className="text-green-400 text-xs font-medium">{t('unitsUpload.hashComputed')}</p>
                               <p className="text-gray-500 text-xs font-mono">{fileHash.slice(0, 16)}…</p>
                             </div>
                           </div>
@@ -609,16 +612,15 @@ export default function UploadProofPage() {
               {!isDocumentMode && (
                 <div className="space-y-2">
                   <Label className="text-gray-300">
-                    {proofType === 'photo' ? 'Photo' : 'Video'} <span className="text-red-400">*</span>
+                    {proofType === 'photo' ? t('unitsUpload.photoOption') : t('unitsUpload.videoOption')} <span className="text-red-400">*</span>
                   </Label>
                   <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
                     {!capturedMedia ? (
                       <>
-                        {/* Placeholder shown until user activates camera */}
                         {!cameraActive && (
                           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-900/80">
                             <Camera className="w-12 h-12 text-gray-500" />
-                            <p className="text-gray-400 text-sm">Tap to activate camera</p>
+                            <p className="text-gray-400 text-sm">{t('unitsUpload.tapCamera')}</p>
                           </div>
                         )}
                         <video
@@ -656,15 +658,14 @@ export default function UploadProofPage() {
                   <div className="flex gap-2">
                     {!capturedMedia ? (
                       proofType === 'photo' ? (
-                        // Photo: clicking activates camera first, then captures
                         !cameraActive ? (
                           <Button
                             type="button"
                             onClick={handleActivateCamera}
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                           >
-                            <Camera className="w-4 h-4 mr-2" />
-                            Capture Photo
+                            <Camera className="w-4 h-4 me-2" />
+                            {t('unitsUpload.capturePhoto')}
                           </Button>
                         ) : (
                           <Button
@@ -673,20 +674,19 @@ export default function UploadProofPage() {
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                             disabled={!stream}
                           >
-                            <Camera className="w-4 h-4 mr-2" />
-                            Capture Photo
+                            <Camera className="w-4 h-4 me-2" />
+                            {t('unitsUpload.capturePhoto')}
                           </Button>
                         )
                       ) : (
-                        // Video: clicking activates camera first, then starts recording
                         !cameraActive ? (
                           <Button
                             type="button"
                             onClick={handleActivateCamera}
                             className="w-full bg-red-600 hover:bg-red-700 text-white"
                           >
-                            <Circle className="w-4 h-4 mr-2" />
-                            Start Recording
+                            <Circle className="w-4 h-4 me-2" />
+                            {t('unitsUpload.startRecording')}
                           </Button>
                         ) : !isRecording ? (
                           <Button
@@ -695,8 +695,8 @@ export default function UploadProofPage() {
                             className="w-full bg-red-600 hover:bg-red-700 text-white"
                             disabled={!stream}
                           >
-                            <Circle className="w-4 h-4 mr-2" />
-                            Start Recording
+                            <Circle className="w-4 h-4 me-2" />
+                            {t('unitsUpload.startRecording')}
                           </Button>
                         ) : (
                           <Button
@@ -704,8 +704,8 @@ export default function UploadProofPage() {
                             onClick={stopRecording}
                             className="w-full bg-gray-600 hover:bg-gray-700 text-white"
                           >
-                            <Square className="w-4 h-4 mr-2" />
-                            Stop Recording
+                            <Square className="w-4 h-4 me-2" />
+                            {t('unitsUpload.stopRecording')}
                           </Button>
                         )
                       )
@@ -716,26 +716,26 @@ export default function UploadProofPage() {
                         variant="outline"
                         className="w-full bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                       >
-                        <RotateCcw className="w-4 h-4 mr-2" />
-                        Retake {proofType === 'photo' ? 'Photo' : 'Video'}
+                        <RotateCcw className="w-4 h-4 me-2" />
+                        {proofType === 'photo' ? t('unitsUpload.retakePhoto') : t('unitsUpload.retakeVideo')}
                       </Button>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* ── GOVERNANCE STRUCTURED FIELDS (conditional on unit config) ── */}
+              {/* ── GOVERNANCE STRUCTURED FIELDS ── */}
               {unitConfig?.requires_reference_number && (
                 <div className="space-y-2">
                   <Label htmlFor="reference_number" className="text-gray-300">
-                    Reference Number <span className="text-red-400">*</span>
-                    <span className="text-gray-500 text-xs ml-2">(permit, certificate, or invoice ID)</span>
+                    {t('unitsUpload.refNumberLabel')} <span className="text-red-400">*</span>
+                    <span className="text-gray-500 text-xs ms-2">{t('unitsUpload.refNumberHelper')}</span>
                   </Label>
                   <Input
                     id="reference_number"
                     value={referenceNumber}
                     onChange={(e) => setReferenceNumber(e.target.value)}
-                    placeholder="e.g. PERMIT-2026-00123"
+                    placeholder={t('unitsUpload.refNumberPlaceholder')}
                     className="bg-black/40 border-gray-700 text-white"
                   />
                 </div>
@@ -744,8 +744,8 @@ export default function UploadProofPage() {
               {unitConfig?.requires_expiry_date && (
                 <div className="space-y-2">
                   <Label htmlFor="expiry_date" className="text-gray-300">
-                    Expiry Date <span className="text-red-400">*</span>
-                    <span className="text-gray-500 text-xs ml-2">(permit/certificate validity end date)</span>
+                    {t('unitsUpload.expiryDateLabel')} <span className="text-red-400">*</span>
+                    <span className="text-gray-500 text-xs ms-2">{t('unitsUpload.expiryDateHelper')}</span>
                   </Label>
                   <Input
                     id="expiry_date"
@@ -758,17 +758,16 @@ export default function UploadProofPage() {
                 </div>
               )}
 
-              {/* Optional reference/expiry for units that don't require but allow */}
               {!unitConfig?.requires_reference_number && (
                 <div className="space-y-2">
                   <Label htmlFor="reference_number_opt" className="text-gray-300">
-                    Reference Number <span className="text-gray-500 text-xs">(optional)</span>
+                    {t('unitsUpload.refNumberLabel')} <span className="text-gray-500 text-xs">{t('unitsUpload.refNumberOptional')}</span>
                   </Label>
                   <Input
                     id="reference_number_opt"
                     value={referenceNumber}
                     onChange={(e) => setReferenceNumber(e.target.value)}
-                    placeholder="Permit, certificate, or invoice ID (if applicable)"
+                    placeholder={t('unitsUpload.refNumberPlaceholder')}
                     className="bg-black/40 border-gray-700 text-white"
                   />
                 </div>
@@ -777,7 +776,7 @@ export default function UploadProofPage() {
               {!unitConfig?.requires_expiry_date && (
                 <div className="space-y-2">
                   <Label htmlFor="expiry_date_opt" className="text-gray-300">
-                    Expiry Date <span className="text-gray-500 text-xs">(optional)</span>
+                    {t('unitsUpload.expiryDateLabel')} <span className="text-gray-500 text-xs">{t('unitsUpload.expiryDateOptional')}</span>
                   </Label>
                   <Input
                     id="expiry_date_opt"
@@ -793,18 +792,18 @@ export default function UploadProofPage() {
               {/* Notes */}
               <div className="space-y-2">
                 <Label htmlFor="notes" className="text-gray-300">
-                  Notes <span className="text-gray-500 text-xs">(optional)</span>
+                  {t('unitsUpload.notesLabel')} <span className="text-gray-500 text-xs">{t('unitsUpload.notesOptional')}</span>
                 </Label>
                 <Textarea
                   id="notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add any notes or context about this proof..."
+                  placeholder={t('unitsUpload.notesPlaceholder')}
                   className="bg-black/40 border-gray-700 text-white min-h-[80px]"
                 />
               </div>
 
-              {/* Submit — Cancel link above, Submit Proof button below */}
+              {/* Submit */}
               <div className="pt-2 space-y-3">
                 <div className="flex justify-end">
                   <button
@@ -812,7 +811,7 @@ export default function UploadProofPage() {
                     onClick={handleCancel}
                     className="text-gray-400 hover:text-gray-200 text-sm transition-colors"
                   >
-                    Cancel
+                    {t('unitsUpload.cancel')}
                   </button>
                 </div>
                 <Button
@@ -820,7 +819,7 @@ export default function UploadProofPage() {
                   disabled={loading || !canSubmit}
                   className="w-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
                 >
-                  {loading ? 'Uploading...' : 'Submit Proof'}
+                  {loading ? t('unitsUpload.uploading') : t('unitsUpload.submit')}
                 </Button>
               </div>
             </form>
