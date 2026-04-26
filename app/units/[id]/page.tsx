@@ -664,17 +664,17 @@ export default function UnitDetailPage() {
                             }
                           }
                         }}
-                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/28 border border-blue-500/40 rounded-2xl rounded-tl-sm p-4 transition-colors group"
+                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/25 border border-blue-500/40 rounded-2xl rounded-tl-sm px-4 py-3 transition-colors group flex items-center gap-3"
                       >
-                        <div className="flex items-center gap-4">
-                          {/* Large play button */}
-                          <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 shadow-lg transition-colors ${isPlayingExisting ? 'bg-blue-400' : 'bg-blue-500 group-hover:bg-blue-400'}`}>
-                            {isPlayingExisting
-                              ? <Pause className="w-6 h-6 text-white" />
-                              : <Play className="w-6 h-6 text-white fill-white ml-1" />}
-                          </div>
-                          {/* Waveform bars */}
-                          <div className="flex items-center gap-[2px] flex-1 h-10">
+                        {/* Play / Pause circle */}
+                        <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-md transition-colors ${isPlayingExisting ? 'bg-blue-400' : 'bg-blue-500 group-hover:bg-blue-400'}`}>
+                          {isPlayingExisting
+                            ? <Pause className="w-4 h-4 text-white" />
+                            : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
+                        </div>
+                        {/* Waveform + label stacked — no gap, no second row */}
+                        <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+                          <div className="flex items-center gap-[2px] h-8">
                             {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45,70,55,80,40].map((h, i, arr) => (
                               <div
                                 key={i}
@@ -683,27 +683,33 @@ export default function UnitDetailPage() {
                                   height: `${h}%`,
                                   backgroundColor: i / arr.length <= playProgressExisting
                                     ? 'rgb(147 197 253)'
-                                    : isPlayingExisting ? 'rgba(147,197,253,0.45)' : 'rgba(147,197,253,0.5)',
+                                    : 'rgba(147,197,253,0.45)',
                                 }}
                               />
                             ))}
                           </div>
+                          <p className="text-[11px] text-blue-300/60 flex items-center gap-1 leading-none">
+                            <Volume2 className="w-3 h-3 shrink-0" />
+                            {isPlayingExisting ? 'Playing…' : 'Tap to listen — voice note from management'}
+                          </p>
                         </div>
-                        <p className="text-xs text-blue-300/80 mt-3 flex items-center gap-1.5">
-                          <Volume2 className="w-3.5 h-3.5" />
-                          {isPlayingExisting ? 'Playing...' : 'Tap to listen — voice note from management'}
-                        </p>
                       </button>
                     </div>
                   )}
 
-                  {/* "Heard by" receipt — shown below the voice bubble */}
+                  {/* "Heard by" receipt */}
                   {unit.voice_note_signed_url && unit.last_voice_note_play && (
-                    <p className="text-xs text-gray-600 flex items-center gap-1 px-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500/70 shrink-0" />
-                      Last heard by <span className="text-gray-500 font-medium">{unit.last_voice_note_play.full_name}</span>
-                      &nbsp;·&nbsp;{new Date(unit.last_voice_note_play.played_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/8 border border-green-500/20 w-fit">
+                      <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                      <span className="text-xs text-green-300/80">
+                        Last heard by{' '}
+                        <span className="font-semibold text-green-200">{unit.last_voice_note_play.full_name}</span>
+                        <span className="text-green-400/50 ml-1.5">
+                          · {new Date(unit.last_voice_note_play.played_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}{' '}
+                          {new Date(unit.last_voice_note_play.played_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </span>
+                    </div>
                   )}
 
                   {/* Text note bubble */}
@@ -715,20 +721,21 @@ export default function UnitDetailPage() {
                     </div>
                   )}
 
-                  {/* No instructions — soft amber nudge visible to everyone */}
+                  {/* No instructions — helpful nudge, not a guilt trip */}
                   {!unit.voice_note_signed_url && !unit.management_notes && (
-                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/20">
-                      <span className="text-amber-400 mt-0.5 shrink-0 text-base leading-none">⚠</span>
+                    <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700/50">
+                      <MessageSquare className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
                       <div>
-                        <p className="text-amber-300/80 text-sm font-medium">No management instructions recorded</p>
-                        <p className="text-amber-400/50 text-xs mt-0.5">Field team will proceed without a briefing on this unit.</p>
+                        <p className="text-gray-300 text-sm font-medium">
+                          {canEditNotes ? 'Brief your team before they start' : 'No briefing on this unit yet'}
+                        </p>
+                        <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">
+                          {canEditNotes
+                            ? 'A short voice note or written note gives the field team the context they need to execute correctly — requirements, access details, what good looks like.'
+                            : 'Your workstream lead hasn\'t added instructions yet. Check with them if you have questions before starting.'}
+                        </p>
                       </div>
                     </div>
-                  )}
-
-                  {/* Edit prompt for leads only */}
-                  {!unit.voice_note_signed_url && !unit.management_notes && canEditNotes && (
-                    <p className="text-gray-600 text-xs italic px-1">Click Edit above to add a voice note or written instructions.</p>
                   )}
                 </div>
               )}
