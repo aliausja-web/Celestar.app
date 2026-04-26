@@ -269,7 +269,7 @@ export default function NewUnitPage() {
                   {(audioUrl || formData.management_notes) && (
                     <div className="px-4 pt-4 pb-0 space-y-2">
                       {audioUrl && (
-                        <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-3">
+                        <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-2.5">
                           <audio
                             ref={audioRef}
                             src={audioUrl}
@@ -291,7 +291,7 @@ export default function NewUnitPage() {
                           >
                             {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
                           </button>
-                          <div className="flex items-center gap-[2px] flex-1 h-7">
+                          <div className="flex items-center justify-between flex-1 h-7">
                             {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45].map((h, i, arr) => (
                               <div
                                 key={i}
