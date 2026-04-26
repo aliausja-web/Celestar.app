@@ -267,7 +267,7 @@ export default function NewUnitPage() {
 
                   {/* Preview bubbles — shown once content exists */}
                   {(audioUrl || formData.management_notes) && (
-                    <div className="px-4 pt-4 pb-2 space-y-2 border-b border-gray-700/40">
+                    <div className="px-4 pt-4 pb-1 space-y-2">
                       {audioUrl && (
                         <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-3">
                           <audio

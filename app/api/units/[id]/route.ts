@@ -76,6 +76,25 @@ export async function GET(
       .eq('unit_id', params.id)
       .order('uploaded_at', { ascending: false });
 
+    // Get last voice-note play event + player's name
+    const { data: lastPlayEvent } = await supabase
+      .from('unit_status_events')
+      .select('created_at, triggered_by, metadata')
+      .eq('unit_id', params.id)
+      .eq('event_type', 'voice_note_played')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let lastVoiceNotePlay: { played_at: string; full_name: string } | null = null;
+    if (lastPlayEvent) {
+      const meta = (lastPlayEvent.metadata as any) || {};
+      lastVoiceNotePlay = {
+        played_at: lastPlayEvent.created_at,
+        full_name: meta.full_name || meta.email || 'Unknown',
+      };
+    }
+
     return NextResponse.json({
       ...unit,
       // voice_note_url already stores the full public URL; expose as
@@ -84,6 +103,7 @@ export async function GET(
       proofs: proofs || [],
       proof_count: proofs?.length || 0,
       last_proof_time: proofs?.[0]?.uploaded_at || null,
+      last_voice_note_play: lastVoiceNotePlay,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
