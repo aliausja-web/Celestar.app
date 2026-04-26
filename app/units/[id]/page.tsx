@@ -664,17 +664,15 @@ export default function UnitDetailPage() {
                             }
                           }
                         }}
-                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/25 border border-blue-500/40 rounded-2xl rounded-tl-sm px-4 py-2.5 transition-colors group flex items-center gap-3"
+                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/28 border border-blue-500/40 rounded-2xl rounded-tl-sm px-4 py-2.5 transition-colors group"
                       >
-                        {/* Play / Pause circle */}
-                        <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-md transition-colors ${isPlayingExisting ? 'bg-blue-400' : 'bg-blue-500 group-hover:bg-blue-400'}`}>
-                          {isPlayingExisting
-                            ? <Pause className="w-4 h-4 text-white" />
-                            : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
-                        </div>
-                        {/* Waveform + label stacked — no gap, no second row */}
-                        <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                          <div className="flex items-center justify-between h-8">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 shadow-lg transition-colors ${isPlayingExisting ? 'bg-blue-400' : 'bg-blue-500 group-hover:bg-blue-400'}`}>
+                            {isPlayingExisting
+                              ? <Pause className="w-6 h-6 text-white" />
+                              : <Play className="w-6 h-6 text-white fill-white ml-1" />}
+                          </div>
+                          <div className="flex items-center justify-between flex-1 h-10">
                             {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45,70,55,80,40].map((h, i, arr) => (
                               <div
                                 key={i}
@@ -688,11 +686,11 @@ export default function UnitDetailPage() {
                               />
                             ))}
                           </div>
-                          <p className="text-[11px] text-blue-300/60 flex items-center gap-1 leading-none">
-                            <Volume2 className="w-3 h-3 shrink-0" />
-                            {isPlayingExisting ? 'Playing…' : 'Tap to listen — voice note from management'}
-                          </p>
                         </div>
+                        <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5">
+                          <Volume2 className="w-3.5 h-3.5" />
+                          {isPlayingExisting ? 'Playing...' : 'Tap to listen — voice note from management'}
+                        </p>
                       </button>
                     </div>
                   )}
