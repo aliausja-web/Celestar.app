@@ -731,7 +731,7 @@ export default function UnitDetailPage() {
                         </p>
                         <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">
                           {canEditNotes
-                            ? 'A short voice note or written note gives the field team the context they need to execute correctly — requirements, access details, what good looks like.'
+                            ? 'A short voice note or written note gives the field team the context they need to execute correctly: requirements, completion criteria, or instructions.'
                             : 'Your workstream lead hasn\'t added instructions yet. Check with them if you have questions before starting.'}
                         </p>
                       </div>
@@ -747,7 +747,7 @@ export default function UnitDetailPage() {
 
                     {/* Preview bubbles */}
                     {(audioUrlNote || unit.voice_note_signed_url || notesText) && (
-                      <div className="px-4 pt-4 pb-1 space-y-2">
+                      <div className="px-4 pt-4 pb-0 space-y-2">
                         {/* New recording preview (replaces existing) */}
                         {audioUrlNote && (
                           <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-3">
@@ -805,7 +805,7 @@ export default function UnitDetailPage() {
                     )}
 
                     {/* Input area */}
-                    <div className="px-4 pb-4 pt-2 space-y-3">
+                    <div className="px-4 pb-4 pt-0 space-y-2">
                       {/* Idle mic */}
                       {!isRecordingNote && !audioUrlNote && (
                         <button
