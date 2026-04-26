@@ -131,12 +131,14 @@ export default function UnitDetailPage() {
   const [audioUrlNote, setAudioUrlNote] = useState<string | null>(null);
   const [recordingSecsNote, setRecordingSecsNote] = useState(0);
   const [isPlayingNewNote, setIsPlayingNewNote] = useState(false);
+  const [playProgressNew, setPlayProgressNew] = useState(0);
   const mediaRecorderNoteRef = useRef<MediaRecorder | null>(null);
   const chunksNoteRef = useRef<BlobPart[]>([]);
   const timerNoteRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const newAudioRef = useRef<HTMLAudioElement | null>(null);
   // playback of existing saved voice note
   const [isPlayingExisting, setIsPlayingExisting] = useState(false);
+  const [playProgressExisting, setPlayProgressExisting] = useState(0);
   const existingAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -302,6 +304,7 @@ export default function UnitDetailPage() {
     setAudioUrlNote(null);
     setRecordingSecsNote(0);
     setIsPlayingNewNote(false);
+    setPlayProgressNew(0);
   }
 
   function formatSecs(s: number) {
@@ -627,7 +630,11 @@ export default function UnitDetailPage() {
                       <audio
                         ref={existingAudioRef}
                         src={unit.voice_note_signed_url}
-                        onEnded={() => setIsPlayingExisting(false)}
+                        onEnded={() => { setIsPlayingExisting(false); setPlayProgressExisting(0); }}
+                        onTimeUpdate={() => {
+                          const a = existingAudioRef.current;
+                          if (a && a.duration) setPlayProgressExisting(a.currentTime / a.duration);
+                        }}
                         className="hidden"
                       />
                       <button
@@ -647,11 +654,16 @@ export default function UnitDetailPage() {
                           </div>
                           {/* Waveform bars */}
                           <div className="flex items-center gap-[2px] flex-1 h-10">
-                            {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45,70,55,80,40].map((h, i) => (
+                            {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45,70,55,80,40].map((h, i, arr) => (
                               <div
                                 key={i}
-                                className={`w-[2px] rounded-[1px] shrink-0 transition-all ${isPlayingExisting ? 'bg-blue-300' : 'bg-blue-400/60 group-hover:bg-blue-400/80'}`}
-                                style={{ height: `${h}%`, animationDelay: `${i * 40}ms` }}
+                                className="w-[2px] rounded-[1px] shrink-0 transition-colors duration-75"
+                                style={{
+                                  height: `${h}%`,
+                                  backgroundColor: i / arr.length <= playProgressExisting
+                                    ? 'rgb(147 197 253)'
+                                    : isPlayingExisting ? 'rgba(147,197,253,0.45)' : 'rgba(147,197,253,0.5)',
+                                }}
                               />
                             ))}
                           </div>
@@ -691,7 +703,16 @@ export default function UnitDetailPage() {
                         {/* New recording preview (replaces existing) */}
                         {audioUrlNote && (
                           <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-3">
-                            <audio ref={newAudioRef} src={audioUrlNote} onEnded={() => setIsPlayingNewNote(false)} className="hidden" />
+                            <audio
+                              ref={newAudioRef}
+                              src={audioUrlNote}
+                              onEnded={() => { setIsPlayingNewNote(false); setPlayProgressNew(0); }}
+                              onTimeUpdate={() => {
+                                const a = newAudioRef.current;
+                                if (a && a.duration) setPlayProgressNew(a.currentTime / a.duration);
+                              }}
+                              className="hidden"
+                            />
                             <button
                               type="button"
                               onClick={() => {
@@ -704,8 +725,15 @@ export default function UnitDetailPage() {
                               {isPlayingNewNote ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
                             </button>
                             <div className="flex items-center gap-[2px] flex-1 h-7">
-                              {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45].map((h, i) => (
-                                <div key={i} className={`w-[2px] rounded-[1px] shrink-0 ${isPlayingNewNote ? 'bg-blue-400' : 'bg-blue-400/50'}`} style={{ height: `${h}%` }} />
+                              {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45].map((h, i, arr) => (
+                                <div
+                                  key={i}
+                                  className="w-[2px] rounded-[1px] shrink-0 transition-colors duration-75"
+                                  style={{
+                                    height: `${h}%`,
+                                    backgroundColor: i / arr.length <= playProgressNew ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.35)',
+                                  }}
+                                />
                               ))}
                             </div>
                             <button type="button" onClick={deleteNewRecording} className="text-gray-500 hover:text-red-400 transition-colors ml-1">

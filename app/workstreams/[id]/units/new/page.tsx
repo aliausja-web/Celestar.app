@@ -30,6 +30,7 @@ export default function NewUnitPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playProgress, setPlayProgress] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -96,6 +97,7 @@ export default function NewUnitPage() {
     setAudioUrl(null);
     setRecordingSeconds(0);
     setIsPlaying(false);
+    setPlayProgress(0);
   }
 
   function formatSeconds(s: number) {
@@ -257,7 +259,7 @@ export default function NewUnitPage() {
                   <h3 className="text-white font-semibold">Notes from Management</h3>
                 </div>
                 <p className="text-sm text-gray-500 mb-4">
-                  Voice and written guidance for the field team — requirements, acceptance criteria, instructions.
+                  Voice and written guidance for the field team: requirements, acceptance criteria, instructions.
                 </p>
 
                 {/* Unified chat-style composer */}
@@ -268,7 +270,16 @@ export default function NewUnitPage() {
                     <div className="px-4 pt-4 pb-2 space-y-2 border-b border-gray-700/40">
                       {audioUrl && (
                         <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-3">
-                          <audio ref={audioRef} src={audioUrl} onEnded={() => setIsPlaying(false)} className="hidden" />
+                          <audio
+                            ref={audioRef}
+                            src={audioUrl}
+                            onEnded={() => { setIsPlaying(false); setPlayProgress(0); }}
+                            onTimeUpdate={() => {
+                              const a = audioRef.current;
+                              if (a && a.duration) setPlayProgress(a.currentTime / a.duration);
+                            }}
+                            className="hidden"
+                          />
                           <button
                             type="button"
                             onClick={() => {
@@ -281,8 +292,15 @@ export default function NewUnitPage() {
                             {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
                           </button>
                           <div className="flex items-center gap-[2px] flex-1 h-7">
-                            {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45].map((h, i) => (
-                              <div key={i} className={`w-[2px] rounded-[1px] shrink-0 transition-opacity ${isPlaying ? 'bg-blue-400' : 'bg-blue-400/50'}`} style={{ height: `${h}%` }} />
+                            {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45].map((h, i, arr) => (
+                              <div
+                                key={i}
+                                className="w-[2px] rounded-[1px] shrink-0 transition-colors duration-75"
+                                style={{
+                                  height: `${h}%`,
+                                  backgroundColor: i / arr.length <= playProgress ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.35)',
+                                }}
+                              />
                             ))}
                           </div>
                           <button type="button" onClick={deleteRecording} className="text-gray-500 hover:text-red-400 transition-colors ml-1">
@@ -299,7 +317,7 @@ export default function NewUnitPage() {
                   )}
 
                   {/* Input area */}
-                  <div className="p-4 space-y-4">
+                  <div className="px-4 pb-4 pt-3 space-y-3">
                     {/* Idle mic button */}
                     {!isRecording && !audioUrl && (
                       <button
