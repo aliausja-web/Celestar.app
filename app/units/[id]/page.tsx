@@ -664,7 +664,7 @@ export default function UnitDetailPage() {
                             }
                           }
                         }}
-                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/25 border border-blue-500/40 rounded-2xl rounded-tl-sm px-4 py-3 transition-colors group flex items-center gap-3"
+                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/25 border border-blue-500/40 rounded-2xl rounded-tl-sm px-4 py-2.5 transition-colors group flex items-center gap-3"
                       >
                         {/* Play / Pause circle */}
                         <div className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-md transition-colors ${isPlayingExisting ? 'bg-blue-400' : 'bg-blue-500 group-hover:bg-blue-400'}`}>
@@ -674,7 +674,7 @@ export default function UnitDetailPage() {
                         </div>
                         {/* Waveform + label stacked — no gap, no second row */}
                         <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                          <div className="flex items-center gap-[2px] h-8">
+                          <div className="flex items-center justify-between h-8">
                             {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45,70,55,80,40].map((h, i, arr) => (
                               <div
                                 key={i}
@@ -750,7 +750,7 @@ export default function UnitDetailPage() {
                       <div className="px-4 pt-4 pb-0 space-y-2">
                         {/* New recording preview (replaces existing) */}
                         {audioUrlNote && (
-                          <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-3">
+                          <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-2.5">
                             <audio
                               ref={newAudioRef}
                               src={audioUrlNote}
@@ -772,7 +772,7 @@ export default function UnitDetailPage() {
                             >
                               {isPlayingNewNote ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
                             </button>
-                            <div className="flex items-center gap-[2px] flex-1 h-7">
+                            <div className="flex items-center justify-between flex-1 h-7">
                               {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45].map((h, i, arr) => (
                                 <div
                                   key={i}
