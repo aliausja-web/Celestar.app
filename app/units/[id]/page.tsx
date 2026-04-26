@@ -32,6 +32,7 @@ import {
   Square,
   Trash2,
   Pencil,
+  Volume2,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isPast, differenceInDays } from 'date-fns';
 import { supabase } from '@/lib/firebase';
@@ -619,114 +620,78 @@ export default function UnitDetailPage() {
 
               {/* View mode */}
               {!editingNotes && (
-                <>
-                  {/* Existing voice note player */}
+                <div className="space-y-3">
+                  {/* Prominent voice note bubble */}
                   {unit.voice_note_signed_url && (
-                    <div className="bg-black/30 border border-gray-700 rounded-lg p-4">
-                      <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">Voice Note</p>
+                    <div>
                       <audio
                         ref={existingAudioRef}
                         src={unit.voice_note_signed_url}
                         onEnded={() => setIsPlayingExisting(false)}
                         className="hidden"
                       />
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => {
-                            if (!existingAudioRef.current) return;
-                            if (isPlayingExisting) {
-                              existingAudioRef.current.pause();
-                              setIsPlayingExisting(false);
-                            } else {
-                              existingAudioRef.current.play();
-                              setIsPlayingExisting(true);
-                            }
-                          }}
-                          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600/15 border border-blue-500/35 text-blue-400 hover:bg-blue-600/25 transition-colors text-sm font-medium"
-                        >
-                          {isPlayingExisting
-                            ? <><Pause className="w-4 h-4" /> Pause</>
-                            : <><Play className="w-4 h-4" /> Play Voice Note</>}
-                        </button>
-                        <span className="text-xs text-gray-500">Tap to listen</span>
-                      </div>
+                      <button
+                        onClick={() => {
+                          if (!existingAudioRef.current) return;
+                          if (isPlayingExisting) { existingAudioRef.current.pause(); setIsPlayingExisting(false); }
+                          else { existingAudioRef.current.play(); setIsPlayingExisting(true); }
+                        }}
+                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/28 border border-blue-500/40 rounded-2xl rounded-tl-sm p-4 transition-colors group"
+                      >
+                        <div className="flex items-center gap-4">
+                          {/* Large play button */}
+                          <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 shadow-lg transition-colors ${isPlayingExisting ? 'bg-blue-400' : 'bg-blue-500 group-hover:bg-blue-400'}`}>
+                            {isPlayingExisting
+                              ? <Pause className="w-6 h-6 text-white" />
+                              : <Play className="w-6 h-6 text-white fill-white ml-1" />}
+                          </div>
+                          {/* Waveform bars */}
+                          <div className="flex items-end gap-0.5 flex-1 h-10">
+                            {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45,70,55,80,40].map((h, i) => (
+                              <div
+                                key={i}
+                                className={`flex-1 rounded-full transition-all ${isPlayingExisting ? 'bg-blue-300' : 'bg-blue-400/60 group-hover:bg-blue-400/80'}`}
+                                style={{ height: `${h}%`, animationDelay: `${i * 40}ms` }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <p className="text-xs text-blue-300/80 mt-3 flex items-center gap-1.5">
+                          <Volume2 className="w-3.5 h-3.5" />
+                          {isPlayingExisting ? 'Playing...' : 'Tap to listen — voice note from management'}
+                        </p>
+                      </button>
                     </div>
                   )}
 
-                  {/* Written notes */}
-                  {unit.management_notes ? (
-                    <div className="bg-black/20 border border-gray-700/60 rounded-lg p-4">
-                      <p className="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">
+                  {/* Text note bubble */}
+                  {unit.management_notes && (
+                    <div className="bg-gray-800/60 border border-gray-700/40 rounded-2xl rounded-tl-sm px-4 py-3">
+                      <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">
                         {unit.management_notes}
                       </p>
                     </div>
-                  ) : !unit.voice_note_signed_url && canEditNotes ? (
-                    <p className="text-gray-600 text-sm italic">
-                      No notes added yet. Click Edit to add a voice note or written instructions.
-                    </p>
-                  ) : null}
-                </>
+                  )}
+
+                  {/* Empty state for leads */}
+                  {!unit.voice_note_signed_url && !unit.management_notes && canEditNotes && (
+                    <p className="text-gray-600 text-sm italic">No notes yet — click Edit to add a voice note or written instructions.</p>
+                  )}
+                </div>
               )}
 
-              {/* Edit mode (leads/owners only) */}
+              {/* Edit mode — chat-style composer */}
               {editingNotes && (
                 <div className="space-y-4">
+                  <div className="bg-black/30 border border-gray-700 rounded-xl overflow-hidden">
 
-                  {/* Voice recorder */}
-                  <div>
-                    <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Voice Note</p>
-                    <div className="bg-black/30 border border-gray-700 rounded-lg p-4">
-                      <div className="flex items-center gap-3 flex-wrap">
-
-                        {/* Idle — keep existing or record new */}
-                        {!audioUrlNote && !isRecordingNote && (
-                          <div className="flex items-center gap-3 flex-wrap">
-                            {unit.voice_note_signed_url && (
-                              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-600/10 border border-green-500/25">
-                                <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
-                                <span className="text-green-400 text-sm">Existing note saved</span>
-                              </div>
-                            )}
-                            <button
-                              type="button"
-                              onClick={startRecordingNote}
-                              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600/15 border border-blue-500/35 text-blue-400 hover:bg-blue-600/25 transition-colors text-sm font-medium"
-                            >
-                              <Mic className="w-4 h-4" />
-                              {unit.voice_note_signed_url ? 'Record New Note' : 'Record Voice Note'}
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Recording */}
-                        {isRecordingNote && (
-                          <div className="flex items-center gap-3">
-                            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-                            <span className="text-red-400 font-mono text-sm tabular-nums">{formatSecs(recordingSecsNote)}</span>
-                            <button
-                              type="button"
-                              onClick={stopRecordingNote}
-                              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-600/20 border border-red-500/40 text-red-400 hover:bg-red-600/30 transition-colors text-sm"
-                            >
-                              <Square className="w-3.5 h-3.5 fill-current" />
-                              Stop
-                            </button>
-                          </div>
-                        )}
-
-                        {/* New recording ready */}
-                        {audioUrlNote && !isRecordingNote && (
-                          <div className="flex items-center gap-3">
-                            <audio
-                              ref={newAudioRef}
-                              src={audioUrlNote}
-                              onEnded={() => setIsPlayingNewNote(false)}
-                              className="hidden"
-                            />
-                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-600/10 border border-blue-500/25">
-                              <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
-                              <span className="text-blue-400 text-sm font-medium">New note recorded</span>
-                            </div>
+                    {/* Preview bubbles */}
+                    {(audioUrlNote || unit.voice_note_signed_url || notesText) && (
+                      <div className="px-4 pt-4 pb-2 space-y-2 border-b border-gray-700/40">
+                        {/* New recording preview (replaces existing) */}
+                        {audioUrlNote && (
+                          <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-3">
+                            <audio ref={newAudioRef} src={audioUrlNote} onEnded={() => setIsPlayingNewNote(false)} className="hidden" />
                             <button
                               type="button"
                               onClick={() => {
@@ -734,52 +699,105 @@ export default function UnitDetailPage() {
                                 if (isPlayingNewNote) { newAudioRef.current.pause(); setIsPlayingNewNote(false); }
                                 else { newAudioRef.current.play(); setIsPlayingNewNote(true); }
                               }}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-300 hover:bg-gray-700 transition-colors text-sm"
+                              className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center shrink-0 hover:bg-blue-400 transition-colors"
                             >
-                              {isPlayingNewNote ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                              {isPlayingNewNote ? 'Pause' : 'Play'}
+                              {isPlayingNewNote ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
                             </button>
-                            <button
-                              type="button"
-                              onClick={deleteNewRecording}
-                              title="Discard new recording"
-                              className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            >
+                            <div className="flex items-end gap-0.5 flex-1 h-7">
+                              {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45].map((h, i) => (
+                                <div key={i} className={`flex-1 rounded-full ${isPlayingNewNote ? 'bg-blue-400' : 'bg-blue-400/50'}`} style={{ height: `${h}%` }} />
+                              ))}
+                            </div>
+                            <button type="button" onClick={deleteNewRecording} className="text-gray-500 hover:text-red-400 transition-colors ml-1">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         )}
+                        {/* Existing voice note (when no new recording yet) */}
+                        {!audioUrlNote && unit.voice_note_signed_url && (
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-green-600/10 border border-green-500/25">
+                            <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                            <span className="text-green-400 text-sm">Existing voice note saved</span>
+                          </div>
+                        )}
+                        {notesText && (
+                          <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl rounded-tl-sm px-4 py-3">
+                            <p className="text-gray-200 text-sm whitespace-pre-wrap">{notesText}</p>
+                          </div>
+                        )}
                       </div>
+                    )}
+
+                    {/* Input area */}
+                    <div className="p-4 space-y-4">
+                      {/* Idle mic */}
+                      {!isRecordingNote && !audioUrlNote && (
+                        <button
+                          type="button"
+                          onClick={startRecordingNote}
+                          className="w-full flex flex-col items-center gap-2 py-5 rounded-xl bg-blue-600/10 border border-blue-500/25 border-dashed hover:bg-blue-600/18 hover:border-blue-500/45 transition-all group"
+                        >
+                          <div className="w-14 h-14 rounded-full bg-blue-600/20 border-2 border-blue-500/50 flex items-center justify-center group-hover:bg-blue-600/30 transition-colors">
+                            <Mic className="w-6 h-6 text-blue-400" />
+                          </div>
+                          <span className="text-blue-400 text-sm font-medium">
+                            {unit.voice_note_signed_url ? 'Tap to record new voice note' : 'Tap to record voice note'}
+                          </span>
+                        </button>
+                      )}
+
+                      {/* Active recording */}
+                      {isRecordingNote && (
+                        <div className="flex flex-col items-center gap-3 py-3">
+                          <div className="relative flex items-center justify-center">
+                            <div className="w-16 h-16 rounded-full bg-red-500/20 animate-ping absolute" />
+                            <div className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center relative z-10">
+                              <Mic className="w-7 h-7 text-white" />
+                            </div>
+                          </div>
+                          <span className="text-red-400 font-mono text-xl tabular-nums">{formatSecs(recordingSecsNote)}</span>
+                          <button
+                            type="button"
+                            onClick={stopRecordingNote}
+                            className="flex items-center gap-2 px-5 py-2 rounded-full bg-red-600/20 border border-red-500/40 text-red-400 hover:bg-red-600/30 transition-colors text-sm font-medium"
+                          >
+                            <Square className="w-3.5 h-3.5 fill-current" /> Stop recording
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Re-record */}
+                      {audioUrlNote && !isRecordingNote && (
+                        <button type="button" onClick={deleteNewRecording} className="w-full flex items-center justify-center gap-1.5 py-1 text-gray-600 hover:text-gray-400 text-xs transition-colors">
+                          <Mic className="w-3 h-3" /> Re-record
+                        </button>
+                      )}
+
+                      {/* Divider */}
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-px bg-gray-700/60" />
+                        <span className="text-xs text-gray-600">written note</span>
+                        <div className="flex-1 h-px bg-gray-700/60" />
+                      </div>
+
+                      {/* Text input */}
+                      <Textarea
+                        value={notesText}
+                        onChange={(e) => setNotesText(e.target.value)}
+                        placeholder="Type a written note for the field team..."
+                        className="bg-transparent border-0 border-b border-gray-700/60 rounded-none text-white text-sm resize-none focus-visible:ring-0 focus-visible:border-blue-500/50 px-0 min-h-[56px] placeholder:text-gray-600"
+                      />
                     </div>
                   </div>
 
-                  {/* Written notes */}
-                  <div>
-                    <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Written Notes</p>
-                    <Textarea
-                      value={notesText}
-                      onChange={(e) => setNotesText(e.target.value)}
-                      placeholder="Requirements, acceptance criteria, guidelines for the field team..."
-                      className="bg-black/40 border-gray-700 text-white min-h-[100px]"
-                    />
-                  </div>
-
                   {/* Save / Cancel */}
-                  <div className="flex gap-2 pt-1">
-                    <Button
-                      onClick={saveNotes}
-                      disabled={savingNotes}
-                      className="bg-blue-600 hover:bg-blue-700 text-white"
-                    >
+                  <div className="flex gap-2">
+                    <Button onClick={saveNotes} disabled={savingNotes} className="bg-blue-600 hover:bg-blue-700 text-white">
                       {savingNotes ? 'Saving...' : 'Save Notes'}
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => {
-                        setEditingNotes(false);
-                        setNotesText(unit.management_notes ?? '');
-                        deleteNewRecording();
-                      }}
+                      onClick={() => { setEditingNotes(false); setNotesText(unit.management_notes ?? ''); deleteNewRecording(); }}
                       disabled={savingNotes}
                       className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                     >

@@ -257,93 +257,107 @@ export default function NewUnitPage() {
                   <h3 className="text-white font-semibold">Notes from Management</h3>
                 </div>
                 <p className="text-sm text-gray-500 mb-4">
-                  Leave voice and written guidance for the field team — requirements, acceptance criteria, and instructions they need before starting.
+                  Voice and written guidance for the field team — requirements, acceptance criteria, instructions.
                 </p>
 
-                {/* Voice recorder */}
-                <div className="bg-black/30 border border-gray-700 rounded-lg p-4 mb-3">
-                  <div className="flex items-center gap-3 flex-wrap">
+                {/* Unified chat-style composer */}
+                <div className="bg-black/30 border border-gray-700 rounded-xl overflow-hidden">
 
-                    {/* Idle — no recording yet */}
-                    {!audioUrl && !isRecording && (
+                  {/* Preview bubbles — shown once content exists */}
+                  {(audioUrl || formData.management_notes) && (
+                    <div className="px-4 pt-4 pb-2 space-y-2 border-b border-gray-700/40">
+                      {audioUrl && (
+                        <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-3">
+                          <audio ref={audioRef} src={audioUrl} onEnded={() => setIsPlaying(false)} className="hidden" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!audioRef.current) return;
+                              if (isPlaying) { audioRef.current.pause(); setIsPlaying(false); }
+                              else { audioRef.current.play(); setIsPlaying(true); }
+                            }}
+                            className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center shrink-0 hover:bg-blue-400 transition-colors"
+                          >
+                            {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
+                          </button>
+                          <div className="flex items-end gap-0.5 flex-1 h-7">
+                            {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45].map((h, i) => (
+                              <div key={i} className={`flex-1 rounded-full transition-opacity ${isPlaying ? 'bg-blue-400' : 'bg-blue-400/50'}`} style={{ height: `${h}%` }} />
+                            ))}
+                          </div>
+                          <button type="button" onClick={deleteRecording} className="text-gray-500 hover:text-red-400 transition-colors ml-1">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                      {formData.management_notes && (
+                        <div className="bg-gray-800/60 border border-gray-700/50 rounded-2xl rounded-tl-sm px-4 py-3">
+                          <p className="text-gray-200 text-sm whitespace-pre-wrap">{formData.management_notes}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Input area */}
+                  <div className="p-4 space-y-4">
+                    {/* Idle mic button */}
+                    {!isRecording && !audioUrl && (
                       <button
                         type="button"
                         onClick={startRecording}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600/15 border border-blue-500/35 text-blue-400 hover:bg-blue-600/25 transition-colors text-sm font-medium"
+                        className="w-full flex flex-col items-center gap-2 py-5 rounded-xl bg-blue-600/10 border border-blue-500/25 border-dashed hover:bg-blue-600/18 hover:border-blue-500/45 transition-all group"
                       >
-                        <Mic className="w-4 h-4" />
-                        Record Voice Note
+                        <div className="w-14 h-14 rounded-full bg-blue-600/20 border-2 border-blue-500/50 flex items-center justify-center group-hover:bg-blue-600/30 transition-colors">
+                          <Mic className="w-6 h-6 text-blue-400" />
+                        </div>
+                        <span className="text-blue-400 text-sm font-medium">Tap to record voice note</span>
+                        <span className="text-gray-600 text-xs">Field team will hear this before starting</span>
                       </button>
                     )}
 
-                    {/* Recording in progress */}
+                    {/* Active recording */}
                     {isRecording && (
-                      <div className="flex items-center gap-3">
-                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-                        <span className="text-red-400 font-mono text-sm tabular-nums">
-                          {formatSeconds(recordingSeconds)}
-                        </span>
+                      <div className="flex flex-col items-center gap-3 py-3">
+                        <div className="relative flex items-center justify-center">
+                          <div className="w-16 h-16 rounded-full bg-red-500/20 animate-ping absolute" />
+                          <div className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center relative z-10">
+                            <Mic className="w-7 h-7 text-white" />
+                          </div>
+                        </div>
+                        <span className="text-red-400 font-mono text-xl tabular-nums">{formatSeconds(recordingSeconds)}</span>
                         <button
                           type="button"
                           onClick={stopRecording}
-                          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-600/20 border border-red-500/40 text-red-400 hover:bg-red-600/30 transition-colors text-sm"
+                          className="flex items-center gap-2 px-5 py-2 rounded-full bg-red-600/20 border border-red-500/40 text-red-400 hover:bg-red-600/30 transition-colors text-sm font-medium"
                         >
-                          <Square className="w-3.5 h-3.5 fill-current" />
-                          Stop
+                          <Square className="w-3.5 h-3.5 fill-current" /> Stop recording
                         </button>
                       </div>
                     )}
 
-                    {/* Recording saved */}
+                    {/* Re-record link */}
                     {audioUrl && !isRecording && (
-                      <div className="flex items-center gap-3">
-                        <audio
-                          ref={audioRef}
-                          src={audioUrl}
-                          onEnded={() => setIsPlaying(false)}
-                          className="hidden"
-                        />
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-600/10 border border-green-500/25">
-                          <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
-                          <span className="text-green-400 text-sm font-medium">Voice note recorded</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!audioRef.current) return;
-                            if (isPlaying) {
-                              audioRef.current.pause();
-                              setIsPlaying(false);
-                            } else {
-                              audioRef.current.play();
-                              setIsPlaying(true);
-                            }
-                          }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700/50 border border-gray-600 text-gray-300 hover:bg-gray-700 transition-colors text-sm"
-                        >
-                          {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                          {isPlaying ? 'Pause' : 'Play'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={deleteRecording}
-                          title="Delete recording"
-                          className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      <button type="button" onClick={deleteRecording} className="w-full flex items-center justify-center gap-1.5 py-1 text-gray-600 hover:text-gray-400 text-xs transition-colors">
+                        <Mic className="w-3 h-3" /> Re-record voice note
+                      </button>
                     )}
+
+                    {/* Divider */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 h-px bg-gray-700/60" />
+                      <span className="text-xs text-gray-600">written note</span>
+                      <div className="flex-1 h-px bg-gray-700/60" />
+                    </div>
+
+                    {/* Text input */}
+                    <Textarea
+                      value={formData.management_notes}
+                      onChange={(e) => setFormData({ ...formData, management_notes: e.target.value })}
+                      placeholder="Type a written note for the field team..."
+                      className="bg-transparent border-0 border-b border-gray-700/60 rounded-none text-white text-sm resize-none focus-visible:ring-0 focus-visible:border-blue-500/50 px-0 min-h-[56px] placeholder:text-gray-600"
+                    />
                   </div>
                 </div>
-
-                {/* Written notes */}
-                <Textarea
-                  value={formData.management_notes}
-                  onChange={(e) => setFormData({ ...formData, management_notes: e.target.value })}
-                  placeholder="Written notes — requirements, acceptance criteria, guidelines for the field team..."
-                  className="bg-black/40 border-gray-700 text-white min-h-[90px]"
-                />
               </div>
 
               {/* Advanced Options */}
