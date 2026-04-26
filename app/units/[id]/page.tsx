@@ -646,11 +646,11 @@ export default function UnitDetailPage() {
                               : <Play className="w-6 h-6 text-white fill-white ml-1" />}
                           </div>
                           {/* Waveform bars */}
-                          <div className="flex items-end gap-0.5 flex-1 h-10">
+                          <div className="flex items-center gap-[2px] flex-1 h-10">
                             {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45,70,55,80,40].map((h, i) => (
                               <div
                                 key={i}
-                                className={`flex-1 rounded-full transition-all ${isPlayingExisting ? 'bg-blue-300' : 'bg-blue-400/60 group-hover:bg-blue-400/80'}`}
+                                className={`w-[2px] rounded-[1px] shrink-0 transition-all ${isPlayingExisting ? 'bg-blue-300' : 'bg-blue-400/60 group-hover:bg-blue-400/80'}`}
                                 style={{ height: `${h}%`, animationDelay: `${i * 40}ms` }}
                               />
                             ))}
@@ -703,9 +703,9 @@ export default function UnitDetailPage() {
                             >
                               {isPlayingNewNote ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
                             </button>
-                            <div className="flex items-end gap-0.5 flex-1 h-7">
+                            <div className="flex items-center gap-[2px] flex-1 h-7">
                               {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45].map((h, i) => (
-                                <div key={i} className={`flex-1 rounded-full ${isPlayingNewNote ? 'bg-blue-400' : 'bg-blue-400/50'}`} style={{ height: `${h}%` }} />
+                                <div key={i} className={`w-[2px] rounded-[1px] shrink-0 ${isPlayingNewNote ? 'bg-blue-400' : 'bg-blue-400/50'}`} style={{ height: `${h}%` }} />
                               ))}
                             </div>
                             <button type="button" onClick={deleteNewRecording} className="text-gray-500 hover:text-red-400 transition-colors ml-1">
