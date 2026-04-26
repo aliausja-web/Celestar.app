@@ -99,6 +99,7 @@ interface Unit {
   // Management notes
   management_notes?: string;
   voice_note_signed_url?: string;
+  last_voice_note_play?: { played_at: string; full_name: string } | null;
 }
 
 export default function UnitDetailPage() {
@@ -140,6 +141,8 @@ export default function UnitDetailPage() {
   const [isPlayingExisting, setIsPlayingExisting] = useState(false);
   const [playProgressExisting, setPlayProgressExisting] = useState(0);
   const existingAudioRef = useRef<HTMLAudioElement | null>(null);
+  // play-tracking: log once per page load, not on every tap
+  const hasLoggedPlayRef = useRef(false);
 
   useEffect(() => {
     if (unitId) {
@@ -638,10 +641,28 @@ export default function UnitDetailPage() {
                         className="hidden"
                       />
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (!existingAudioRef.current) return;
-                          if (isPlayingExisting) { existingAudioRef.current.pause(); setIsPlayingExisting(false); }
-                          else { existingAudioRef.current.play(); setIsPlayingExisting(true); }
+                          if (isPlayingExisting) {
+                            existingAudioRef.current.pause();
+                            setIsPlayingExisting(false);
+                          } else {
+                            existingAudioRef.current.play();
+                            setIsPlayingExisting(true);
+                            // Log play once per page load — fire & forget
+                            if (!hasLoggedPlayRef.current) {
+                              hasLoggedPlayRef.current = true;
+                              try {
+                                const { data: { session } } = await supabase.auth.getSession();
+                                if (session) {
+                                  fetch(`/api/units/${unitId}/voice-note-play`, {
+                                    method: 'POST',
+                                    headers: { Authorization: `Bearer ${session.access_token}` },
+                                  }).catch(() => {});
+                                }
+                              } catch {}
+                            }
+                          }
                         }}
                         className="w-full text-left bg-blue-600/20 hover:bg-blue-600/28 border border-blue-500/40 rounded-2xl rounded-tl-sm p-4 transition-colors group"
                       >
@@ -676,6 +697,15 @@ export default function UnitDetailPage() {
                     </div>
                   )}
 
+                  {/* "Heard by" receipt — shown below the voice bubble */}
+                  {unit.voice_note_signed_url && unit.last_voice_note_play && (
+                    <p className="text-xs text-gray-600 flex items-center gap-1 px-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500/70 shrink-0" />
+                      Last heard by <span className="text-gray-500 font-medium">{unit.last_voice_note_play.full_name}</span>
+                      &nbsp;·&nbsp;{new Date(unit.last_voice_note_play.played_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  )}
+
                   {/* Text note bubble */}
                   {unit.management_notes && (
                     <div className="bg-gray-800/60 border border-gray-700/40 rounded-2xl rounded-tl-sm px-4 py-3">
@@ -685,9 +715,20 @@ export default function UnitDetailPage() {
                     </div>
                   )}
 
-                  {/* Empty state for leads */}
+                  {/* No instructions — soft amber nudge visible to everyone */}
+                  {!unit.voice_note_signed_url && !unit.management_notes && (
+                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/8 border border-amber-500/20">
+                      <span className="text-amber-400 mt-0.5 shrink-0 text-base leading-none">⚠</span>
+                      <div>
+                        <p className="text-amber-300/80 text-sm font-medium">No management instructions recorded</p>
+                        <p className="text-amber-400/50 text-xs mt-0.5">Field team will proceed without a briefing on this unit.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Edit prompt for leads only */}
                   {!unit.voice_note_signed_url && !unit.management_notes && canEditNotes && (
-                    <p className="text-gray-600 text-sm italic">No notes yet — click Edit to add a voice note or written instructions.</p>
+                    <p className="text-gray-600 text-xs italic px-1">Click Edit above to add a voice note or written instructions.</p>
                   )}
                 </div>
               )}
@@ -699,7 +740,7 @@ export default function UnitDetailPage() {
 
                     {/* Preview bubbles */}
                     {(audioUrlNote || unit.voice_note_signed_url || notesText) && (
-                      <div className="px-4 pt-4 pb-2 space-y-2 border-b border-gray-700/40">
+                      <div className="px-4 pt-4 pb-1 space-y-2">
                         {/* New recording preview (replaces existing) */}
                         {audioUrlNote && (
                           <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-3">
@@ -757,7 +798,7 @@ export default function UnitDetailPage() {
                     )}
 
                     {/* Input area */}
-                    <div className="p-4 space-y-4">
+                    <div className="px-4 pb-4 pt-2 space-y-3">
                       {/* Idle mic */}
                       {!isRecordingNote && !audioUrlNote && (
                         <button
