@@ -731,7 +731,7 @@ export default function UnitDetailPage() {
                         </p>
                         <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">
                           {canEditNotes
-                            ? 'A short voice note or written note gives the field team the context they need to execute correctly — requirements, access details, what good looks like.'
+                            ? 'A short voice note or written note gives the field team the context they need to execute correctly: requirements, completion criteria, or instructions.'
                             : 'Your workstream lead hasn\'t added instructions yet. Check with them if you have questions before starting.'}
                         </p>
                       </div>
