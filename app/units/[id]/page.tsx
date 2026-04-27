@@ -749,7 +749,7 @@ export default function UnitDetailPage() {
                       <div className="px-4 pt-4 pb-0 space-y-2">
                         {/* New recording preview (replaces existing) */}
                         {audioUrlNote && (
-                          <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-2.5">
+                          <div className="bg-blue-600/20 border border-blue-500/40 rounded-2xl rounded-tl-sm px-4 py-2.5">
                             <audio
                               ref={newAudioRef}
                               src={audioUrlNote}
@@ -760,40 +760,84 @@ export default function UnitDetailPage() {
                               }}
                               className="hidden"
                             />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!newAudioRef.current) return;
-                                if (isPlayingNewNote) { newAudioRef.current.pause(); setIsPlayingNewNote(false); }
-                                else { newAudioRef.current.play(); setIsPlayingNewNote(true); }
-                              }}
-                              className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center shrink-0 hover:bg-blue-400 transition-colors"
-                            >
-                              {isPlayingNewNote ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
-                            </button>
-                            <div className="flex items-center gap-[2px] flex-1 h-7">
-                              {[30,45,60,35,75,50,80,40,70,55,35,65,85,45,70,30,60,75,50,40,80,55,65,35,70,45,85,60,40,75,55,30,65,80,45,70,35,60,85,50,40,75,65,30,80,55,45,70,35,60].map((h, i, arr) => (
-                                <div
-                                  key={i}
-                                  className="rounded-[1px] shrink-0 transition-colors duration-75"
-                                  style={{
-                                    width: `calc((100% - ${(arr.length - 1) * 2}px) / ${arr.length})`,
-                                    height: `${h}%`,
-                                    backgroundColor: i / arr.length <= playProgressNew ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.35)',
-                                  }}
-                                />
-                              ))}
+                            <div className="flex items-center gap-4">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!newAudioRef.current) return;
+                                  if (isPlayingNewNote) { newAudioRef.current.pause(); setIsPlayingNewNote(false); }
+                                  else { newAudioRef.current.play(); setIsPlayingNewNote(true); }
+                                }}
+                                className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 shadow-lg transition-colors ${isPlayingNewNote ? 'bg-blue-400' : 'bg-blue-500 hover:bg-blue-400'}`}
+                              >
+                                {isPlayingNewNote ? <Pause className="w-6 h-6 text-white" /> : <Play className="w-6 h-6 text-white fill-white ml-1" />}
+                              </button>
+                              <div className="flex items-center gap-[2px] flex-1 h-10">
+                                {[30,45,60,35,75,50,80,40,70,55,35,65,85,45,70,30,60,75,50,40,80,55,65,35,70,45,85,60,40,75,55,30,65,80,45,70,35,60,85,50,40,75,65,30,80,55,45,70,35,60,75,50,85,40,65,30,70,80,55,45,60,35,75,50,40,85,65,30,70,55,80,45,60,35,75,50,40,65,85,55].map((h, i, arr) => (
+                                  <div
+                                    key={i}
+                                    className="rounded-[1px] shrink-0 transition-colors duration-75"
+                                    style={{
+                                      width: `calc((100% - ${(arr.length - 1) * 2}px) / ${arr.length})`,
+                                      height: `${h}%`,
+                                      backgroundColor: i / arr.length <= playProgressNew ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.45)',
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                              <button type="button" onClick={deleteNewRecording} className="text-gray-500 hover:text-red-400 transition-colors ml-1 shrink-0">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
-                            <button type="button" onClick={deleteNewRecording} className="text-gray-500 hover:text-red-400 transition-colors ml-1">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5">
+                              <Volume2 className="w-3.5 h-3.5" />
+                              {isPlayingNewNote ? 'Playing...' : 'New recording — tap to preview'}
+                            </p>
                           </div>
                         )}
-                        {/* Existing voice note (when no new recording yet) */}
+                        {/* Existing voice note (when no new recording yet) — show full rich bubble */}
                         {!audioUrlNote && unit.voice_note_signed_url && (
-                          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-green-600/10 border border-green-500/25">
-                            <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
-                            <span className="text-green-400 text-sm">Existing voice note saved</span>
+                          <div className="bg-blue-600/20 border border-blue-500/40 rounded-2xl rounded-tl-sm px-4 py-2.5">
+                            <audio
+                              ref={existingAudioRef}
+                              src={unit.voice_note_signed_url}
+                              onEnded={() => { setIsPlayingExisting(false); setPlayProgressExisting(0); }}
+                              onTimeUpdate={() => {
+                                const a = existingAudioRef.current;
+                                if (a && a.duration) setPlayProgressExisting(a.currentTime / a.duration);
+                              }}
+                              className="hidden"
+                            />
+                            <div className="flex items-center gap-4">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!existingAudioRef.current) return;
+                                  if (isPlayingExisting) { existingAudioRef.current.pause(); setIsPlayingExisting(false); }
+                                  else { existingAudioRef.current.play(); setIsPlayingExisting(true); }
+                                }}
+                                className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 shadow-lg transition-colors ${isPlayingExisting ? 'bg-blue-400' : 'bg-blue-500 hover:bg-blue-400'}`}
+                              >
+                                {isPlayingExisting ? <Pause className="w-6 h-6 text-white" /> : <Play className="w-6 h-6 text-white fill-white ml-1" />}
+                              </button>
+                              <div className="flex items-center gap-[2px] flex-1 h-10">
+                                {[30,45,60,35,75,50,80,40,70,55,35,65,85,45,70,30,60,75,50,40,80,55,65,35,70,45,85,60,40,75,55,30,65,80,45,70,35,60,85,50,40,75,65,30,80,55,45,70,35,60,75,50,85,40,65,30,70,80,55,45,60,35,75,50,40,85,65,30,70,55,80,45,60,35,75,50,40,65,85,55].map((h, i, arr) => (
+                                  <div
+                                    key={i}
+                                    className="rounded-[1px] shrink-0 transition-colors duration-75"
+                                    style={{
+                                      width: `calc((100% - ${(arr.length - 1) * 2}px) / ${arr.length})`,
+                                      height: `${h}%`,
+                                      backgroundColor: i / arr.length <= playProgressExisting ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.45)',
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                            <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5">
+                              <Volume2 className="w-3.5 h-3.5" />
+                              {isPlayingExisting ? 'Playing...' : 'Tap to listen — voice note from management'}
+                            </p>
                           </div>
                         )}
                         {notesText && (
