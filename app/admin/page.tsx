@@ -18,23 +18,9 @@ interface CronRun {
   error_message: string | null;
 }
 
-function formatRelativeTime(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
-}
-
-const JOB_LABELS: Record<string, string> = {
-  'check-escalations': 'Escalation Checker',
-  'deadline-reminders': 'Deadline Reminders',
+const JOB_LABEL_KEYS: Record<string, string> = {
+  'check-escalations': 'admin.jobEscalationChecker',
+  'deadline-reminders': 'admin.jobDeadlineReminders',
 };
 
 export default function AdminDashboard() {
@@ -274,7 +260,8 @@ export default function AdminDashboard() {
           ) : (
             <div className="divide-y divide-[#21262d]">
               {cronRuns.map((run) => {
-                const label = JOB_LABELS[run.job_name] ?? run.job_name;
+                const labelKey = JOB_LABEL_KEYS[run.job_name];
+                const label = labelKey ? t(labelKey) : run.job_name;
                 const lastRunAt = run.completed_at ?? run.started_at;
 
                 return (
@@ -314,7 +301,18 @@ export default function AdminDashboard() {
                         >
                           {run.status.toUpperCase()}
                         </span>
-                        <span className="text-[#7d8590] text-xs">{formatRelativeTime(lastRunAt)}</span>
+                        <span className="text-[#7d8590] text-xs">{(() => {
+                          const date = new Date(lastRunAt);
+                          if (isNaN(date.getTime())) return t('admin.justNow');
+                          const diffMs = Date.now() - date.getTime();
+                          const diffMins = Math.floor(diffMs / 60000);
+                          const diffHours = Math.floor(diffMins / 60);
+                          const diffDays = Math.floor(diffHours / 24);
+                          if (diffMins < 1) return t('admin.justNow');
+                          if (diffMins < 60) return t('admin.minsAgo', { n: diffMins });
+                          if (diffHours < 24) return t('admin.hoursAgo', { n: diffHours });
+                          return t('admin.daysAgo', { n: diffDays });
+                        })()}</span>
                       </div>
                     </div>
                   </div>

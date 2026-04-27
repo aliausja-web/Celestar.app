@@ -12,8 +12,8 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
-import { formatDistanceToNow } from 'date-fns';
 import { useLocale } from '@/lib/i18n/context';
+import { getNotifContent, formatRelativeTimeI18n } from '@/lib/i18n/notifications';
 
 interface Notification {
   id: string;
@@ -175,7 +175,7 @@ export function NotificationBell() {
         ) : notifications.length === 0 ? (
           <div className="py-8 text-center text-gray-500">
             <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">{t('notificationBell.empty')}</p>
+            <p className="text-sm">{t('notificationBell.noNotifications')}</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-800">
@@ -196,19 +196,26 @@ export function NotificationBell() {
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start gap-2 mb-1">
-                      <span className="text-sm">{getTypeIcon(notification.type)}</span>
-                      <p className="text-sm font-medium text-white truncate flex-1">
-                        {notification.title}
-                      </p>
-                    </div>
-                    <p className="text-xs text-gray-400 line-clamp-2">
-                      {notification.message}
-                    </p>
+                    {(() => {
+                      const content = getNotifContent(notification, t);
+                      return (
+                        <>
+                          <div className="flex items-start gap-2 mb-1">
+                            <span className="text-sm">{getTypeIcon(notification.type)}</span>
+                            <p className="text-sm font-medium text-white truncate flex-1">
+                              {content.title}
+                            </p>
+                          </div>
+                          <p className="text-xs text-gray-400 line-clamp-2">
+                            {content.message}
+                          </p>
+                        </>
+                      );
+                    })()}
                     <p className="text-xs text-gray-500 mt-1">
-                      {notification.created_at && !isNaN(new Date(notification.created_at).getTime())
-                        ? formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })
-                        : 'Just now'}
+                      {notification.created_at
+                        ? formatRelativeTimeI18n(notification.created_at, t)
+                        : t('admin.justNow')}
                     </p>
                   </div>
                 </div>

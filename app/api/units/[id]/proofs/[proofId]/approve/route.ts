@@ -127,6 +127,7 @@ export async function POST(
               proof_id: params.proofId,
               reviewed_by: context!.email,
               rejection_reason: rejection_reason || null,
+              unit_title: unitTitle,
             },
           }]);
         }
