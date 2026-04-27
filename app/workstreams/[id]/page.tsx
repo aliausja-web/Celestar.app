@@ -14,7 +14,7 @@ import {
   AlertTriangle, CheckCircle2, Clock, Camera, Upload, ChevronLeft,
   FileText, Video, Image as ImageIcon, AlertOctagon, Plus,
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, isValid } from 'date-fns';
 import { supabase } from '@/lib/firebase';
 import { toast } from 'sonner';
 import { usePermissions } from '@/hooks/use-permissions';
@@ -133,7 +133,9 @@ export default function WorkstreamBoard() {
     const isGreen = unit.computed_status === 'GREEN';
     const isBlocked = unit.computed_status === 'BLOCKED';
     const isUnconfirmed = unit.is_confirmed === false;
-    const isPastDeadline = unit.required_green_by && new Date(unit.required_green_by) < new Date();
+    const deadlineDate = unit.required_green_by ? new Date(unit.required_green_by) : null;
+    const validDeadline = deadlineDate && isValid(deadlineDate) ? deadlineDate : null;
+    const isPastDeadline = validDeadline && validDeadline < new Date();
     const statusColor = isBlocked
       ? 'border-yellow-600 bg-yellow-900/40 text-yellow-400 font-semibold'
       : isGreen
@@ -162,12 +164,12 @@ export default function WorkstreamBoard() {
               <h3 className="text-[#e6edf3] font-medium text-lg">{unit.title}</h3>
               <div className="flex flex-wrap items-center gap-2 text-xs text-[#7d8590]">
                 <span>{t('workstream.owner')} {unit.owner_party_name}</span>
-                {unit.required_green_by && (
+                {validDeadline && (
                   <span className={`flex items-center gap-1 ${isPastDeadline ? 'text-red-300 font-medium' : ''}`}>
                     <Clock className="w-3 h-3" />
                     {isPastDeadline ? '⚠️ ' : ''}
-                    {format(new Date(unit.required_green_by), 'MMM d, HH:mm')} (
-                    {formatDistanceToNow(new Date(unit.required_green_by), { addSuffix: true })})
+                    {format(validDeadline, 'MMM d, HH:mm')} (
+                    {formatDistanceToNow(validDeadline, { addSuffix: true })})
                   </span>
                 )}
               </div>
@@ -215,7 +217,7 @@ export default function WorkstreamBoard() {
               </Button>
             </div>
           </div>
-          {unit.last_proof_time && (
+          {unit.last_proof_time && isValid(new Date(unit.last_proof_time)) && (
             <div className="mt-3 pt-3 border-t border-[#30363d] text-xs text-[#7d8590]">
               {t('workstream.lastProof')} {formatDistanceToNow(new Date(unit.last_proof_time), { addSuffix: true })}
             </div>
