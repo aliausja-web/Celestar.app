@@ -195,6 +195,9 @@ const en = {
     notes: 'Notes:',
     validation: 'Validation:',
     superseded: 'Superseded',
+    notesTitle: 'Notes from Management',
+    notesDesc: 'Requirements, acceptance criteria and guidelines for your field team.',
+    proofUploadedLabel: 'Proof Uploaded',
   },
   notifications: {
     title: 'Notifications',
@@ -653,6 +656,9 @@ const ar: Messages = {
     notes: 'ملاحظات:',
     validation: 'التحقق:',
     superseded: 'تم الاستبدال',
+    notesTitle: 'ملاحظات الإدارة',
+    notesDesc: 'المتطلبات ومعايير القبول والإرشادات لفريقك الميداني.',
+    proofUploadedLabel: 'تم رفع إثبات',
   },
   notifications: {
     title: 'الإشعارات',
@@ -1111,6 +1117,9 @@ const ur: Messages = {
     notes: 'نوٹس:',
     validation: 'تصدیق:',
     superseded: 'تبدیل ہو گیا',
+    notesTitle: 'انتظامیہ کے نوٹس',
+    notesDesc: 'آپ کی فیلڈ ٹیم کے لیے ضروریات، قبولیت کے معیار اور رہنما اصول۔',
+    proofUploadedLabel: 'ثبوت اپلوڈ ہوا',
   },
   notifications: {
     title: 'اطلاعات',
@@ -1569,6 +1578,9 @@ const bn: Messages = {
     notes: 'নোট:',
     validation: 'যাচাই:',
     superseded: 'প্রতিস্থাপিত',
+    notesTitle: 'ম্যানেজমেন্টের নোট',
+    notesDesc: 'আপনার ফিল্ড টিমের জন্য প্রয়োজনীয়তা, গ্রহণযোগ্যতার মানদণ্ড এবং নির্দেশিকা।',
+    proofUploadedLabel: 'প্রমাণ আপলোড হয়েছে',
   },
   notifications: {
     title: 'বিজ্ঞপ্তি',
