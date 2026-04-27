@@ -42,6 +42,14 @@ import { NotificationBell } from '@/components/notification-bell';
 import { useLocale } from '@/lib/i18n/context';
 import { LanguageSwitcher } from '@/components/language-switcher';
 
+// Waveform height pattern — long enough to cycle naturally at any bar count
+const WAVE_HEIGHTS = [
+  40,55,70,45,85,60,75,35,90,50,65,80,40,70,55,85,30,60,75,50,
+  45,80,35,65,90,55,70,40,85,60,50,75,30,65,80,45,70,55,90,35,
+  60,75,50,85,40,65,80,45,70,55,35,90,60,75,50,85,30,65,80,45,
+  70,55,40,85,60,50,75,35,65,90,45,70,55,80,30,60,75,50,85,40,
+];
+
 interface Proof {
   id: string;
   type: string;
@@ -143,6 +151,21 @@ export default function UnitDetailPage() {
   const existingAudioRef = useRef<HTMLAudioElement | null>(null);
   // play-tracking: log once per page load, not on every tap
   const hasLoggedPlayRef = useRef(false);
+  // waveform: responsive bar count so bars are always ~3px wide on every screen
+  const [waveformBarCount, setWaveformBarCount] = useState(60);
+  const waveformContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = waveformContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const width = entry.contentRect.width;
+      // 3px bar + 2px gap = 5px per bar; min 20, max 120
+      setWaveformBarCount(Math.min(120, Math.max(20, Math.floor(width / 5))));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [editingNotes, audioUrlNote]); // re-observe when the active waveform swaps
 
   useEffect(() => {
     if (unitId) {
@@ -672,15 +695,15 @@ export default function UnitDetailPage() {
                               ? <Pause className="w-6 h-6 text-white" />
                               : <Play className="w-6 h-6 text-white fill-white ml-1" />}
                           </div>
-                          <div className="flex items-center gap-[2px] flex-1 h-10">
-                            {[30,45,60,35,75,50,80,40,70,55,35,65,85,45,70,30,60,75,50,40,80,55,65,35,70,45,85,60,40,75,55,30,65,80,45,70,35,60,85,50,40,75,65,30,80,55,45,70,35,60,75,50,85,40,65,30,70,80,55,45,60,35,75,50,40,85,65,30,70,55,80,45,60,35,75,50,40,65,85,55].map((h, i, arr) => (
+                          <div ref={waveformContainerRef} className="flex items-center gap-[2px] flex-1 h-10 overflow-hidden">
+                            {Array.from({ length: waveformBarCount }, (_, i) => WAVE_HEIGHTS[i % WAVE_HEIGHTS.length]).map((h, i) => (
                               <div
                                 key={i}
-                                className="rounded-[1px] shrink-0 transition-colors duration-75"
+                                className="rounded-sm shrink-0 transition-colors duration-75"
                                 style={{
-                                  width: `calc((100% - ${(arr.length - 1) * 2}px) / ${arr.length})`,
+                                  width: '3px',
                                   height: `${h}%`,
-                                  backgroundColor: i / arr.length <= playProgressExisting
+                                  backgroundColor: i / waveformBarCount <= playProgressExisting
                                     ? 'rgb(147 197 253)'
                                     : 'rgba(147,197,253,0.45)',
                                 }}
@@ -772,15 +795,15 @@ export default function UnitDetailPage() {
                               >
                                 {isPlayingNewNote ? <Pause className="w-6 h-6 text-white" /> : <Play className="w-6 h-6 text-white fill-white ml-1" />}
                               </button>
-                              <div className="flex items-center gap-[2px] flex-1 h-10">
-                                {[30,45,60,35,75,50,80,40,70,55,35,65,85,45,70,30,60,75,50,40,80,55,65,35,70,45,85,60,40,75,55,30,65,80,45,70,35,60,85,50,40,75,65,30,80,55,45,70,35,60,75,50,85,40,65,30,70,80,55,45,60,35,75,50,40,85,65,30,70,55,80,45,60,35,75,50,40,65,85,55].map((h, i, arr) => (
+                              <div ref={waveformContainerRef} className="flex items-center gap-[2px] flex-1 h-10 overflow-hidden">
+                                {Array.from({ length: waveformBarCount }, (_, i) => WAVE_HEIGHTS[i % WAVE_HEIGHTS.length]).map((h, i) => (
                                   <div
                                     key={i}
-                                    className="rounded-[1px] shrink-0 transition-colors duration-75"
+                                    className="rounded-sm shrink-0 transition-colors duration-75"
                                     style={{
-                                      width: `calc((100% - ${(arr.length - 1) * 2}px) / ${arr.length})`,
+                                      width: '3px',
                                       height: `${h}%`,
-                                      backgroundColor: i / arr.length <= playProgressNew ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.45)',
+                                      backgroundColor: i / waveformBarCount <= playProgressNew ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.45)',
                                     }}
                                   />
                                 ))}
@@ -820,15 +843,15 @@ export default function UnitDetailPage() {
                               >
                                 {isPlayingExisting ? <Pause className="w-6 h-6 text-white" /> : <Play className="w-6 h-6 text-white fill-white ml-1" />}
                               </button>
-                              <div className="flex items-center gap-[2px] flex-1 h-10">
-                                {[30,45,60,35,75,50,80,40,70,55,35,65,85,45,70,30,60,75,50,40,80,55,65,35,70,45,85,60,40,75,55,30,65,80,45,70,35,60,85,50,40,75,65,30,80,55,45,70,35,60,75,50,85,40,65,30,70,80,55,45,60,35,75,50,40,85,65,30,70,55,80,45,60,35,75,50,40,65,85,55].map((h, i, arr) => (
+                              <div ref={waveformContainerRef} className="flex items-center gap-[2px] flex-1 h-10 overflow-hidden">
+                                {Array.from({ length: waveformBarCount }, (_, i) => WAVE_HEIGHTS[i % WAVE_HEIGHTS.length]).map((h, i) => (
                                   <div
                                     key={i}
-                                    className="rounded-[1px] shrink-0 transition-colors duration-75"
+                                    className="rounded-sm shrink-0 transition-colors duration-75"
                                     style={{
-                                      width: `calc((100% - ${(arr.length - 1) * 2}px) / ${arr.length})`,
+                                      width: '3px',
                                       height: `${h}%`,
-                                      backgroundColor: i / arr.length <= playProgressExisting ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.45)',
+                                      backgroundColor: i / waveformBarCount <= playProgressExisting ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.45)',
                                     }}
                                   />
                                 ))}
