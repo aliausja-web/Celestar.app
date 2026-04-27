@@ -418,6 +418,15 @@ export default function UnitDetailPage() {
   const approvedCount = unit.proofs.filter(p => p.approval_status === 'approved' && !p.is_superseded).length;
   const pendingCount = unit.proofs.filter(p => p.approval_status === 'pending').length;
 
+  const proofUploadEvents: AuditEvent[] = unit.proofs.map(proof => ({
+    id: `proof-upload-${proof.id}`,
+    event_type: 'proof_uploaded',
+    created_at: proof.uploaded_at,
+    reason: `${proof.type}${proof.uploaded_by_email ? ` · ${proof.uploaded_by_email}` : ''}`,
+  }));
+  const allAuditEvents = [...auditEvents, ...proofUploadEvents]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
   function getExpiryBadge(proof: Proof) {
     if (!proof.expiry_date) return null;
     if (proof.is_expired) {
@@ -436,6 +445,7 @@ export default function UnitDetailPage() {
 
   function getAuditEventLabel(event: AuditEvent) {
     const labels: Record<string, string> = {
+      proof_uploaded: t('units.proofUploadedLabel'),
       proof_approved: 'Proof Approved',
       proof_rejected: 'Proof Rejected',
       proof_expired: 'Proof Expired',
@@ -450,6 +460,7 @@ export default function UnitDetailPage() {
   }
 
   function getAuditEventColor(event: AuditEvent) {
+    if (event.event_type === 'proof_uploaded') return 'text-blue-400';
     if (event.event_type === 'proof_approved' || event.new_status === 'GREEN') return 'text-green-400';
     if (event.event_type === 'proof_rejected' || event.event_type === 'proof_expired') return 'text-red-400';
     if (event.event_type === 'manual_escalation') return 'text-orange-400';
@@ -624,7 +635,7 @@ export default function UnitDetailPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-white flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-blue-400" />
-                  Notes from Management
+                  {t('units.notesTitle')}
                 </CardTitle>
                 {canEditNotes && !editingNotes && (
                   <Button
@@ -640,7 +651,7 @@ export default function UnitDetailPage() {
               </div>
               {!editingNotes && (
                 <CardDescription className="text-gray-500">
-                  Requirements, acceptance criteria and guidelines from your workstream lead.
+                  {t('units.notesDesc')}
                 </CardDescription>
               )}
             </CardHeader>
@@ -1128,7 +1139,7 @@ export default function UnitDetailPage() {
         </Card>
 
         {/* Audit Trail */}
-        {auditEvents.length > 0 && (
+        {allAuditEvents.length > 0 && (
           <Card className="bg-black/25 border-gray-800">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
@@ -1141,11 +1152,13 @@ export default function UnitDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {auditEvents.map((event) => (
+                {allAuditEvents.map((event) => (
                   <div key={event.id} className="flex gap-3 text-sm">
                     <div className="flex flex-col items-center">
                       <div className={`w-2 h-2 rounded-full mt-1.5 ${
-                        event.event_type === 'proof_approved' || event.new_status === 'GREEN'
+                        event.event_type === 'proof_uploaded'
+                          ? 'bg-blue-500'
+                          : event.event_type === 'proof_approved' || event.new_status === 'GREEN'
                           ? 'bg-green-500'
                           : event.event_type === 'proof_rejected' || event.event_type === 'proof_expired'
                           ? 'bg-red-500'

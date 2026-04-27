@@ -146,7 +146,10 @@ export default function WorkstreamBoard() {
     const requiredTypes = unit.proof_requirements?.required_types || ['photo'];
 
     return (
-      <Card className={`border-[#30363d] bg-[#161b22] transition-all ${isUnconfirmed ? 'opacity-75 border-dashed' : ''}`}>
+      <Card
+        className={`border-[#30363d] bg-[#161b22] transition-all cursor-pointer hover:border-[#484f58] ${isUnconfirmed ? 'opacity-75 border-dashed' : ''}`}
+        onClick={() => router.push(`/units/${unit.id}`)}
+      >
         <CardContent className="p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="flex-1 min-w-0 space-y-2">
@@ -208,7 +211,7 @@ export default function WorkstreamBoard() {
               )}
             </div>
             <div className="flex gap-2 sm:flex-col sm:shrink-0">
-              <Button size="sm" onClick={() => router.push(`/units/${unit.id}/upload`)} className="flex-1 sm:flex-none bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]">
+              <Button size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/units/${unit.id}/upload`); }} className="flex-1 sm:flex-none bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]">
                 <Upload className="w-4 h-4 me-2" />
                 {t('workstream.submitProof')}
               </Button>
