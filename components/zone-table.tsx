@@ -1,8 +1,11 @@
+'use client';
+
 import { Zone } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toDate } from '@/lib/utils';
 import { Clock, AlertTriangle, CheckCircle2, Camera } from 'lucide-react';
+import { useLocale } from '@/lib/i18n/context';
 
 interface ZoneTableProps {
   zones: Zone[];
@@ -11,7 +14,9 @@ interface ZoneTableProps {
   onEscalate?: (zoneId: string) => void;
 }
 
-function StatusBadge({ status, proofCount, requiredCount }: { status: string; proofCount?: number; requiredCount?: number }) {
+type TFunc = (key: string, params?: Record<string, string | number>) => string;
+
+function StatusBadge({ status, proofCount, requiredCount, t }: { status: string; proofCount?: number; requiredCount?: number; t: TFunc }) {
   const isGreen = status === 'GREEN';
   const colors = isGreen
     ? 'border-green-500/40 bg-green-500/12 text-green-200'
@@ -28,16 +33,16 @@ function StatusBadge({ status, proofCount, requiredCount }: { status: string; pr
       {requiredCount && (
         <div className="text-xs text-gray-500 flex items-center gap-1">
           <Camera className="w-3 h-3" />
-          {proofCount || 0}/{requiredCount} proofs
+          {proofCount || 0}/{requiredCount} {t('zoneTable.proofs')}
         </div>
       )}
     </div>
   );
 }
 
-function DeadlineCell({ deadline }: { deadline: string | Date | null }) {
+function DeadlineCell({ deadline, t }: { deadline: string | Date | null; t: TFunc }) {
   if (!deadline) {
-    return <span className="text-gray-500 text-xs">No deadline</span>;
+    return <span className="text-gray-500 text-xs">{t('zoneTable.noDeadline')}</span>;
   }
 
   const deadlineDate = toDate(deadline);
@@ -59,9 +64,9 @@ function DeadlineCell({ deadline }: { deadline: string | Date | null }) {
   );
 }
 
-function EscalationBadge({ level }: { level: number }) {
+function EscalationBadge({ level, t }: { level: number; t: TFunc }) {
   if (level === 0) {
-    return <span className="text-gray-500 text-xs">L0 - None</span>;
+    return <span className="text-gray-500 text-xs">L0 — {t('zoneTable.escalationNone')}</span>;
   }
 
   const colors = {
@@ -70,34 +75,36 @@ function EscalationBadge({ level }: { level: number }) {
     3: 'border-red-500/40 bg-red-500/12 text-red-200',
   };
 
-  const labels = {
-    1: 'L1 - Site',
-    2: 'L2 - Manager',
-    3: 'L3 - Executive',
+  const labelKeys = {
+    1: 'zoneTable.escalationSite',
+    2: 'zoneTable.escalationManager',
+    3: 'zoneTable.escalationExecutive',
   };
 
   return (
     <Badge className={`${colors[level as keyof typeof colors]} text-xs px-2 py-1 font-bold flex items-center gap-1 w-fit`}>
       <span className="text-lg">⚡</span>
-      {labels[level as keyof typeof labels]}
+      L{level} — {t(labelKeys[level as keyof typeof labelKeys])}
     </Badge>
   );
 }
 
 export function ZoneTable({ zones, onZoneClick, showEscalateButton, onEscalate }: ZoneTableProps) {
+  const { t } = useLocale();
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-800">
-            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Zone</th>
-            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Deliverable</th>
-            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Owner</th>
-            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Status</th>
-            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Readiness Deadline</th>
-            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Escalation</th>
+            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">{t('zoneTable.colZone')}</th>
+            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">{t('zoneTable.colDeliverable')}</th>
+            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">{t('zoneTable.colOwner')}</th>
+            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">{t('zoneTable.colStatus')}</th>
+            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">{t('zoneTable.colDeadline')}</th>
+            <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">{t('zoneTable.colEscalation')}</th>
             {showEscalateButton && (
-              <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">Actions</th>
+              <th className="text-left py-3 px-4 text-gray-400 font-bold text-xs">{t('zoneTable.colActions')}</th>
             )}
           </tr>
         </thead>
@@ -116,15 +123,16 @@ export function ZoneTable({ zones, onZoneClick, showEscalateButton, onEscalate }
               <td className="py-3 px-4">
                 <StatusBadge
                   status={zone.computed_status || zone.status}
-                  proofCount={0} // TODO: fetch from proofs table
+                  proofCount={0}
                   requiredCount={zone.required_proof_count || 1}
+                  t={t}
                 />
               </td>
               <td className="py-3 px-4">
-                <DeadlineCell deadline={zone.readiness_deadline} />
+                <DeadlineCell deadline={zone.readiness_deadline} t={t} />
               </td>
               <td className="py-3 px-4">
-                <EscalationBadge level={zone.current_escalation_level || 0} />
+                <EscalationBadge level={zone.current_escalation_level || 0} t={t} />
               </td>
               {showEscalateButton && (
                 <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
@@ -134,7 +142,7 @@ export function ZoneTable({ zones, onZoneClick, showEscalateButton, onEscalate }
                       className="px-3 py-1.5 text-xs font-bold border border-gray-700 bg-gray-800/50 hover:bg-red-500/20 hover:border-red-500 rounded-lg transition-colors flex items-center gap-1.5"
                     >
                       <AlertTriangle className="w-3 h-3" />
-                      Escalate
+                      {t('zoneTable.escalateButton')}
                     </button>
                   )}
                 </td>

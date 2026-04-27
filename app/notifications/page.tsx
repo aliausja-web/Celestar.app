@@ -6,9 +6,9 @@ import { Bell, ArrowLeft, Check, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/firebase';
-import { formatDistanceToNow } from 'date-fns';
 import { useLocale } from '@/lib/i18n/context';
 import { LanguageSwitcher } from '@/components/language-switcher';
+import { getNotifContent, formatRelativeTimeI18n } from '@/lib/i18n/notifications';
 
 interface Notification {
   id: string;
@@ -200,20 +200,30 @@ export default function NotificationsPage() {
                   <div className={`w-2.5 h-2.5 rounded-full ${!notification.is_read ? getPriorityColor(notification.priority) : 'bg-gray-700'}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span>{getTypeIcon(notification.type)}</span>
-                    <p className={`font-medium truncate ${!notification.is_read ? 'text-white' : 'text-gray-400'}`}>
-                      {notification.title}
-                    </p>
-                    <Badge className={`text-xs ${getPriorityLabel(notification.priority)}`}>
-                      {notification.priority}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-[#7d8590] line-clamp-2 mb-1">{notification.message}</p>
+                  {(() => {
+                    const content = getNotifContent(notification, t);
+                    const priorityLabel = t(`notifications.priority_${notification.priority}`) !== `notifications.priority_${notification.priority}`
+                      ? t(`notifications.priority_${notification.priority}`)
+                      : notification.priority;
+                    return (
+                      <>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span>{getTypeIcon(notification.type)}</span>
+                          <p className={`font-medium truncate ${!notification.is_read ? 'text-white' : 'text-gray-400'}`}>
+                            {content.title}
+                          </p>
+                          <Badge className={`text-xs ${getPriorityLabel(notification.priority)}`}>
+                            {priorityLabel}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-[#7d8590] line-clamp-2 mb-1">{content.message}</p>
+                      </>
+                    );
+                  })()}
                   <p className="text-xs text-[#484f58]">
-                    {notification.created_at && !isNaN(new Date(notification.created_at).getTime())
-                      ? formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })
-                      : 'Just now'}
+                    {notification.created_at
+                      ? formatRelativeTimeI18n(notification.created_at, t)
+                      : t('admin.justNow')}
                   </p>
                 </div>
                 {!notification.is_read && (

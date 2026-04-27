@@ -265,6 +265,7 @@ export async function POST(
             proof_id: proof.id,
             submitted_by: context!.email,
             proof_type: proofType,
+            unit_title: unitTitle,
           },
         }));
         const { error: notifInsertError } = await supabase
