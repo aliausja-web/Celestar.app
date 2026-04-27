@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -153,19 +153,18 @@ export default function UnitDetailPage() {
   const hasLoggedPlayRef = useRef(false);
   // waveform: responsive bar count so bars are always ~3px wide on every screen
   const [waveformBarCount, setWaveformBarCount] = useState(60);
-  const waveformContainerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const el = waveformContainerRef.current;
-    if (!el) return;
+  const waveformRoRef = useRef<ResizeObserver | null>(null);
+  // Callback ref: fires the instant the element mounts, regardless of async data timing
+  const waveformContainerRef = useCallback((node: HTMLDivElement | null) => {
+    if (waveformRoRef.current) { waveformRoRef.current.disconnect(); waveformRoRef.current = null; }
+    if (!node) return;
     const ro = new ResizeObserver(([entry]) => {
       const width = entry.contentRect.width;
-      // 3px bar + 2px gap = 5px per bar; min 20, max 120
       setWaveformBarCount(Math.min(120, Math.max(20, Math.floor(width / 5))));
     });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [editingNotes, audioUrlNote]); // re-observe when the active waveform swaps
+    ro.observe(node);
+    waveformRoRef.current = ro;
+  }, []);
 
   useEffect(() => {
     if (unitId) {
@@ -713,7 +712,7 @@ export default function UnitDetailPage() {
                         </div>
                         <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5">
                           <Volume2 className="w-3.5 h-3.5" />
-                          {isPlayingExisting ? 'Playing...' : 'Tap to listen — voice note from management'}
+                          {isPlayingExisting ? 'Playing...' : 'Tap to listen voice note from management'}
                         </p>
                       </button>
                     </div>
@@ -859,7 +858,7 @@ export default function UnitDetailPage() {
                             </div>
                             <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5">
                               <Volume2 className="w-3.5 h-3.5" />
-                              {isPlayingExisting ? 'Playing...' : 'Tap to listen — voice note from management'}
+                              {isPlayingExisting ? 'Playing...' : 'Tap to listen voice note from management'}
                             </p>
                           </div>
                         )}
