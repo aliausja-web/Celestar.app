@@ -672,12 +672,13 @@ export default function UnitDetailPage() {
                               ? <Pause className="w-6 h-6 text-white" />
                               : <Play className="w-6 h-6 text-white fill-white ml-1" />}
                           </div>
-                          <div className="flex items-center justify-between flex-1 h-10">
-                            {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45,70,55,80,40].map((h, i, arr) => (
+                          <div className="flex items-center gap-[2px] flex-1 h-10">
+                            {[30,45,60,35,75,50,80,40,70,55,35,65,85,45,70,30,60,75,50,40,80,55,65,35,70,45,85,60,40,75,55,30,65,80,45,70,35,60,85,50,40,75,65,30,80,55,45,70,35,60,75,50,85,40,65,30,70,80,55,45,60,35,75,50,40,85,65,30,70,55,80,45,60,35,75,50,40,65,85,55].map((h, i, arr) => (
                               <div
                                 key={i}
-                                className="w-[2px] rounded-[1px] shrink-0 transition-colors duration-75"
+                                className="rounded-[1px] shrink-0 transition-colors duration-75"
                                 style={{
+                                  width: `calc((100% - ${(arr.length - 1) * 2}px) / ${arr.length})`,
                                   height: `${h}%`,
                                   backgroundColor: i / arr.length <= playProgressExisting
                                     ? 'rgb(147 197 253)'
@@ -770,12 +771,13 @@ export default function UnitDetailPage() {
                             >
                               {isPlayingNewNote ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
                             </button>
-                            <div className="flex items-center justify-between flex-1 h-7">
-                              {[35,55,70,45,80,60,75,40,85,65,50,90,45,70,55,80,35,65,75,50,40,85,60,45].map((h, i, arr) => (
+                            <div className="flex items-center gap-[2px] flex-1 h-7">
+                              {[30,45,60,35,75,50,80,40,70,55,35,65,85,45,70,30,60,75,50,40,80,55,65,35,70,45,85,60,40,75,55,30,65,80,45,70,35,60,85,50,40,75,65,30,80,55,45,70,35,60].map((h, i, arr) => (
                                 <div
                                   key={i}
-                                  className="w-[2px] rounded-[1px] shrink-0 transition-colors duration-75"
+                                  className="rounded-[1px] shrink-0 transition-colors duration-75"
                                   style={{
+                                    width: `calc((100% - ${(arr.length - 1) * 2}px) / ${arr.length})`,
                                     height: `${h}%`,
                                     backgroundColor: i / arr.length <= playProgressNew ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.35)',
                                   }}
