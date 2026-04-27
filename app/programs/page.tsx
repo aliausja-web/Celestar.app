@@ -452,7 +452,7 @@ export default function ProgramDashboard() {
               <h2 className="text-xl font-medium text-[#e6edf3]">
                 {t('programs.workstreamsCount', { count: workstreams.length })}
               </h2>
-              {permissions.canCreateProgram && (
+              {(permissions.canCreateProgram || permissions.role === 'WORKSTREAM_LEAD') && (
                 <Button
                   onClick={() => router.push(`/programs/${selectedProgram.id}/workstreams/new`)}
                   className="bg-[#1c5fc7]/90 hover:bg-[#1c5fc7] text-white border border-[#1c5fc7]/50"

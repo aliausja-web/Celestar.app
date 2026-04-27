@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, Plus, Trash2, ArrowLeft, User, Shield, AlertCircle, ChevronDown, ChevronRight, Check } from 'lucide-react';
+import { Users, Plus, Trash2, ArrowLeft, User, AlertCircle, ChevronDown, ChevronRight, Check, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
 import { usePermissions } from '@/hooks/use-permissions';
 import { NotificationBell } from '@/components/notification-bell';
@@ -47,18 +47,27 @@ export default function TeamManagementPage() {
   const [users, setUsers] = useState<FieldUser[]>([]);
   const [programs, setPrograms] = useState<ProgramOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unitsLoading, setUnitsLoading] = useState(false);
+
+  // Create dialog state
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [expandedPrograms, setExpandedPrograms] = useState<Record<string, boolean>>({});
-
-  const [formData, setFormData] = useState({
-    username: '',
-    password: '',
-    full_name: '',
-  });
+  const [formData, setFormData] = useState({ username: '', password: '', full_name: '' });
   const [selectedUnitIds, setSelectedUnitIds] = useState<Set<string>>(new Set());
+
+  // Edit dialog state
+  const [editingUser, setEditingUser] = useState<FieldUser | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editFormData, setEditFormData] = useState({ full_name: '' });
+  const [editSelectedUnitIds, setEditSelectedUnitIds] = useState<Set<string>>(new Set());
+  const [editExpandedPrograms, setEditExpandedPrograms] = useState<Record<string, boolean>>({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  // Delete state
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const canManage =
     permissions.role === 'PLATFORM_ADMIN' ||
@@ -72,7 +81,6 @@ export default function TeamManagementPage() {
       return;
     }
     fetchUsers();
-    fetchAvailableUnits();
   }, [permissions.role]);
 
   async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -97,20 +105,45 @@ export default function TeamManagementPage() {
     }
   }
 
-  async function fetchAvailableUnits() {
+  async function fetchAvailableUnits(): Promise<ProgramOption[]> {
+    setUnitsLoading(true);
     try {
       const headers = await getAuthHeaders();
       const res = await fetch('/api/team/units', { headers });
       if (res.ok) {
         const data = await res.json();
-        setPrograms(data.programs || []);
-        // Auto-expand first program
-        if (data.programs?.length > 0) {
-          setExpandedPrograms({ [data.programs[0].program_id]: true });
-        }
+        const fetched: ProgramOption[] = data.programs || [];
+        setPrograms(fetched);
+        return fetched;
       }
     } catch {
       // Non-fatal — unit assignment is optional
+    } finally {
+      setUnitsLoading(false);
+    }
+    return programs;
+  }
+
+  async function openCreateDialog() {
+    setError('');
+    setFormData({ username: '', password: '', full_name: '' });
+    setSelectedUnitIds(new Set());
+    setShowCreateDialog(true);
+    const fetched = await fetchAvailableUnits();
+    if (fetched.length > 0) {
+      setExpandedPrograms({ [fetched[0].program_id]: true });
+    }
+  }
+
+  async function openEditDialog(user: FieldUser) {
+    setEditError('');
+    setEditFormData({ full_name: user.display_name });
+    setEditSelectedUnitIds(new Set(user.assigned_units.map((u) => u.unit_id)));
+    setEditingUser(user);
+    setShowEditDialog(true);
+    const fetched = await fetchAvailableUnits();
+    if (fetched.length > 0) {
+      setEditExpandedPrograms({ [fetched[0].program_id]: true });
     }
   }
 
@@ -149,11 +182,41 @@ export default function TeamManagementPage() {
       }
 
       await fetchUsers();
-      closeDialog();
+      closeCreateDialog();
     } catch (err: any) {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleEdit() {
+    if (!editingUser) return;
+
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/team/users/${editingUser.user_id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          full_name: editFormData.full_name.trim() || editingUser.username,
+          unit_ids: Array.from(editSelectedUnitIds),
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to update login');
+      }
+
+      await fetchUsers();
+      closeEditDialog();
+    } catch (err: any) {
+      setEditError(err.message);
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -181,8 +244,15 @@ export default function TeamManagementPage() {
   function toggleUnit(unitId: string) {
     setSelectedUnitIds((prev) => {
       const next = new Set(prev);
-      if (next.has(unitId)) next.delete(unitId);
-      else next.add(unitId);
+      if (next.has(unitId)) next.delete(unitId); else next.add(unitId);
+      return next;
+    });
+  }
+
+  function toggleEditUnit(unitId: string) {
+    setEditSelectedUnitIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(unitId)) next.delete(unitId); else next.add(unitId);
       return next;
     });
   }
@@ -191,11 +261,23 @@ export default function TeamManagementPage() {
     setExpandedPrograms((prev) => ({ ...prev, [programId]: !prev[programId] }));
   }
 
-  function closeDialog() {
+  function toggleEditProgram(programId: string) {
+    setEditExpandedPrograms((prev) => ({ ...prev, [programId]: !prev[programId] }));
+  }
+
+  function closeCreateDialog() {
     setShowCreateDialog(false);
     setFormData({ username: '', password: '', full_name: '' });
     setSelectedUnitIds(new Set());
     setError('');
+  }
+
+  function closeEditDialog() {
+    setShowEditDialog(false);
+    setEditingUser(null);
+    setEditFormData({ full_name: '' });
+    setEditSelectedUnitIds(new Set());
+    setEditError('');
   }
 
   const totalUnits = programs.reduce(
@@ -207,6 +289,72 @@ export default function TeamManagementPage() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center">
         <div className="text-white text-lg">Loading team...</div>
+      </div>
+    );
+  }
+
+  // Reusable unit tree for both create and edit dialogs
+  function UnitTree({
+    selected,
+    onToggleUnit,
+    expanded,
+    onToggleProgram,
+  }: {
+    selected: Set<string>;
+    onToggleUnit: (id: string) => void;
+    expanded: Record<string, boolean>;
+    onToggleProgram: (id: string) => void;
+  }) {
+    if (unitsLoading) {
+      return <p className="text-gray-500 text-sm italic px-1">Loading workstreams...</p>;
+    }
+    if (totalUnits === 0) {
+      return <p className="text-gray-500 text-sm italic">No units available yet.</p>;
+    }
+    return (
+      <div className="border border-gray-600 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
+        {programs.map((prog) => (
+          <div key={prog.program_id}>
+            <button
+              type="button"
+              onClick={() => onToggleProgram(prog.program_id)}
+              className="w-full flex items-center gap-2 px-3 py-2 bg-gray-900/80 hover:bg-gray-900 text-gray-300 text-xs font-semibold uppercase tracking-wider transition-colors"
+            >
+              {expanded[prog.program_id]
+                ? <ChevronDown className="w-3.5 h-3.5" />
+                : <ChevronRight className="w-3.5 h-3.5" />}
+              {prog.program_name}
+            </button>
+
+            {expanded[prog.program_id] && prog.workstreams.map((ws) => (
+              <div key={ws.workstream_id}>
+                <div className="px-4 py-1.5 bg-gray-800/60 text-gray-400 text-xs font-medium border-t border-gray-700/50">
+                  {ws.workstream_name}
+                </div>
+                {ws.units.map((unit) => {
+                  const checked = selected.has(unit.id);
+                  return (
+                    <button
+                      key={unit.id}
+                      type="button"
+                      onClick={() => onToggleUnit(unit.id)}
+                      className={`w-full flex items-center gap-3 px-5 py-2.5 text-left text-sm transition-colors border-t border-gray-700/30 ${
+                        checked ? 'bg-green-600/10 text-green-300' : 'text-gray-300 hover:bg-gray-700/40'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                        checked ? 'bg-green-600 border-green-600' : 'border-gray-500 bg-transparent'
+                      }`}>
+                        {checked && <Check className="w-3 h-3 text-white" />}
+                      </div>
+                      {unit.title}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ))}
       </div>
     );
   }
@@ -234,7 +382,7 @@ export default function TeamManagementPage() {
             <div className="flex items-center gap-3">
               <NotificationBell />
               <button
-                onClick={() => { setError(''); setShowCreateDialog(true); }}
+                onClick={openCreateDialog}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium"
               >
                 <Plus className="w-4 h-4" />
@@ -247,7 +395,7 @@ export default function TeamManagementPage() {
 
       {/* Body */}
       <div className="max-w-5xl mx-auto px-6 py-8">
-        {error && !showCreateDialog && (
+        {error && !showCreateDialog && !showEditDialog && (
           <div className="flex items-center gap-2 mb-6 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-300 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
@@ -262,7 +410,7 @@ export default function TeamManagementPage() {
               Create logins for field contributors and assign them to their specific units.
             </p>
             <button
-              onClick={() => { setError(''); setShowCreateDialog(true); }}
+              onClick={openCreateDialog}
               className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium"
             >
               Create First Login
@@ -330,14 +478,23 @@ export default function TeamManagementPage() {
                       {new Date(user.created_at).toLocaleDateString()}
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <button
-                        onClick={() => handleDelete(user.user_id, user.username)}
-                        disabled={deletingId === user.user_id}
-                        className="p-2 hover:bg-red-500/10 rounded-lg text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
-                        title="Remove login"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openEditDialog(user)}
+                          className="p-2 hover:bg-blue-500/10 rounded-lg text-blue-400 hover:text-blue-300 transition-colors"
+                          title="Edit login"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(user.user_id, user.username)}
+                          disabled={deletingId === user.user_id}
+                          className="p-2 hover:bg-red-500/10 rounded-lg text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
+                          title="Remove login"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -366,7 +523,6 @@ export default function TeamManagementPage() {
                 </div>
               )}
 
-              {/* Credentials */}
               <div className="space-y-4">
                 <div>
                   <label className="block text-gray-300 text-sm font-medium mb-1.5">
@@ -413,7 +569,6 @@ export default function TeamManagementPage() {
                 </div>
               </div>
 
-              {/* Unit assignment */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-gray-300 text-sm font-medium">
@@ -425,63 +580,12 @@ export default function TeamManagementPage() {
                     </span>
                   )}
                 </div>
-
-                {totalUnits === 0 ? (
-                  <p className="text-gray-500 text-sm italic">No units available yet.</p>
-                ) : (
-                  <div className="border border-gray-600 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
-                    {programs.map((prog) => (
-                      <div key={prog.program_id}>
-                        {/* Program header */}
-                        <button
-                          type="button"
-                          onClick={() => toggleProgram(prog.program_id)}
-                          className="w-full flex items-center gap-2 px-3 py-2 bg-gray-900/80 hover:bg-gray-900 text-gray-300 text-xs font-semibold uppercase tracking-wider transition-colors"
-                        >
-                          {expandedPrograms[prog.program_id]
-                            ? <ChevronDown className="w-3.5 h-3.5" />
-                            : <ChevronRight className="w-3.5 h-3.5" />}
-                          {prog.program_name}
-                        </button>
-
-                        {expandedPrograms[prog.program_id] && prog.workstreams.map((ws) => (
-                          <div key={ws.workstream_id}>
-                            {/* Workstream sub-header */}
-                            <div className="px-4 py-1.5 bg-gray-800/60 text-gray-400 text-xs font-medium border-t border-gray-700/50">
-                              {ws.workstream_name}
-                            </div>
-
-                            {/* Units */}
-                            {ws.units.map((unit) => {
-                              const checked = selectedUnitIds.has(unit.id);
-                              return (
-                                <button
-                                  key={unit.id}
-                                  type="button"
-                                  onClick={() => toggleUnit(unit.id)}
-                                  className={`w-full flex items-center gap-3 px-5 py-2.5 text-left text-sm transition-colors border-t border-gray-700/30 ${
-                                    checked
-                                      ? 'bg-green-600/10 text-green-300'
-                                      : 'text-gray-300 hover:bg-gray-700/40'
-                                  }`}
-                                >
-                                  <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                                    checked
-                                      ? 'bg-green-600 border-green-600'
-                                      : 'border-gray-500 bg-transparent'
-                                  }`}>
-                                    {checked && <Check className="w-3 h-3 text-white" />}
-                                  </div>
-                                  {unit.title}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <UnitTree
+                  selected={selectedUnitIds}
+                  onToggleUnit={toggleUnit}
+                  expanded={expandedPrograms}
+                  onToggleProgram={toggleProgram}
+                />
                 <p className="text-gray-500 text-xs mt-1.5">
                   Field contributors only see and interact with their assigned units.
                 </p>
@@ -490,7 +594,7 @@ export default function TeamManagementPage() {
 
             <div className="px-6 py-4 border-t border-gray-700 flex gap-3">
               <button
-                onClick={closeDialog}
+                onClick={closeCreateDialog}
                 disabled={saving}
                 className="flex-1 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
               >
@@ -502,6 +606,83 @@ export default function TeamManagementPage() {
                 className="flex-1 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {saving ? 'Creating...' : `Create Login${selectedUnitIds.size > 0 ? ` & Assign ${selectedUnitIds.size} Unit${selectedUnitIds.size !== 1 ? 's' : ''}` : ''}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Dialog */}
+      {showEditDialog && editingUser && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl border border-gray-700 w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="px-6 py-5 border-b border-gray-700">
+              <h2 className="text-xl font-bold text-white">Edit Field Team Login</h2>
+              <p className="text-gray-400 text-sm mt-1 font-mono">
+                {editingUser.username}
+              </p>
+            </div>
+
+            <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+              {editError && (
+                <div className="flex items-center gap-2 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-300 text-sm">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {editError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-gray-300 text-sm font-medium mb-1.5">
+                  Display name
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.full_name}
+                  onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })}
+                  placeholder="e.g. Jane Smith"
+                  className="w-full px-4 py-2.5 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-gray-300 text-sm font-medium">
+                    Assigned units
+                  </label>
+                  {editSelectedUnitIds.size > 0 ? (
+                    <span className="text-green-400 text-xs font-medium">
+                      {editSelectedUnitIds.size} selected
+                    </span>
+                  ) : (
+                    <span className="text-gray-500 text-xs">None selected</span>
+                  )}
+                </div>
+                <UnitTree
+                  selected={editSelectedUnitIds}
+                  onToggleUnit={toggleEditUnit}
+                  expanded={editExpandedPrograms}
+                  onToggleProgram={toggleEditProgram}
+                />
+                <p className="text-gray-500 text-xs mt-1.5">
+                  Reassign to new workstreams or units as projects change.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-700 flex gap-3">
+              <button
+                onClick={closeEditDialog}
+                disabled={editSaving}
+                className="flex-1 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEdit}
+                disabled={editSaving}
+                className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {editSaving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>
