@@ -269,7 +269,7 @@ export default function NewUnitPage() {
                   {(audioUrl || formData.management_notes) && (
                     <div className="px-4 pt-4 pb-0 space-y-2">
                       {audioUrl && (
-                        <div className="flex items-center gap-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-tl-sm px-4 py-2.5">
+                        <div className="bg-blue-600/20 border border-blue-500/40 rounded-2xl rounded-tl-sm px-4 py-2.5">
                           <audio
                             ref={audioRef}
                             src={audioUrl}
@@ -280,33 +280,35 @@ export default function NewUnitPage() {
                             }}
                             className="hidden"
                           />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!audioRef.current) return;
-                              if (isPlaying) { audioRef.current.pause(); setIsPlaying(false); }
-                              else { audioRef.current.play(); setIsPlaying(true); }
-                            }}
-                            className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center shrink-0 hover:bg-blue-400 transition-colors"
-                          >
-                            {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
-                          </button>
-                          <div className="flex items-center gap-[2px] flex-1 h-7">
-                            {[30,45,60,35,75,50,80,40,70,55,35,65,85,45,70,30,60,75,50,40,80,55,65,35,70,45,85,60,40,75,55,30,65,80,45,70,35,60,85,50,40,75,65,30,80,55,45,70,35,60].map((h, i, arr) => (
-                              <div
-                                key={i}
-                                className="rounded-[1px] shrink-0 transition-colors duration-75"
-                                style={{
-                                  width: `calc((100% - ${(arr.length - 1) * 2}px) / ${arr.length})`,
-                                  height: `${h}%`,
-                                  backgroundColor: i / arr.length <= playProgress ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.35)',
-                                }}
-                              />
-                            ))}
+                          <div className="flex items-center gap-4">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!audioRef.current) return;
+                                if (isPlaying) { audioRef.current.pause(); setIsPlaying(false); }
+                                else { audioRef.current.play(); setIsPlaying(true); }
+                              }}
+                              className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 shadow-lg transition-colors ${isPlaying ? 'bg-blue-400' : 'bg-blue-500 hover:bg-blue-400'}`}
+                            >
+                              {isPlaying ? <Pause className="w-6 h-6 text-white" /> : <Play className="w-6 h-6 text-white fill-white ml-1" />}
+                            </button>
+                            <div className="flex items-center gap-[2px] flex-1 h-10">
+                              {[30,45,60,35,75,50,80,40,70,55,35,65,85,45,70,30,60,75,50,40,80,55,65,35,70,45,85,60,40,75,55,30,65,80,45,70,35,60,85,50,40,75,65,30,80,55,45,70,35,60].map((h, i, arr) => (
+                                <div
+                                  key={i}
+                                  className="rounded-[1px] shrink-0 transition-colors duration-75"
+                                  style={{
+                                    width: `calc((100% - ${(arr.length - 1) * 2}px) / ${arr.length})`,
+                                    height: `${h}%`,
+                                    backgroundColor: i / arr.length <= playProgress ? 'rgb(147 197 253)' : 'rgba(147,197,253,0.35)',
+                                  }}
+                                />
+                              ))}
+                            </div>
+                            <button type="button" onClick={deleteRecording} className="text-gray-500 hover:text-red-400 transition-colors ml-1 shrink-0">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
-                          <button type="button" onClick={deleteRecording} className="text-gray-500 hover:text-red-400 transition-colors ml-1">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
                         </div>
                       )}
                       {formData.management_notes && (
@@ -318,7 +320,7 @@ export default function NewUnitPage() {
                   )}
 
                   {/* Input area */}
-                  <div className="px-4 pb-4 pt-0 space-y-2">
+                  <div className={`px-4 pb-4 space-y-2 ${(audioUrl || formData.management_notes) ? 'pt-2' : 'pt-4'}`}>
                     {/* Idle mic button */}
                     {!isRecording && !audioUrl && (
                       <button
