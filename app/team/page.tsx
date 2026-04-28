@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, Plus, Trash2, ArrowLeft, User, AlertCircle, ChevronDown, ChevronRight, Check, Pencil } from 'lucide-react';
+import { Users, Plus, Trash2, ArrowLeft, User, AlertCircle, ChevronDown, ChevronRight, Check, Pencil, Search, X } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
 import { usePermissions } from '@/hooks/use-permissions';
 import { NotificationBell } from '@/components/notification-bell';
+import { useLocale } from '@/lib/i18n/context';
 
 interface AssignedUnit {
   unit_id: string;
@@ -43,6 +44,7 @@ interface ProgramOption {
 export default function TeamManagementPage() {
   const router = useRouter();
   const permissions = usePermissions();
+  const { t } = useLocale();
 
   const [users, setUsers] = useState<FieldUser[]>([]);
   const [programs, setPrograms] = useState<ProgramOption[]>([]);
@@ -54,6 +56,8 @@ export default function TeamManagementPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [expandedPrograms, setExpandedPrograms] = useState<Record<string, boolean>>({});
+  const [expandedWorkstreams, setExpandedWorkstreams] = useState<Record<string, boolean>>({});
+  const [createSearch, setCreateSearch] = useState('');
   const [formData, setFormData] = useState({ username: '', password: '', full_name: '' });
   const [selectedUnitIds, setSelectedUnitIds] = useState<Set<string>>(new Set());
 
@@ -63,6 +67,8 @@ export default function TeamManagementPage() {
   const [editFormData, setEditFormData] = useState({ full_name: '' });
   const [editSelectedUnitIds, setEditSelectedUnitIds] = useState<Set<string>>(new Set());
   const [editExpandedPrograms, setEditExpandedPrograms] = useState<Record<string, boolean>>({});
+  const [editExpandedWorkstreams, setEditExpandedWorkstreams] = useState<Record<string, boolean>>({});
+  const [editSearch, setEditSearch] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -128,10 +134,16 @@ export default function TeamManagementPage() {
     setError('');
     setFormData({ username: '', password: '', full_name: '' });
     setSelectedUnitIds(new Set());
+    setCreateSearch('');
+    setExpandedPrograms({});
+    setExpandedWorkstreams({});
     setShowCreateDialog(true);
     const fetched = await fetchAvailableUnits();
     if (fetched.length > 0) {
       setExpandedPrograms({ [fetched[0].program_id]: true });
+      if (fetched[0].workstreams.length > 0) {
+        setExpandedWorkstreams({ [fetched[0].workstreams[0].workstream_id]: true });
+      }
     }
   }
 
@@ -139,26 +151,32 @@ export default function TeamManagementPage() {
     setEditError('');
     setEditFormData({ full_name: user.display_name });
     setEditSelectedUnitIds(new Set(user.assigned_units.map((u) => u.unit_id)));
+    setEditSearch('');
+    setEditExpandedPrograms({});
+    setEditExpandedWorkstreams({});
     setEditingUser(user);
     setShowEditDialog(true);
     const fetched = await fetchAvailableUnits();
     if (fetched.length > 0) {
       setEditExpandedPrograms({ [fetched[0].program_id]: true });
+      if (fetched[0].workstreams.length > 0) {
+        setEditExpandedWorkstreams({ [fetched[0].workstreams[0].workstream_id]: true });
+      }
     }
   }
 
   async function handleCreate() {
     const username = formData.username.trim().toLowerCase();
     if (!username || !formData.password) {
-      setError('Username and password are required');
+      setError(t('team.usernameRequired'));
       return;
     }
     if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(t('team.passwordLengthError'));
       return;
     }
     if (!/^[a-z0-9_-]{3,30}$/.test(username)) {
-      setError('Username must be 3–30 characters: lowercase letters, numbers, underscores, or hyphens only');
+      setError(t('team.usernameFormatError'));
       return;
     }
 
@@ -222,7 +240,7 @@ export default function TeamManagementPage() {
 
   async function handleDelete(userId: string, username: string | null) {
     const label = username ?? userId;
-    if (!confirm(`Remove login for "${label}"? This cannot be undone.`)) return;
+    if (!confirm(t('team.removeConfirm', { username: label }))) return;
 
     setDeletingId(userId);
     setError('');
@@ -261,14 +279,25 @@ export default function TeamManagementPage() {
     setExpandedPrograms((prev) => ({ ...prev, [programId]: !prev[programId] }));
   }
 
+  function toggleWorkstream(wsId: string) {
+    setExpandedWorkstreams((prev) => ({ ...prev, [wsId]: !prev[wsId] }));
+  }
+
   function toggleEditProgram(programId: string) {
     setEditExpandedPrograms((prev) => ({ ...prev, [programId]: !prev[programId] }));
+  }
+
+  function toggleEditWorkstream(wsId: string) {
+    setEditExpandedWorkstreams((prev) => ({ ...prev, [wsId]: !prev[wsId] }));
   }
 
   function closeCreateDialog() {
     setShowCreateDialog(false);
     setFormData({ username: '', password: '', full_name: '' });
     setSelectedUnitIds(new Set());
+    setCreateSearch('');
+    setExpandedPrograms({});
+    setExpandedWorkstreams({});
     setError('');
   }
 
@@ -277,6 +306,9 @@ export default function TeamManagementPage() {
     setEditingUser(null);
     setEditFormData({ full_name: '' });
     setEditSelectedUnitIds(new Set());
+    setEditSearch('');
+    setEditExpandedPrograms({});
+    setEditExpandedWorkstreams({});
     setEditError('');
   }
 
@@ -288,7 +320,7 @@ export default function TeamManagementPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center">
-        <div className="text-white text-lg">Loading team...</div>
+        <div className="text-white text-lg">{t('team.loadingTeam')}</div>
       </div>
     );
   }
@@ -299,64 +331,176 @@ export default function TeamManagementPage() {
     onToggleUnit,
     expanded,
     onToggleProgram,
+    expandedWs,
+    onToggleWs,
+    search,
+    onSearchChange,
+    onToggleAllInWs,
   }: {
     selected: Set<string>;
     onToggleUnit: (id: string) => void;
     expanded: Record<string, boolean>;
     onToggleProgram: (id: string) => void;
+    expandedWs: Record<string, boolean>;
+    onToggleWs: (id: string) => void;
+    search: string;
+    onSearchChange: (v: string) => void;
+    onToggleAllInWs: (unitIds: string[], allSelected: boolean) => void;
   }) {
     if (unitsLoading) {
-      return <p className="text-gray-500 text-sm italic px-1">Loading workstreams...</p>;
+      return <p className="text-gray-500 text-sm italic px-1">{t('team.loadingWorkstreams')}</p>;
     }
     if (totalUnits === 0) {
-      return <p className="text-gray-500 text-sm italic">No units available yet.</p>;
+      return <p className="text-gray-500 text-sm italic">{t('team.noUnitsAvailable')}</p>;
     }
+
+    const q = search.toLowerCase().trim();
+    const searching = q.length > 0;
+
+    // Filter and auto-expand when searching
+    const visiblePrograms = programs.map((prog) => ({
+      ...prog,
+      workstreams: prog.workstreams.map((ws) => ({
+        ...ws,
+        units: searching ? ws.units.filter((u) => u.title.toLowerCase().includes(q)) : ws.units,
+      })).filter((ws) => !searching || ws.units.length > 0),
+    })).filter((prog) => !searching || prog.workstreams.length > 0);
+
     return (
-      <div className="border border-gray-600 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
-        {programs.map((prog) => (
-          <div key={prog.program_id}>
+      <div className="space-y-1.5">
+        {/* Search input */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={t('team.searchPlaceholder')}
+            className="w-full pl-8 pr-8 py-2 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 text-xs"
+          />
+          {search && (
             <button
               type="button"
-              onClick={() => onToggleProgram(prog.program_id)}
-              className="w-full flex items-center gap-2 px-3 py-2 bg-gray-900/80 hover:bg-gray-900 text-gray-300 text-xs font-semibold uppercase tracking-wider transition-colors"
+              onClick={() => onSearchChange('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
             >
-              {expanded[prog.program_id]
-                ? <ChevronDown className="w-3.5 h-3.5" />
-                : <ChevronRight className="w-3.5 h-3.5" />}
-              {prog.program_name}
+              <X className="w-3.5 h-3.5" />
             </button>
+          )}
+        </div>
 
-            {expanded[prog.program_id] && prog.workstreams.map((ws) => (
-              <div key={ws.workstream_id}>
-                <div className="px-4 py-1.5 bg-gray-800/60 text-gray-400 text-xs font-medium border-t border-gray-700/50">
-                  {ws.workstream_name}
-                </div>
-                {ws.units.map((unit) => {
-                  const checked = selected.has(unit.id);
+        <div className="border border-gray-600 rounded-lg overflow-hidden max-h-60 overflow-y-auto">
+          {visiblePrograms.map((prog) => {
+            const isProgramOpen = searching || expanded[prog.program_id];
+            return (
+              <div key={prog.program_id}>
+                <button
+                  type="button"
+                  onClick={() => onToggleProgram(prog.program_id)}
+                  className="w-full flex items-center gap-2 px-3 py-2 bg-gray-900/80 hover:bg-gray-900 text-gray-300 text-xs font-semibold uppercase tracking-wider transition-colors"
+                >
+                  {isProgramOpen
+                    ? <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                    : <ChevronRight className="w-3.5 h-3.5 shrink-0" />}
+                  {prog.program_name}
+                </button>
+
+                {isProgramOpen && prog.workstreams.map((ws) => {
+                  const isWsOpen = searching || expandedWs[ws.workstream_id];
+                  const allWsSelected = ws.units.length > 0 && ws.units.every((u) => selected.has(u.id));
+                  const someWsSelected = ws.units.some((u) => selected.has(u.id));
+                  const wsUnitIds = ws.units.map((u) => u.id);
+
                   return (
-                    <button
-                      key={unit.id}
-                      type="button"
-                      onClick={() => onToggleUnit(unit.id)}
-                      className={`w-full flex items-center gap-3 px-5 py-2.5 text-left text-sm transition-colors border-t border-gray-700/30 ${
-                        checked ? 'bg-green-600/10 text-green-300' : 'text-gray-300 hover:bg-gray-700/40'
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
-                        checked ? 'bg-green-600 border-green-600' : 'border-gray-500 bg-transparent'
-                      }`}>
-                        {checked && <Check className="w-3 h-3 text-white" />}
+                    <div key={ws.workstream_id}>
+                      <div className="flex items-center border-t border-gray-700/50 bg-gray-800/60">
+                        <button
+                          type="button"
+                          onClick={() => onToggleWs(ws.workstream_id)}
+                          className="flex items-center gap-1.5 flex-1 px-4 py-1.5 text-gray-400 text-xs font-medium hover:text-gray-300 transition-colors text-left"
+                        >
+                          {isWsOpen
+                            ? <ChevronDown className="w-3 h-3 shrink-0" />
+                            : <ChevronRight className="w-3 h-3 shrink-0" />}
+                          {ws.workstream_name}
+                          <span className="ml-1 text-gray-600 font-normal">({ws.units.length})</span>
+                        </button>
+                        {/* Select-all toggle for this workstream */}
+                        <button
+                          type="button"
+                          onClick={() => onToggleAllInWs(wsUnitIds, allWsSelected)}
+                          className={`px-2.5 py-1 text-xs transition-colors shrink-0 ${
+                            allWsSelected
+                              ? 'text-green-400 hover:text-red-400'
+                              : someWsSelected
+                              ? 'text-yellow-400 hover:text-green-400'
+                              : 'text-gray-600 hover:text-green-400'
+                          }`}
+                          title={allWsSelected ? t('team.deselectAll') : t('team.selectAll')}
+                        >
+                          {allWsSelected ? t('team.deselectAll') : t('team.selectAll')}
+                        </button>
                       </div>
-                      {unit.title}
-                    </button>
+
+                      {isWsOpen && ws.units.map((unit) => {
+                        const checked = selected.has(unit.id);
+                        return (
+                          <button
+                            key={unit.id}
+                            type="button"
+                            onClick={() => onToggleUnit(unit.id)}
+                            className={`w-full flex items-center gap-3 px-5 py-2.5 text-left text-sm transition-colors border-t border-gray-700/30 ${
+                              checked ? 'bg-green-600/10 text-green-300' : 'text-gray-300 hover:bg-gray-700/40'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                              checked ? 'bg-green-600 border-green-600' : 'border-gray-500 bg-transparent'
+                            }`}>
+                              {checked && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            {unit.title}
+                          </button>
+                        );
+                      })}
+                    </div>
                   );
                 })}
               </div>
-            ))}
-          </div>
-        ))}
+            );
+          })}
+
+          {searching && visiblePrograms.length === 0 && (
+            <p className="text-gray-500 text-xs italic text-center py-4 px-3">
+              No units match "{search}"
+            </p>
+          )}
+        </div>
       </div>
     );
+  }
+
+  function toggleAllInWs(unitIds: string[], allSelected: boolean) {
+    setSelectedUnitIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        unitIds.forEach((id) => next.delete(id));
+      } else {
+        unitIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
+
+  function toggleAllInWsEdit(unitIds: string[], allSelected: boolean) {
+    setEditSelectedUnitIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        unitIds.forEach((id) => next.delete(id));
+      } else {
+        unitIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
   }
 
   return (
@@ -373,9 +517,9 @@ export default function TeamManagementPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-400" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-white">Field Team Logins</h1>
+                <h1 className="text-2xl font-bold text-white">{t('team.pageTitle')}</h1>
                 <p className="text-gray-400 text-sm mt-0.5">
-                  Manage field contributor accounts and unit assignments
+                  {t('team.pageSubtitle')}
                 </p>
               </div>
             </div>
@@ -386,7 +530,7 @@ export default function TeamManagementPage() {
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium"
               >
                 <Plus className="w-4 h-4" />
-                Add Login
+                {t('team.addLogin')}
               </button>
             </div>
           </div>
@@ -405,32 +549,34 @@ export default function TeamManagementPage() {
         {users.length === 0 ? (
           <div className="bg-gray-800/60 rounded-xl border border-gray-700 p-12 text-center">
             <Users className="w-14 h-14 text-gray-600 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-white mb-1">No field team logins yet</h3>
+            <h3 className="text-lg font-semibold text-white mb-1">{t('team.noLoginsTitle')}</h3>
             <p className="text-gray-400 text-sm mb-6">
-              Create logins for field contributors and assign them to their specific units.
+              {t('team.noLoginsDesc')}
             </p>
             <button
               onClick={openCreateDialog}
               className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium"
             >
-              Create First Login
+              {t('team.createFirstLogin')}
             </button>
           </div>
         ) : (
           <div className="bg-gray-800/60 rounded-xl border border-gray-700 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-700">
               <span className="text-gray-300 text-sm font-medium">
-                {users.length} field contributor{users.length !== 1 ? 's' : ''}
+                {users.length !== 1
+                  ? t('team.contributorCountPlural', { count: users.length })
+                  : t('team.contributorCount', { count: users.length })}
               </span>
             </div>
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-700 bg-gray-800/40">
-                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">Username</th>
-                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">Display Name</th>
-                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">Assigned Units</th>
-                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">Added</th>
-                  <th className="text-right py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">Actions</th>
+                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colUsername')}</th>
+                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colDisplayName')}</th>
+                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colAssignedUnits')}</th>
+                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colAdded')}</th>
+                  <th className="text-right py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -454,7 +600,7 @@ export default function TeamManagementPage() {
                     </td>
                     <td className="py-4 px-6">
                       {user.assigned_units.length === 0 ? (
-                        <span className="text-gray-500 text-sm italic">No units assigned</span>
+                        <span className="text-gray-500 text-sm italic">{t('team.noUnitsAssigned')}</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {user.assigned_units.slice(0, 2).map((u) => (
@@ -468,7 +614,7 @@ export default function TeamManagementPage() {
                           ))}
                           {user.assigned_units.length > 2 && (
                             <span className="inline-block px-2 py-0.5 bg-gray-700 rounded text-gray-400 text-xs">
-                              +{user.assigned_units.length - 2} more
+                              {t('team.moreUnits', { count: user.assigned_units.length - 2 })}
                             </span>
                           )}
                         </div>
@@ -482,7 +628,7 @@ export default function TeamManagementPage() {
                         <button
                           onClick={() => openEditDialog(user)}
                           className="p-2 hover:bg-blue-500/10 rounded-lg text-blue-400 hover:text-blue-300 transition-colors"
-                          title="Edit login"
+                          title={t('team.editDialogTitle')}
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
@@ -490,7 +636,6 @@ export default function TeamManagementPage() {
                           onClick={() => handleDelete(user.user_id, user.username)}
                           disabled={deletingId === user.user_id}
                           className="p-2 hover:bg-red-500/10 rounded-lg text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
-                          title="Remove login"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -509,9 +654,9 @@ export default function TeamManagementPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl border border-gray-700 w-full max-w-lg max-h-[90vh] flex flex-col">
             <div className="px-6 py-5 border-b border-gray-700">
-              <h2 className="text-xl font-bold text-white">Create Field Team Login</h2>
+              <h2 className="text-xl font-bold text-white">{t('team.createDialogTitle')}</h2>
               <p className="text-gray-400 text-sm mt-1">
-                The new account will be a Field Contributor in your organisation.
+                {t('team.createDialogDesc')}
               </p>
             </div>
 
@@ -526,7 +671,7 @@ export default function TeamManagementPage() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-gray-300 text-sm font-medium mb-1.5">
-                    Username <span className="text-red-400">*</span>
+                    {t('team.usernameLabel')} <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="text"
@@ -538,26 +683,26 @@ export default function TeamManagementPage() {
                     className="w-full px-4 py-2.5 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm font-mono"
                   />
                   <p className="text-gray-500 text-xs mt-1">
-                    3–30 chars · lowercase letters, numbers, _ or - only
+                    {t('team.usernameHint')}
                   </p>
                 </div>
 
                 <div>
                   <label className="block text-gray-300 text-sm font-medium mb-1.5">
-                    Password <span className="text-red-400">*</span>
+                    {t('team.passwordLabel')} <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="password"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Min. 6 characters"
+                    placeholder={t('team.passwordHint')}
                     className="w-full px-4 py-2.5 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
                   />
                 </div>
 
                 <div>
                   <label className="block text-gray-300 text-sm font-medium mb-1.5">
-                    Display name <span className="text-gray-500">(optional)</span>
+                    {t('team.displayNameLabel')} <span className="text-gray-500">{t('team.displayNameOptional')}</span>
                   </label>
                   <input
                     type="text"
@@ -572,11 +717,11 @@ export default function TeamManagementPage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-gray-300 text-sm font-medium">
-                    Assign units <span className="text-gray-500">(optional)</span>
+                    {t('team.assignUnitsLabel')} <span className="text-gray-500">{t('team.displayNameOptional')}</span>
                   </label>
                   {selectedUnitIds.size > 0 && (
                     <span className="text-green-400 text-xs font-medium">
-                      {selectedUnitIds.size} selected
+                      {t('team.unitsSelected', { count: selectedUnitIds.size })}
                     </span>
                   )}
                 </div>
@@ -585,9 +730,14 @@ export default function TeamManagementPage() {
                   onToggleUnit={toggleUnit}
                   expanded={expandedPrograms}
                   onToggleProgram={toggleProgram}
+                  expandedWs={expandedWorkstreams}
+                  onToggleWs={toggleWorkstream}
+                  search={createSearch}
+                  onSearchChange={setCreateSearch}
+                  onToggleAllInWs={toggleAllInWs}
                 />
                 <p className="text-gray-500 text-xs mt-1.5">
-                  Field contributors only see and interact with their assigned units.
+                  {t('team.unitsHint')}
                 </p>
               </div>
             </div>
@@ -598,14 +748,18 @@ export default function TeamManagementPage() {
                 disabled={saving}
                 className="flex-1 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
               >
-                Cancel
+                {t('team.cancelButton')}
               </button>
               <button
                 onClick={handleCreate}
                 disabled={saving || !formData.username || !formData.password}
                 className="flex-1 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? 'Creating...' : `Create Login${selectedUnitIds.size > 0 ? ` & Assign ${selectedUnitIds.size} Unit${selectedUnitIds.size !== 1 ? 's' : ''}` : ''}`}
+                {saving
+                  ? t('team.creatingButton')
+                  : selectedUnitIds.size > 0
+                  ? t(selectedUnitIds.size === 1 ? 'team.createWithUnitsButton' : 'team.createWithUnitsButtonPlural', { count: selectedUnitIds.size })
+                  : t('team.createButton')}
               </button>
             </div>
           </div>
@@ -617,7 +771,7 @@ export default function TeamManagementPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl border border-gray-700 w-full max-w-lg max-h-[90vh] flex flex-col">
             <div className="px-6 py-5 border-b border-gray-700">
-              <h2 className="text-xl font-bold text-white">Edit Field Team Login</h2>
+              <h2 className="text-xl font-bold text-white">{t('team.editDialogTitle')}</h2>
               <p className="text-gray-400 text-sm mt-1 font-mono">
                 {editingUser.username}
               </p>
@@ -633,7 +787,7 @@ export default function TeamManagementPage() {
 
               <div>
                 <label className="block text-gray-300 text-sm font-medium mb-1.5">
-                  Display name
+                  {t('team.displayNameLabel')}
                 </label>
                 <input
                   type="text"
@@ -647,14 +801,14 @@ export default function TeamManagementPage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-gray-300 text-sm font-medium">
-                    Assigned units
+                    {t('team.assignedUnitsLabel')}
                   </label>
                   {editSelectedUnitIds.size > 0 ? (
                     <span className="text-green-400 text-xs font-medium">
-                      {editSelectedUnitIds.size} selected
+                      {t('team.unitsSelected', { count: editSelectedUnitIds.size })}
                     </span>
                   ) : (
-                    <span className="text-gray-500 text-xs">None selected</span>
+                    <span className="text-gray-500 text-xs">{t('team.noneSelected')}</span>
                   )}
                 </div>
                 <UnitTree
@@ -662,9 +816,14 @@ export default function TeamManagementPage() {
                   onToggleUnit={toggleEditUnit}
                   expanded={editExpandedPrograms}
                   onToggleProgram={toggleEditProgram}
+                  expandedWs={editExpandedWorkstreams}
+                  onToggleWs={toggleEditWorkstream}
+                  search={editSearch}
+                  onSearchChange={setEditSearch}
+                  onToggleAllInWs={toggleAllInWsEdit}
                 />
                 <p className="text-gray-500 text-xs mt-1.5">
-                  Reassign to new workstreams or units as projects change.
+                  {t('team.reassignHint')}
                 </p>
               </div>
             </div>
@@ -675,14 +834,14 @@ export default function TeamManagementPage() {
                 disabled={editSaving}
                 className="flex-1 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50"
               >
-                Cancel
+                {t('team.cancelButton')}
               </button>
               <button
                 onClick={handleEdit}
                 disabled={editSaving}
                 className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editSaving ? 'Saving...' : 'Save Changes'}
+                {editSaving ? t('team.savingButton') : t('team.saveButton')}
               </button>
             </div>
           </div>

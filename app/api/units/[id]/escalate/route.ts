@@ -93,6 +93,19 @@ export async function POST(
 
     if (escalationError) throw escalationError;
 
+    // Audit trail: record manual escalation as a status event
+    await supabase.from('unit_status_events').insert({
+      unit_id: unitId,
+      event_type: 'manual_escalation',
+      triggered_by: context!.user_id,
+      triggered_by_role: context!.role,
+      reason: reason.trim(),
+      metadata: {
+        escalation_id: escalation.id,
+        mark_as_blocked: actuallyMarkBlocked,
+      },
+    });
+
     // Get workstream and program details for the email
     const { data: workstreamData } = await supabase
       .from('workstreams')
