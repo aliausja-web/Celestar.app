@@ -145,6 +145,9 @@ export default function UnitDetailPage() {
   const [escalationReason, setEscalationReason] = useState('');
   const [escalating, setEscalating] = useState(false);
 
+  // lightbox for briefing attachment images
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   // Notes from Management — view/edit
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState('');
@@ -721,14 +724,14 @@ export default function UnitDetailPage() {
                 </CardDescription>
               )}
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-0">
 
               {/* View mode */}
               {!editingNotes && (
-                <div className="space-y-3">
-                  {/* Prominent voice note — full-bleed strip */}
+                <div>
+                  {/* Voice note — naturally full-width, no hack needed with p-0 on CardContent */}
                   {unit.voice_note_signed_url && (
-                    <div className="-mx-6">
+                    <>
                       <audio
                         ref={existingAudioRef}
                         src={unit.voice_note_signed_url}
@@ -762,7 +765,7 @@ export default function UnitDetailPage() {
                             }
                           }
                         }}
-                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/28 border-y border-x-0 border-blue-500/40 px-6 py-4 transition-colors group"
+                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/28 border-t border-blue-500/30 px-6 py-4 transition-colors group"
                       >
                         <div className="flex items-center gap-4">
                           <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 shadow-lg transition-colors ${isPlayingExisting ? 'bg-blue-400' : 'bg-blue-500 group-hover:bg-blue-400'}`}>
@@ -791,99 +794,106 @@ export default function UnitDetailPage() {
                           {isPlayingExisting ? 'Playing...' : 'Tap to listen voice note from management'}
                         </p>
                       </button>
-                    </div>
+                    </>
                   )}
 
-                  {/* "Heard by" receipt */}
-                  {unit.voice_note_signed_url && unit.last_voice_note_play && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/8 border border-green-500/20 w-fit">
-                      <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
-                      <span className="text-xs text-green-300/80">
-                        Last heard by{' '}
-                        <span className="font-semibold text-green-200">{unit.last_voice_note_play.full_name}</span>
-                        <span className="text-green-400/50 ml-1.5">
-                          · {new Date(unit.last_voice_note_play.played_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}{' '}
-                          {new Date(unit.last_voice_note_play.played_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                  {/* Everything below has normal padding */}
+                  <div className="px-6 pb-5 space-y-3 mt-3">
+                    {/* "Heard by" receipt */}
+                    {unit.voice_note_signed_url && unit.last_voice_note_play && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/8 border border-green-500/20 w-fit">
+                        <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                        <span className="text-xs text-green-300/80">
+                          Last heard by{' '}
+                          <span className="font-semibold text-green-200">{unit.last_voice_note_play.full_name}</span>
+                          <span className="text-green-400/50 ml-1.5">
+                            · {new Date(unit.last_voice_note_play.played_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}{' '}
+                            {new Date(unit.last_voice_note_play.played_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </span>
-                      </span>
-                    </div>
-                  )}
+                      </div>
+                    )}
 
-                  {/* Text note bubble */}
-                  {unit.management_notes && (
-                    <div className="bg-gray-800/60 border border-gray-700/40 rounded-2xl rounded-tl-sm px-4 py-3">
-                      <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">
-                        {unit.management_notes}
-                      </p>
-                    </div>
-                  )}
+                    {/* Text note bubble */}
+                    {unit.management_notes && (
+                      <div className="bg-gray-800/60 border border-gray-700/40 rounded-2xl rounded-tl-sm px-4 py-3">
+                        <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">
+                          {unit.management_notes}
+                        </p>
+                      </div>
+                    )}
 
-                  {/* Reference materials */}
-                  {(unit.briefing_attachments || []).length > 0 && (
-                    <div className="space-y-2 pt-1">
-                      <p className="text-xs text-gray-500 uppercase tracking-wider font-medium px-1">Reference Materials</p>
-                      <div className="grid grid-cols-1 gap-3">
-                        {(unit.briefing_attachments as BriefingAttachment[]).map((att) => (
-                          <div key={att.id} className="bg-gray-900/60 border border-gray-700/50 rounded-xl overflow-hidden">
-                            {att.mime_type.startsWith('image/') && (
-                              <a href={att.url} target="_blank" rel="noopener noreferrer">
-                                <img src={att.url} alt={att.name} className="w-full object-cover max-h-64 hover:opacity-90 transition-opacity" />
-                              </a>
-                            )}
-                            {att.mime_type.startsWith('video/') && (
-                              <video src={att.url} controls className="w-full max-h-64 bg-black" />
-                            )}
-                            {!att.mime_type.startsWith('image/') && !att.mime_type.startsWith('video/') && (
-                              <div className="flex items-center gap-3 px-4 py-3">
-                                <FileText className="w-8 h-8 text-blue-400 shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-white truncate font-medium">{att.name}</p>
-                                  <p className="text-xs text-gray-500">{(att.size / 1024).toFixed(0)} KB</p>
-                                </div>
-                                <a
-                                  href={att.url}
-                                  download={att.name}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                    {/* Reference materials */}
+                    {(unit.briefing_attachments || []).length > 0 && (
+                      <div className="space-y-2 pt-1">
+                        <p className="text-xs text-gray-500 uppercase tracking-wider font-medium px-1">Reference Materials</p>
+                        <div className="grid grid-cols-1 gap-3">
+                          {(unit.briefing_attachments as BriefingAttachment[]).map((att) => (
+                            <div key={att.id} className="bg-gray-900/60 border border-gray-700/50 rounded-xl overflow-hidden">
+                              {att.mime_type.startsWith('image/') && (
+                                <button
+                                  type="button"
+                                  onClick={() => setLightboxUrl(att.url)}
+                                  className="w-full block"
                                 >
-                                  <Download className="w-4 h-4" />
-                                </a>
-                              </div>
-                            )}
-                            {att.comment && (
-                              <div className="px-4 py-2 border-t border-gray-700/50 bg-gray-800/30">
-                                <p className="text-sm text-gray-300 leading-relaxed">{att.comment}</p>
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                                  <img src={att.url} alt={att.name} className="w-full object-cover max-h-64 hover:opacity-90 transition-opacity" />
+                                </button>
+                              )}
+                              {att.mime_type.startsWith('video/') && (
+                                <video src={att.url} controls className="w-full max-h-64 bg-black" />
+                              )}
+                              {!att.mime_type.startsWith('image/') && !att.mime_type.startsWith('video/') && (
+                                <div className="flex items-center gap-3 px-4 py-3">
+                                  <FileText className="w-8 h-8 text-blue-400 shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-white truncate font-medium">{att.name}</p>
+                                    <p className="text-xs text-gray-500">{(att.size / 1024).toFixed(0)} KB</p>
+                                  </div>
+                                  <a
+                                    href={att.url}
+                                    download={att.name}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </a>
+                                </div>
+                              )}
+                              {att.comment && (
+                                <div className="px-4 py-2 border-t border-gray-700/50 bg-gray-800/30">
+                                  <p className="text-sm text-gray-300 leading-relaxed">{att.comment}</p>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* No instructions — helpful nudge, not a guilt trip */}
-                  {!unit.voice_note_signed_url && !unit.management_notes && !(unit.briefing_attachments || []).length && (
-                    <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700/50">
-                      <MessageSquare className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-gray-300 text-sm font-medium">
-                          {canEditNotes ? 'Brief your team before they start' : 'No briefing on this unit yet'}
-                        </p>
-                        <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">
-                          {canEditNotes
-                            ? 'A short voice note or written note gives the field team the context they need to execute correctly: requirements, completion criteria, or instructions.'
-                            : 'Your workstream lead hasn\'t added instructions yet. Check with them if you have questions before starting.'}
-                        </p>
+                    {/* No instructions nudge */}
+                    {!unit.voice_note_signed_url && !unit.management_notes && !(unit.briefing_attachments || []).length && (
+                      <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700/50">
+                        <MessageSquare className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-gray-300 text-sm font-medium">
+                            {canEditNotes ? 'Brief your team before they start' : 'No briefing on this unit yet'}
+                          </p>
+                          <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">
+                            {canEditNotes
+                              ? 'A short voice note or written note gives the field team the context they need to execute correctly: requirements, completion criteria, or instructions.'
+                              : "Your workstream lead hasn't added instructions yet. Check with them if you have questions before starting."}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               )}
 
               {/* Edit mode — chat-style composer */}
               {editingNotes && (
-                <div className="space-y-4">
+                <div className="px-6 pb-6 pt-2 space-y-4">
                   <div className="bg-black/30 border border-gray-700 rounded-xl overflow-hidden">
 
                     {/* Preview bubbles */}
@@ -1392,6 +1402,18 @@ export default function UnitDetailPage() {
           </Card>
         )}
       </div>
+
+      {/* Briefing image lightbox */}
+      <Dialog open={!!lightboxUrl} onOpenChange={(open) => { if (!open) setLightboxUrl(null); }}>
+        <DialogContent className="max-w-5xl bg-gray-950 border-gray-800 p-2">
+          <DialogHeader className="px-4 pt-2">
+            <DialogTitle className="text-white text-sm font-medium">Reference Material</DialogTitle>
+          </DialogHeader>
+          {lightboxUrl && (
+            <img src={lightboxUrl} alt="Reference material" className="w-full rounded-lg object-contain max-h-[80vh]" />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Zoom Dialog (photo/video only) */}
       <Dialog open={showZoomDialog} onOpenChange={setShowZoomDialog}>
