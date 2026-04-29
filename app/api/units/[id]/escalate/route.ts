@@ -13,7 +13,7 @@ export async function POST(
   try {
     const authHeader = request.headers.get('authorization');
     const { authorized, context, error: authError } = await authorize(authHeader, {
-      requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD', 'CLIENT_VIEWER'],
+      requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD', 'FIELD_CONTRIBUTOR', 'CLIENT_VIEWER'],
     });
 
     if (!authorized) {
