@@ -6,13 +6,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { UnitWithProofs, WorkstreamWithMetrics } from '@/lib/types';
 import {
-  AlertTriangle, CheckCircle2, Clock, Camera, Upload, ChevronLeft,
-  FileText, Video, Image as ImageIcon, AlertOctagon, Plus, History,
+  AlertTriangle, CheckCircle2, Clock, Camera, ChevronLeft,
+  FileText, Video, Image as ImageIcon, Plus, Mic, Paperclip,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isValid } from 'date-fns';
 import { supabase } from '@/lib/firebase';
@@ -34,10 +31,6 @@ export default function WorkstreamBoard() {
   const [workstream, setWorkstream] = useState<WorkstreamWithMetrics | null>(null);
   const [units, setUnits] = useState<UnitWithProofs[]>([]);
   const [loading, setLoading] = useState(true);
-  const [escalating, setEscalating] = useState<string | null>(null);
-  const [showEscalationDialog, setShowEscalationDialog] = useState(false);
-  const [selectedUnitForEscalation, setSelectedUnitForEscalation] = useState<UnitWithProofs | null>(null);
-  const [escalationReason, setEscalationReason] = useState('');
 
   useEffect(() => {
     if (workstreamId) {
@@ -80,46 +73,6 @@ export default function WorkstreamBoard() {
     }
   }
 
-  function openEscalationDialog(unit: UnitWithProofs) {
-    setSelectedUnitForEscalation(unit);
-    setEscalationReason('');
-    setShowEscalationDialog(true);
-  }
-
-  async function handleEscalate() {
-    if (!selectedUnitForEscalation) return;
-    if (!escalationReason.trim()) {
-      toast.error(t('workstream.errorNoReason'));
-      return;
-    }
-    setEscalating(selectedUnitForEscalation.id);
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) throw new Error('Not authenticated. Please log in again.');
-      const token = session.access_token;
-      const response = await fetch(`/api/units/${selectedUnitForEscalation.id}/escalate`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: escalationReason }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to escalate unit');
-      if (data.notifications_sent) {
-        toast.success(t('workstream.successEscalation', { count: data.notifications_sent }));
-      } else {
-        toast.success(t('workstream.noRecipients'));
-      }
-      if (data.email_errors) console.error('Email errors:', data.email_errors);
-      setShowEscalationDialog(false);
-      if (workstreamId) await fetchUnits(workstreamId);
-    } catch (error: any) {
-      console.error('Error escalating unit:', error);
-      toast.error(error.message || 'Failed to escalate unit');
-    } finally {
-      setEscalating(null);
-    }
-  }
-
   function ProofTypeIcon({ type }: { type: string }) {
     switch (type) {
       case 'photo': return <ImageIcon className="w-3 h-3" />;
@@ -133,68 +86,78 @@ export default function WorkstreamBoard() {
     const isGreen = unit.computed_status === 'GREEN';
     const isBlocked = unit.computed_status === 'BLOCKED';
     const isUnconfirmed = unit.is_confirmed === false;
+    const isFieldContributor = permissions.role === 'FIELD_CONTRIBUTOR';
     const deadlineDate = unit.required_green_by ? new Date(unit.required_green_by) : null;
     const validDeadline = deadlineDate && isValid(deadlineDate) ? deadlineDate : null;
     const isPastDeadline = validDeadline && validDeadline < new Date();
-    const statusColor = isBlocked
-      ? 'border-yellow-600 bg-yellow-900/40 text-yellow-400 font-semibold'
-      : isGreen
-      ? 'border-[#238636]/50 bg-[#238636]/10 text-[#3fb950]'
-      : 'border-red-600 bg-red-900/40 text-red-400 font-semibold';
-
     const requiredCount = unit.proof_requirements?.required_count || 1;
     const requiredTypes = unit.proof_requirements?.required_types || ['photo'];
+    const briefingAttachments = ((unit as any).briefing_attachments || []) as Array<{ id: string; url: string; name: string; mime_type: string }>;
+    const managementNotes = (unit as any).management_notes as string | null;
+    const voiceNoteUrl = (unit as any).voice_note_url as string | null;
+
+    const leftBorderColor = isBlocked
+      ? 'border-l-yellow-500'
+      : isGreen
+      ? 'border-l-[#238636]'
+      : 'border-l-red-500';
+
+    const statusBadgeStyle = isBlocked
+      ? 'border-yellow-600 bg-yellow-900/40 text-yellow-400'
+      : isGreen
+      ? 'border-[#238636]/50 bg-[#238636]/15 text-[#3fb950]'
+      : 'border-red-600 bg-red-900/50 text-red-300';
 
     return (
       <Card
-        className={`border-[#30363d] bg-[#161b22] transition-all cursor-pointer hover:border-[#484f58] ${isUnconfirmed ? 'opacity-75 border-dashed' : ''}`}
+        className={`border-[#30363d] border-l-4 ${leftBorderColor} bg-[#161b22] transition-all cursor-pointer hover:bg-[#1c2128] ${isUnconfirmed ? 'opacity-75' : ''}`}
         onClick={() => router.push(`/units/${unit.id}`)}
       >
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-            <div className="flex-1 min-w-0 space-y-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge className={`${statusColor} font-black text-xs px-3 py-1.5 flex items-center gap-1.5`}>
-                  {isGreen ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                  {unit.computed_status}
-                </Badge>
-                {isUnconfirmed && (
-                  <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40 text-xs px-2 py-1">
-                    {t('workstream.unconfirmedBadge')}
-                  </Badge>
-                )}
-              </div>
-              <h3 className="text-[#e6edf3] font-medium text-lg">{unit.title}</h3>
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[#7d8590]">
-                <span>{t('workstream.owner')} {unit.owner_party_name}</span>
+        <CardContent className="p-4 space-y-3">
+          {/* Status + Title row */}
+          <div className="flex items-start gap-3">
+            <Badge className={`${statusBadgeStyle} font-bold text-sm px-3 py-1.5 flex items-center gap-1.5 shrink-0`}>
+              {isGreen ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+              {unit.computed_status}
+            </Badge>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-[#e6edf3] font-semibold text-base leading-snug">{unit.title}</h3>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-xs text-[#7d8590]">
+                {unit.owner_party_name && <span>{t('workstream.owner')} {unit.owner_party_name}</span>}
                 {validDeadline && (
-                  <span className={`flex items-center gap-1 ${isPastDeadline ? 'text-red-300 font-medium' : ''}`}>
+                  <span className={`flex items-center gap-1 ${isPastDeadline ? 'text-red-400 font-medium' : ''}`}>
                     <Clock className="w-3 h-3" />
-                    {isPastDeadline ? '⚠️ ' : ''}
-                    {format(validDeadline, 'MMM d, HH:mm')} (
-                    {formatDistanceToNow(validDeadline, { addSuffix: true })})
+                    {isPastDeadline ? '⚠️ ' : ''}{format(validDeadline, 'MMM d, HH:mm')} ({formatDistanceToNow(validDeadline, { addSuffix: true })})
                   </span>
                 )}
+                {isUnconfirmed && <span className="text-gray-500 italic">{t('workstream.unconfirmedBadge')}</span>}
               </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-[#7d8590]">{t('workstream.required')}</span>
-                <div className="flex items-center gap-1">
-                  <Camera className="w-3 h-3 text-[#7d8590]" />
-                  <span className="text-[#e6edf3] font-medium">{unit.proof_count}/{requiredCount}</span>
-                </div>
-                <div className="flex gap-1">
-                  {requiredTypes.map((type) => (
-                    <Badge key={type} variant="outline" className="text-xs px-2 py-0 border-[#30363d] text-[#7d8590]">
-                      <ProofTypeIcon type={type} />
-                      <span className="ms-1">{type}</span>
-                    </Badge>
-                  ))}
-                </div>
+            </div>
+          </div>
+
+          {/* Workstream Lead+: proof thumbnails */}
+          {!isFieldContributor && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs text-[#7d8590]">
+                <Camera className="w-3 h-3" />
+                <span className="font-medium text-[#e6edf3]">{unit.proof_count}</span>
+                <span>/ {requiredCount} {t('workstream.required')}</span>
+                {unit.last_proof_time && isValid(new Date(unit.last_proof_time)) && (
+                  <span className="text-[#484f58]">· {t('workstream.lastProof')} {formatDistanceToNow(new Date(unit.last_proof_time), { addSuffix: true })}</span>
+                )}
               </div>
               {unit.proofs.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
-                  {unit.proofs.slice(0, 3).map((proof) => (
-                    <div key={proof.id} className="w-16 h-16 bg-[#0d1117] border border-[#30363d] rounded overflow-hidden flex items-center justify-center">
+                  {unit.proofs.slice(0, 5).map((proof) => (
+                    <div
+                      key={proof.id}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/units/${unit.id}`); }}
+                      className={`w-14 h-14 rounded border overflow-hidden flex items-center justify-center cursor-pointer transition-all hover:scale-105 hover:border-[#58a6ff] ${
+                        proof.approval_status === 'approved' ? 'border-[#238636]/60 bg-[#0d1117]' :
+                        proof.approval_status === 'rejected' ? 'border-red-700/60 bg-[#0d1117]' :
+                        'border-[#30363d] bg-[#0d1117]'
+                      }`}
+                    >
                       {proof.type === 'photo' ? (
                         <img src={proof.url} alt="Proof" className="w-full h-full object-cover" />
                       ) : (
@@ -202,34 +165,60 @@ export default function WorkstreamBoard() {
                       )}
                     </div>
                   ))}
-                  {unit.proofs.length > 3 && (
-                    <div className="w-16 h-16 bg-[#0d1117] border border-[#30363d] rounded flex items-center justify-center text-xs text-[#7d8590]">
-                      +{unit.proofs.length - 3}
+                  {unit.proofs.length > 5 && (
+                    <div className="w-14 h-14 bg-[#0d1117] border border-[#30363d] rounded flex items-center justify-center text-xs text-[#7d8590] font-medium">
+                      +{unit.proofs.length - 5}
                     </div>
                   )}
                 </div>
               )}
             </div>
-            <div className="flex gap-2 sm:flex-col sm:shrink-0">
-              {permissions.role === 'FIELD_CONTRIBUTOR' ? (
-                <Button size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/units/${unit.id}/upload`); }} className="flex-1 sm:flex-none bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]">
-                  <Upload className="w-4 h-4 me-2" />
-                  {t('workstream.submitProof')}
-                </Button>
-              ) : (
-                <Button size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/units/${unit.id}`); }} className="flex-1 sm:flex-none bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]">
-                  <History className="w-4 h-4 me-2" />
-                  {t('workstream.viewAuditTrail')}
-                </Button>
+          )}
+
+          {/* Field Contributor: briefing + notes */}
+          {isFieldContributor && (
+            <div className="space-y-2">
+              {/* Proof count pill */}
+              <div className="flex items-center gap-2 text-xs text-[#7d8590]">
+                <Camera className="w-3 h-3" />
+                <span className="font-medium text-[#e6edf3]">{unit.proof_count}</span>
+                <span>/ {requiredCount}</span>
+                <div className="flex gap-1 ms-1">
+                  {requiredTypes.map((type) => (
+                    <Badge key={type} variant="outline" className="text-xs px-1.5 py-0 border-[#30363d] text-[#7d8590]">
+                      <ProofTypeIcon type={type} />
+                      <span className="ms-1">{type}</span>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              {/* Notes snippet */}
+              {managementNotes && (
+                <p className="text-xs text-[#7d8590] line-clamp-2 italic border-l-2 border-[#30363d] pl-2">
+                  {managementNotes}
+                </p>
               )}
-              <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); router.push(`/units/${unit.id}`); }} className="flex-1 sm:flex-none border-[#30363d] text-[#e6edf3] hover:bg-[#161b22]">
-                {t('workstream.viewDetails')}
-              </Button>
-            </div>
-          </div>
-          {unit.last_proof_time && isValid(new Date(unit.last_proof_time)) && (
-            <div className="mt-3 pt-3 border-t border-[#30363d] text-xs text-[#7d8590]">
-              {t('workstream.lastProof')} {formatDistanceToNow(new Date(unit.last_proof_time), { addSuffix: true })}
+              {/* Voice note + briefing attachment indicators */}
+              {(voiceNoteUrl || briefingAttachments.length > 0) && (
+                <div className="flex items-center gap-3 text-xs text-[#7d8590]">
+                  {voiceNoteUrl && (
+                    <span className="flex items-center gap-1">
+                      <Mic className="w-3 h-3 text-blue-400" />
+                      <span className="text-blue-400">Voice note</span>
+                    </span>
+                  )}
+                  {briefingAttachments.length > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Paperclip className="w-3 h-3 text-[#7d8590]" />
+                      {briefingAttachments.length} briefing file{briefingAttachments.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Last proof time */}
+              {unit.last_proof_time && isValid(new Date(unit.last_proof_time)) && (
+                <p className="text-xs text-[#484f58]">{t('workstream.lastProof')} {formatDistanceToNow(new Date(unit.last_proof_time), { addSuffix: true })}</p>
+              )}
             </div>
           )}
         </CardContent>
@@ -352,54 +341,6 @@ export default function WorkstreamBoard() {
         </div>
       </div>
 
-      {/* Escalation Dialog */}
-      <Dialog open={showEscalationDialog} onOpenChange={setShowEscalationDialog}>
-        <DialogContent className="bg-[#161b22] border-[#30363d] max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-[#e6edf3]">{t('workstream.escalationTitle')}</DialogTitle>
-            <DialogDescription className="text-[#7d8590]">
-              {t('workstream.escalationDesc', { name: selectedUnitForEscalation?.title || '' })}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="bg-[#db6d28]/10 border border-[#db6d28]/30 rounded p-3">
-              <div className="flex items-start gap-2">
-                <AlertOctagon className="w-5 h-5 text-[#db6d28] mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm text-[#db6d28] font-medium mb-1">{t('workstream.escalationWarning')}</p>
-                  <p className="text-xs text-[#7d8590]">{t('workstream.escalationCaution')}</p>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="escalation_reason" className="text-[#e6edf3]">
-                {t('workstream.escalationReasonLabel')} <span className="text-red-400">*</span>
-              </Label>
-              <Textarea
-                id="escalation_reason"
-                value={escalationReason}
-                onChange={(e) => setEscalationReason(e.target.value)}
-                placeholder={t('workstream.escalationPlaceholder')}
-                className="bg-[#0d1117] border-[#30363d] text-[#e6edf3] min-h-[120px]"
-                required
-              />
-              <p className="text-xs text-[#7d8590]">{t('workstream.escalationHint')}</p>
-            </div>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setShowEscalationDialog(false)} className="bg-[#0d1117] border-[#30363d] text-[#e6edf3]">
-              {t('workstream.cancelButton')}
-            </Button>
-            <Button
-              onClick={handleEscalate}
-              disabled={!escalationReason.trim() || escalating === selectedUnitForEscalation?.id}
-              className="bg-[#db6d28]/80 hover:bg-[#db6d28] text-[#e6edf3]"
-            >
-              {escalating === selectedUnitForEscalation?.id ? t('workstream.escalatingButton') : t('workstream.escalateButton')}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
