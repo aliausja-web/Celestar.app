@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { UnitWithProofs, WorkstreamWithMetrics } from '@/lib/types';
 import {
   AlertTriangle, CheckCircle2, Clock, Camera, Upload, ChevronLeft,
-  FileText, Video, Image as ImageIcon, AlertOctagon, Plus,
+  FileText, Video, Image as ImageIcon, AlertOctagon, Plus, History,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isValid } from 'date-fns';
 import { supabase } from '@/lib/firebase';
@@ -211,11 +211,18 @@ export default function WorkstreamBoard() {
               )}
             </div>
             <div className="flex gap-2 sm:flex-col sm:shrink-0">
-              <Button size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/units/${unit.id}/upload`); }} className="flex-1 sm:flex-none bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]">
-                <Upload className="w-4 h-4 me-2" />
-                {t('workstream.submitProof')}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => router.push(`/units/${unit.id}`)} className="flex-1 sm:flex-none border-[#30363d] text-[#e6edf3] hover:bg-[#161b22]">
+              {permissions.role === 'FIELD_CONTRIBUTOR' ? (
+                <Button size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/units/${unit.id}/upload`); }} className="flex-1 sm:flex-none bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]">
+                  <Upload className="w-4 h-4 me-2" />
+                  {t('workstream.submitProof')}
+                </Button>
+              ) : (
+                <Button size="sm" onClick={(e) => { e.stopPropagation(); router.push(`/units/${unit.id}`); }} className="flex-1 sm:flex-none bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]">
+                  <History className="w-4 h-4 me-2" />
+                  {t('workstream.viewAuditTrail')}
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); router.push(`/units/${unit.id}`); }} className="flex-1 sm:flex-none border-[#30363d] text-[#e6edf3] hover:bg-[#161b22]">
                 {t('workstream.viewDetails')}
               </Button>
             </div>

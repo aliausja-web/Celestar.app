@@ -1375,6 +1375,23 @@ export default function UnitDetailPage() {
                 ))}
               </div>
             )}
+            {auditEvents.filter(e => e.event_type === 'manual_escalation').length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-semibold text-orange-400 uppercase tracking-wide">{t('units.escalationTitle')}</p>
+                {auditEvents.filter(e => e.event_type === 'manual_escalation').map(e => (
+                  <div key={e.id} className="flex items-start gap-3 p-3 rounded-lg border border-orange-500/30 bg-orange-500/10">
+                    <AlertTriangle className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      {e.reason && <p className="text-sm text-orange-200">{e.reason}</p>}
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {e.triggered_by_role && <span className="me-2">({e.triggered_by_role})</span>}
+                        {formatDistanceToNow(new Date(e.created_at), { addSuffix: true })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
