@@ -173,6 +173,8 @@ export default function UnitDetailPage() {
   const [newAttachmentFiles, setNewAttachmentFiles] = useState<Array<{ file: File; comment: string; localId: string }>>([]);
   const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const [triggerAttachmentPicker, setTriggerAttachmentPicker] = useState(false);
+  const notesSectionRef = useRef<HTMLDivElement | null>(null);
   // waveform: responsive bar count so bars are always ~3px wide on every screen
   const [waveformBarCount, setWaveformBarCount] = useState(60);
   const waveformRoRef = useRef<ResizeObserver | null>(null);
@@ -194,6 +196,17 @@ export default function UnitDetailPage() {
       fetchAuditEvents();
     }
   }, [unitId]);
+
+  // After edit mode opens and the file input is mounted, trigger the picker
+  useEffect(() => {
+    if (editingNotes && triggerAttachmentPicker) {
+      const t = setTimeout(() => {
+        attachmentInputRef.current?.click();
+        setTriggerAttachmentPicker(false);
+      }, 80);
+      return () => clearTimeout(t);
+    }
+  }, [editingNotes, triggerAttachmentPicker]);
 
   async function fetchUnit() {
     try {
@@ -704,12 +717,16 @@ export default function UnitDetailPage() {
               {/* Management actions */}
               {canEditNotes && (
                 <Button
-                  onClick={() => setEditingNotes(true)}
+                  onClick={() => {
+                    setEditingNotes(true);
+                    setTriggerAttachmentPicker(true);
+                    setTimeout(() => notesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+                  }}
                   variant="outline"
                   className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                 >
                   <Paperclip className="w-4 h-4 me-2" />
-                  Attach Reference Material
+                  Attach Briefing Material
                 </Button>
               )}
             </div>
@@ -718,7 +735,7 @@ export default function UnitDetailPage() {
 
         {/* Notes from Management */}
         {(unit.management_notes || unit.voice_note_signed_url || canEditNotes) && (
-          <Card className="bg-black/25 border-gray-800 overflow-hidden">
+          <Card ref={notesSectionRef} className="bg-black/25 border-gray-800 overflow-hidden">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-white flex items-center gap-2">
