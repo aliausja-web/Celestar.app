@@ -33,6 +33,9 @@ import {
   Trash2,
   Pencil,
   Volume2,
+  Paperclip,
+  X,
+  Download,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isPast, differenceInDays } from 'date-fns';
 import { supabase } from '@/lib/firebase';
@@ -41,6 +44,16 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { NotificationBell } from '@/components/notification-bell';
 import { useLocale } from '@/lib/i18n/context';
 import { LanguageSwitcher } from '@/components/language-switcher';
+
+interface BriefingAttachment {
+  id: string;
+  url: string;
+  name: string;
+  mime_type: string;
+  size: number;
+  comment: string;
+  uploaded_at: string;
+}
 
 // Waveform height pattern — long enough to cycle naturally at any bar count
 const WAVE_HEIGHTS = [
@@ -108,6 +121,8 @@ interface Unit {
   management_notes?: string;
   voice_note_signed_url?: string;
   last_voice_note_play?: { played_at: string; full_name: string } | null;
+  // Briefing attachments (reference materials for field team)
+  briefing_attachments?: BriefingAttachment[];
 }
 
 export default function UnitDetailPage() {
@@ -151,6 +166,10 @@ export default function UnitDetailPage() {
   const existingAudioRef = useRef<HTMLAudioElement | null>(null);
   // play-tracking: log once per page load, not on every tap
   const hasLoggedPlayRef = useRef(false);
+  // briefing attachments (edit mode)
+  const [newAttachmentFiles, setNewAttachmentFiles] = useState<Array<{ file: File; comment: string; localId: string }>>([]);
+  const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   // waveform: responsive bar count so bars are always ~3px wide on every screen
   const [waveformBarCount, setWaveformBarCount] = useState(60);
   const waveformRoRef = useRef<ResizeObserver | null>(null);
@@ -336,6 +355,20 @@ export default function UnitDetailPage() {
     return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
   }
 
+  function handleAttachmentSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    const oversized = files.filter(f => f.size > 50 * 1024 * 1024);
+    if (oversized.length) {
+      toast.error(`${oversized.map(f => f.name).join(', ')} exceed the 50 MB limit.`);
+    }
+    const valid = files.filter(f => f.size <= 50 * 1024 * 1024);
+    setNewAttachmentFiles(prev => [
+      ...prev,
+      ...valid.map(file => ({ file, comment: '', localId: `${Date.now()}-${Math.random()}` })),
+    ]);
+    e.target.value = '';
+  }
+
   async function saveNotes() {
     setSavingNotes(true);
     try {
@@ -360,12 +393,43 @@ export default function UnitDetailPage() {
         }
       }
 
+      // Upload new briefing attachments
+      const uploadedAttachments: BriefingAttachment[] = [];
+      for (const item of newAttachmentFiles) {
+        try {
+          const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const filename = `${unitId}/${Date.now()}_${safeName}`;
+          const { error: uploadErr } = await supabase.storage
+            .from('briefing-files')
+            .upload(filename, item.file, { contentType: item.file.type });
+          if (uploadErr) throw uploadErr;
+          const { data: urlData } = supabase.storage.from('briefing-files').getPublicUrl(filename);
+          uploadedAttachments.push({
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            url: urlData.publicUrl,
+            name: item.file.name,
+            mime_type: item.file.type,
+            size: item.file.size,
+            comment: item.comment,
+            uploaded_at: new Date().toISOString(),
+          });
+        } catch {
+          toast.warning(`Failed to upload ${item.file.name} — skipped.`);
+        }
+      }
+
+      const existingAttachments = (unit?.briefing_attachments || []).filter(
+        (a: BriefingAttachment) => !removedAttachmentIds.includes(a.id)
+      );
+      const allAttachments = [...existingAttachments, ...uploadedAttachments];
+
       const patchRes = await fetch(`/api/units/${unitId}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           management_notes: notesText || null,
           voice_note_url: voiceNotePath,
+          briefing_attachments: allAttachments,
         }),
       });
 
@@ -374,6 +438,8 @@ export default function UnitDetailPage() {
       toast.success('Notes saved');
       setEditingNotes(false);
       deleteNewRecording();
+      setNewAttachmentFiles([]);
+      setRemovedAttachmentIds([]);
       await fetchUnit(); // reload to get fresh signed URLs
     } catch (err: any) {
       toast.error(err.message || 'Failed to save notes');
@@ -660,9 +726,9 @@ export default function UnitDetailPage() {
               {/* View mode */}
               {!editingNotes && (
                 <div className="space-y-3">
-                  {/* Prominent voice note bubble */}
+                  {/* Prominent voice note — full-bleed strip */}
                   {unit.voice_note_signed_url && (
-                    <div>
+                    <div className="-mx-6">
                       <audio
                         ref={existingAudioRef}
                         src={unit.voice_note_signed_url}
@@ -682,7 +748,6 @@ export default function UnitDetailPage() {
                           } else {
                             existingAudioRef.current.play();
                             setIsPlayingExisting(true);
-                            // Log play once per page load — fire & forget
                             if (!hasLoggedPlayRef.current) {
                               hasLoggedPlayRef.current = true;
                               try {
@@ -697,7 +762,7 @@ export default function UnitDetailPage() {
                             }
                           }
                         }}
-                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/28 border border-blue-500/40 rounded-2xl rounded-tl-sm px-4 py-2.5 transition-colors group"
+                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/28 border-y border-x-0 border-blue-500/40 px-6 py-4 transition-colors group"
                       >
                         <div className="flex items-center gap-4">
                           <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 shadow-lg transition-colors ${isPlayingExisting ? 'bg-blue-400' : 'bg-blue-500 group-hover:bg-blue-400'}`}>
@@ -753,8 +818,52 @@ export default function UnitDetailPage() {
                     </div>
                   )}
 
+                  {/* Reference materials */}
+                  {(unit.briefing_attachments || []).length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      <p className="text-xs text-gray-500 uppercase tracking-wider font-medium px-1">Reference Materials</p>
+                      <div className="grid grid-cols-1 gap-3">
+                        {(unit.briefing_attachments as BriefingAttachment[]).map((att) => (
+                          <div key={att.id} className="bg-gray-900/60 border border-gray-700/50 rounded-xl overflow-hidden">
+                            {att.mime_type.startsWith('image/') && (
+                              <a href={att.url} target="_blank" rel="noopener noreferrer">
+                                <img src={att.url} alt={att.name} className="w-full object-cover max-h-64 hover:opacity-90 transition-opacity" />
+                              </a>
+                            )}
+                            {att.mime_type.startsWith('video/') && (
+                              <video src={att.url} controls className="w-full max-h-64 bg-black" />
+                            )}
+                            {!att.mime_type.startsWith('image/') && !att.mime_type.startsWith('video/') && (
+                              <div className="flex items-center gap-3 px-4 py-3">
+                                <FileText className="w-8 h-8 text-blue-400 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-white truncate font-medium">{att.name}</p>
+                                  <p className="text-xs text-gray-500">{(att.size / 1024).toFixed(0)} KB</p>
+                                </div>
+                                <a
+                                  href={att.url}
+                                  download={att.name}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </a>
+                              </div>
+                            )}
+                            {att.comment && (
+                              <div className="px-4 py-2 border-t border-gray-700/50 bg-gray-800/30">
+                                <p className="text-sm text-gray-300 leading-relaxed">{att.comment}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* No instructions — helpful nudge, not a guilt trip */}
-                  {!unit.voice_note_signed_url && !unit.management_notes && (
+                  {!unit.voice_note_signed_url && !unit.management_notes && !(unit.briefing_attachments || []).length && (
                     <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700/50">
                       <MessageSquare className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
                       <div>
@@ -940,6 +1049,85 @@ export default function UnitDetailPage() {
                         placeholder="Type a written note for the field team..."
                         className="bg-transparent border-0 border-b border-gray-700/60 rounded-none text-white text-sm resize-none focus-visible:ring-0 focus-visible:border-blue-500/50 px-0 min-h-[56px] placeholder:text-gray-600"
                       />
+
+                      {/* Divider */}
+                      <div className="flex items-center gap-3 pt-1">
+                        <div className="flex-1 h-px bg-gray-700/60" />
+                        <span className="text-xs text-gray-600">reference materials</span>
+                        <div className="flex-1 h-px bg-gray-700/60" />
+                      </div>
+
+                      {/* Existing attachments */}
+                      {(unit.briefing_attachments || [])
+                        .filter((a: BriefingAttachment) => !removedAttachmentIds.includes(a.id))
+                        .map((att: BriefingAttachment) => (
+                          <div key={att.id} className="flex items-center gap-3 px-3 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg">
+                            {att.mime_type.startsWith('image/') ? (
+                              <ImageIcon className="w-5 h-5 text-purple-400 shrink-0" />
+                            ) : att.mime_type.startsWith('video/') ? (
+                              <Video className="w-5 h-5 text-blue-400 shrink-0" />
+                            ) : (
+                              <FileText className="w-5 h-5 text-orange-400 shrink-0" />
+                            )}
+                            <span className="text-sm text-gray-300 flex-1 truncate">{att.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setRemovedAttachmentIds(prev => [...prev, att.id])}
+                              className="text-gray-600 hover:text-red-400 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+
+                      {/* New attachments queued */}
+                      {newAttachmentFiles.map((item, idx) => (
+                        <div key={item.localId} className="bg-gray-800/40 border border-gray-700/50 rounded-lg overflow-hidden">
+                          <div className="flex items-center gap-3 px-3 py-2">
+                            {item.file.type.startsWith('image/') ? (
+                              <ImageIcon className="w-5 h-5 text-purple-400 shrink-0" />
+                            ) : item.file.type.startsWith('video/') ? (
+                              <Video className="w-5 h-5 text-blue-400 shrink-0" />
+                            ) : (
+                              <FileText className="w-5 h-5 text-orange-400 shrink-0" />
+                            )}
+                            <span className="text-sm text-gray-200 flex-1 truncate">{item.file.name}</span>
+                            <span className="text-xs text-gray-600 shrink-0">{(item.file.size / 1024).toFixed(0)} KB</span>
+                            <button
+                              type="button"
+                              onClick={() => setNewAttachmentFiles(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-gray-600 hover:text-red-400 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            value={item.comment}
+                            onChange={(e) => setNewAttachmentFiles(prev => prev.map((f, i) => i === idx ? { ...f, comment: e.target.value } : f))}
+                            placeholder="Add a note about this file (e.g. 'Refer to section 3 for shelf layout')"
+                            className="w-full bg-transparent border-t border-gray-700/50 px-3 py-2 text-sm text-gray-300 placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50"
+                          />
+                        </div>
+                      ))}
+
+                      {/* Add attachment button */}
+                      <button
+                        type="button"
+                        onClick={() => attachmentInputRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed border-gray-700 hover:border-gray-500 text-gray-600 hover:text-gray-400 text-sm transition-colors"
+                      >
+                        <Paperclip className="w-4 h-4" />
+                        Attach reference material (image, video, PDF, doc)
+                      </button>
+                      <input
+                        ref={attachmentInputRef}
+                        type="file"
+                        accept="image/*,video/*,application/pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+                        multiple
+                        className="hidden"
+                        onChange={handleAttachmentSelect}
+                      />
                     </div>
                   </div>
 
@@ -950,7 +1138,13 @@ export default function UnitDetailPage() {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => { setEditingNotes(false); setNotesText(unit.management_notes ?? ''); deleteNewRecording(); }}
+                      onClick={() => {
+                        setEditingNotes(false);
+                        setNotesText(unit.management_notes ?? '');
+                        deleteNewRecording();
+                        setNewAttachmentFiles([]);
+                        setRemovedAttachmentIds([]);
+                      }}
                       disabled={savingNotes}
                       className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                     >
