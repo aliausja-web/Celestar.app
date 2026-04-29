@@ -461,6 +461,8 @@ export default function UnitDetailPage() {
     permissions.role === 'PROGRAM_OWNER' ||
     permissions.role === 'WORKSTREAM_LEAD';
 
+  const isFieldContributor = permissions.role === 'FIELD_CONTRIBUTOR';
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 p-6">
@@ -668,29 +670,46 @@ export default function UnitDetailPage() {
             </div>
 
             <div className="flex gap-2 flex-wrap">
-              <Button
-                onClick={() => router.push(`/units/${unitId}/upload?type=photo`)}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <Upload className="w-4 h-4 me-2" />
-                {t('units.uploadPhoto')}
-              </Button>
-              <Button
-                onClick={() => router.push(`/units/${unitId}/upload?type=document`)}
-                variant="outline"
-                className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
-              >
-                <FileText className="w-4 h-4 me-2" />
-                {t('units.uploadDocument')}
-              </Button>
-              {canApproveProofs && !isGreen && (
+              {/* Field contributor actions */}
+              {isFieldContributor && (
+                <>
+                  <Button
+                    onClick={() => router.push(`/units/${unitId}/upload?type=photo`)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Upload className="w-4 h-4 me-2" />
+                    {t('units.uploadPhoto')}
+                  </Button>
+                  <Button
+                    onClick={() => router.push(`/units/${unitId}/upload?type=document`)}
+                    variant="outline"
+                    className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
+                  >
+                    <FileText className="w-4 h-4 me-2" />
+                    {t('units.uploadDocument')}
+                  </Button>
+                  {!isGreen && (
+                    <Button
+                      onClick={() => setShowEscalationDialog(true)}
+                      variant="outline"
+                      className="bg-[#db6d28]/10 border-[#db6d28]/40 text-[#db6d28] hover:bg-[#db6d28]/20"
+                    >
+                      <AlertOctagon className="w-4 h-4 me-2" />
+                      {t('units.escalate')}
+                    </Button>
+                  )}
+                </>
+              )}
+
+              {/* Management actions */}
+              {canEditNotes && (
                 <Button
-                  onClick={() => setShowEscalationDialog(true)}
+                  onClick={() => setEditingNotes(true)}
                   variant="outline"
-                  className="bg-[#db6d28]/10 border-[#db6d28]/40 text-[#db6d28] hover:bg-[#db6d28]/20"
+                  className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                 >
-                  <AlertOctagon className="w-4 h-4 me-2" />
-                  {t('units.escalate')}
+                  <Paperclip className="w-4 h-4 me-2" />
+                  Attach Reference Material
                 </Button>
               )}
             </div>
@@ -699,7 +718,7 @@ export default function UnitDetailPage() {
 
         {/* Notes from Management */}
         {(unit.management_notes || unit.voice_note_signed_url || canEditNotes) && (
-          <Card className="bg-black/25 border-gray-800">
+          <Card className="bg-black/25 border-gray-800 overflow-hidden">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-white flex items-center gap-2">
@@ -773,7 +792,7 @@ export default function UnitDetailPage() {
                               ? <Pause className="w-6 h-6 text-white" />
                               : <Play className="w-6 h-6 text-white fill-white ml-1" />}
                           </div>
-                          <div ref={waveformContainerRef} className="flex items-center gap-[2px] flex-1 h-10 overflow-hidden">
+                          <div ref={waveformContainerRef} className="flex items-center justify-between flex-1 h-10 overflow-hidden">
                             {Array.from({ length: waveformBarCount }, (_, i) => WAVE_HEIGHTS[i % WAVE_HEIGHTS.length]).map((h, i) => (
                               <div
                                 key={i}
@@ -924,7 +943,7 @@ export default function UnitDetailPage() {
                               >
                                 {isPlayingNewNote ? <Pause className="w-6 h-6 text-white" /> : <Play className="w-6 h-6 text-white fill-white ml-1" />}
                               </button>
-                              <div ref={waveformContainerRef} className="flex items-center gap-[2px] flex-1 h-10 overflow-hidden">
+                              <div ref={waveformContainerRef} className="flex items-center justify-between flex-1 h-10 overflow-hidden">
                                 {Array.from({ length: waveformBarCount }, (_, i) => WAVE_HEIGHTS[i % WAVE_HEIGHTS.length]).map((h, i) => (
                                   <div
                                     key={i}
@@ -972,7 +991,7 @@ export default function UnitDetailPage() {
                               >
                                 {isPlayingExisting ? <Pause className="w-6 h-6 text-white" /> : <Play className="w-6 h-6 text-white fill-white ml-1" />}
                               </button>
-                              <div ref={waveformContainerRef} className="flex items-center gap-[2px] flex-1 h-10 overflow-hidden">
+                              <div ref={waveformContainerRef} className="flex items-center justify-between flex-1 h-10 overflow-hidden">
                                 {Array.from({ length: waveformBarCount }, (_, i) => WAVE_HEIGHTS[i % WAVE_HEIGHTS.length]).map((h, i) => (
                                   <div
                                     key={i}
