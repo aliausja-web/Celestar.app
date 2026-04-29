@@ -405,7 +405,7 @@ export default function UnitDetailPage() {
           const { data: urlData } = supabase.storage.from('voice-notes').getPublicUrl(filename);
           voiceNotePath = urlData.publicUrl;
         } catch {
-          toast.warning('Voice note upload failed — saving text notes only.');
+          toast.warning(t('units.voiceNoteUploadFailed'));
         }
       }
 
@@ -451,7 +451,7 @@ export default function UnitDetailPage() {
 
       if (!patchRes.ok) throw new Error((await patchRes.json()).error || 'Save failed');
 
-      toast.success('Notes saved');
+      toast.success(t('units.notesSaved'));
       setEditingNotes(false);
       deleteNewRecording();
       setNewAttachmentFiles([]);
@@ -530,15 +530,16 @@ export default function UnitDetailPage() {
   function getAuditEventLabel(event: AuditEvent) {
     const labels: Record<string, string> = {
       proof_uploaded: t('units.proofUploadedLabel'),
-      proof_approved: 'Proof Approved',
-      proof_rejected: 'Proof Rejected',
-      proof_expired: 'Proof Expired',
-      status_computed: 'Status Recomputed',
-      blocked: 'Unit Blocked',
-      unblocked: 'Unit Unblocked',
-      manual_escalation: 'Manual Escalation',
-      unit_confirmed: 'Unit Confirmed',
-      unit_archived: 'Unit Archived',
+      proof_approved: t('units.proofApprovedLabel'),
+      proof_rejected: t('units.proofRejectedLabel'),
+      proof_expired: t('units.proofExpiredLabel'),
+      status_computed: t('units.statusRecomputedLabel'),
+      blocked: t('units.unitBlockedAuditLabel'),
+      unblocked: t('units.unitUnblockedLabel'),
+      manual_escalation: t('units.manualEscalationAuditLabel'),
+      unit_confirmed: t('units.unitConfirmedLabel'),
+      unit_archived: t('units.unitArchivedLabel'),
+      voice_note_played: t('units.voiceNotePlayed'),
     };
     return labels[event.event_type] || event.event_type;
   }
@@ -726,7 +727,7 @@ export default function UnitDetailPage() {
                   className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                 >
                   <Paperclip className="w-4 h-4 me-2" />
-                  Attach Briefing Material
+                  {t('units.attachBriefingMaterial')}
                 </Button>
               )}
             </div>
@@ -750,7 +751,7 @@ export default function UnitDetailPage() {
                     className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                   >
                     <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                    {unit.management_notes || unit.voice_note_signed_url ? 'Edit' : 'Add Notes'}
+                    {unit.management_notes || unit.voice_note_signed_url ? t('units.editNotesButton') : t('units.addNotesButton')}
                   </Button>
                 )}
               </div>
@@ -827,7 +828,7 @@ export default function UnitDetailPage() {
                         </div>
                         <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5">
                           <Volume2 className="w-3.5 h-3.5" />
-                          {isPlayingExisting ? 'Playing...' : 'Tap to listen voice note from management'}
+                          {isPlayingExisting ? t('units.playingLabel') : t('units.tapToListen')}
                         </p>
                       </button>
                     </>
@@ -840,7 +841,7 @@ export default function UnitDetailPage() {
                       <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/8 border border-green-500/20 w-fit">
                         <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
                         <span className="text-xs text-green-300/80">
-                          Last heard by{' '}
+                          {t('units.lastHeardBy')}{' '}
                           <span className="font-semibold text-green-200">{unit.last_voice_note_play.full_name}</span>
                           <span className="text-green-400/50 ml-1.5">
                             · {new Date(unit.last_voice_note_play.played_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}{' '}
@@ -862,7 +863,7 @@ export default function UnitDetailPage() {
                     {/* Reference materials */}
                     {(unit.briefing_attachments || []).length > 0 && (
                       <div className="space-y-2 pt-1">
-                        <p className="text-xs text-gray-500 uppercase tracking-wider font-medium px-1">Reference Materials</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wider font-medium px-1">{t('units.referenceMaterialsTitle')}</p>
                         <div className="grid grid-cols-1 gap-3">
                           {(unit.briefing_attachments as BriefingAttachment[]).map((att) => (
                             <div key={att.id} className="bg-gray-900/60 border border-gray-700/50 rounded-xl overflow-hidden">
@@ -913,12 +914,10 @@ export default function UnitDetailPage() {
                         <MessageSquare className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
                         <div>
                           <p className="text-gray-300 text-sm font-medium">
-                            {canEditNotes ? 'Brief your team before they start' : 'No briefing on this unit yet'}
+                            {canEditNotes ? t('units.briefTeamNudgeTitle') : t('units.noBriefingTitle')}
                           </p>
                           <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">
-                            {canEditNotes
-                              ? 'A short voice note or written note gives the field team the context they need to execute correctly: requirements, completion criteria, or instructions.'
-                              : "Your workstream lead hasn't added instructions yet. Check with them if you have questions before starting."}
+                            {canEditNotes ? t('units.briefTeamNudgeDesc') : t('units.noBriefingDesc')}
                           </p>
                         </div>
                       </div>
@@ -979,7 +978,7 @@ export default function UnitDetailPage() {
                             </div>
                             <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5">
                               <Volume2 className="w-3.5 h-3.5" />
-                              {isPlayingNewNote ? 'Playing...' : 'New recording — tap to preview'}
+                              {isPlayingNewNote ? t('units.playingLabel') : t('units.newRecordingPreview')}
                             </p>
                           </div>
                         )}
@@ -1024,7 +1023,7 @@ export default function UnitDetailPage() {
                             </div>
                             <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5">
                               <Volume2 className="w-3.5 h-3.5" />
-                              {isPlayingExisting ? 'Playing...' : 'Tap to listen voice note from management'}
+                              {isPlayingExisting ? t('units.playingLabel') : t('units.tapToListen')}
                             </p>
                           </div>
                         )}
@@ -1049,7 +1048,7 @@ export default function UnitDetailPage() {
                             <Mic className="w-6 h-6 text-blue-400" />
                           </div>
                           <span className="text-blue-400 text-sm font-medium">
-                            {unit.voice_note_signed_url ? 'Tap to record new voice note' : 'Tap to record voice note'}
+                            {unit.voice_note_signed_url ? t('units.tapToRecordNew') : t('units.tapToRecord')}
                           </span>
                         </button>
                       )}
@@ -1069,7 +1068,7 @@ export default function UnitDetailPage() {
                             onClick={stopRecordingNote}
                             className="flex items-center gap-2 px-5 py-2 rounded-full bg-red-600/20 border border-red-500/40 text-red-400 hover:bg-red-600/30 transition-colors text-sm font-medium"
                           >
-                            <Square className="w-3.5 h-3.5 fill-current" /> Stop recording
+                            <Square className="w-3.5 h-3.5 fill-current" /> {t('unitsUpload.stopRecording')}
                           </button>
                         </div>
                       )}
@@ -1077,14 +1076,14 @@ export default function UnitDetailPage() {
                       {/* Re-record */}
                       {audioUrlNote && !isRecordingNote && (
                         <button type="button" onClick={deleteNewRecording} className="w-full flex items-center justify-center gap-1.5 py-1 text-gray-600 hover:text-gray-400 text-xs transition-colors">
-                          <Mic className="w-3 h-3" /> Re-record
+                          <Mic className="w-3 h-3" /> {t('units.reRecord')}
                         </button>
                       )}
 
                       {/* Divider */}
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-px bg-gray-700/60" />
-                        <span className="text-xs text-gray-600">written note</span>
+                        <span className="text-xs text-gray-600">{t('units.writtenNoteLabel')}</span>
                         <div className="flex-1 h-px bg-gray-700/60" />
                       </div>
 
@@ -1099,7 +1098,7 @@ export default function UnitDetailPage() {
                       {/* Divider */}
                       <div className="flex items-center gap-3 pt-1">
                         <div className="flex-1 h-px bg-gray-700/60" />
-                        <span className="text-xs text-gray-600">reference materials</span>
+                        <span className="text-xs text-gray-600">{t('units.referenceMaterialsSection')}</span>
                         <div className="flex-1 h-px bg-gray-700/60" />
                       </div>
 
@@ -1151,7 +1150,7 @@ export default function UnitDetailPage() {
                             type="text"
                             value={item.comment}
                             onChange={(e) => setNewAttachmentFiles(prev => prev.map((f, i) => i === idx ? { ...f, comment: e.target.value } : f))}
-                            placeholder="Add a note about this file (e.g. 'Refer to section 3 for shelf layout')"
+                            placeholder={t('units.attachCommentPlaceholder')}
                             className="w-full bg-transparent border-t border-gray-700/50 px-3 py-2 text-sm text-gray-300 placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50"
                           />
                         </div>
@@ -1164,7 +1163,7 @@ export default function UnitDetailPage() {
                         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed border-gray-700 hover:border-gray-500 text-gray-600 hover:text-gray-400 text-sm transition-colors"
                       >
                         <Paperclip className="w-4 h-4" />
-                        Attach reference material (image, video, PDF, doc)
+                        {t('units.attachMaterialPrompt')}
                       </button>
                       <input
                         ref={attachmentInputRef}
@@ -1180,7 +1179,7 @@ export default function UnitDetailPage() {
                   {/* Save / Cancel */}
                   <div className="flex gap-2">
                     <Button onClick={saveNotes} disabled={savingNotes} className="bg-blue-600 hover:bg-blue-700 text-white">
-                      {savingNotes ? 'Saving...' : 'Save Notes'}
+                      {savingNotes ? t('units.savingNotes') : t('units.saveNotes')}
                     </Button>
                     <Button
                       variant="outline"
@@ -1443,7 +1442,7 @@ export default function UnitDetailPage() {
       <Dialog open={!!lightboxUrl} onOpenChange={(open) => { if (!open) setLightboxUrl(null); }}>
         <DialogContent className="max-w-5xl bg-gray-950 border-gray-800 p-2">
           <DialogHeader className="px-4 pt-2">
-            <DialogTitle className="text-white text-sm font-medium">Reference Material</DialogTitle>
+            <DialogTitle className="text-white text-sm font-medium">{t('units.referenceDialog')}</DialogTitle>
           </DialogHeader>
           {lightboxUrl && (
             <img src={lightboxUrl} alt="Reference material" className="w-full rounded-lg object-contain max-h-[80vh]" />
