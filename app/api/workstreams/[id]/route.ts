@@ -41,12 +41,23 @@ export async function GET(
       .select('id, computed_status, required_green_by')
       .eq('workstream_id', params.id);
 
-    const allUnits = units || [];
-    const total_units = allUnits.length;
-    const red_units = allUnits.filter((u) => u.computed_status === 'RED').length;
-    const green_units = allUnits.filter((u) => u.computed_status === 'GREEN').length;
-    const blocked_units = 0; // is_blocked column may not exist
-    const stale_units = allUnits.filter(
+    let unitScope = units || [];
+
+    // FIELD_CONTRIBUTOR: scope metrics to only their assigned units so stats match the list
+    if (context!.role === 'FIELD_CONTRIBUTOR') {
+      const { data: assignments } = await supabase
+        .from('unit_assignments')
+        .select('unit_id')
+        .eq('user_id', context!.user_id);
+      const assignedIds = new Set((assignments ?? []).map((a: any) => a.unit_id));
+      unitScope = unitScope.filter((u) => assignedIds.has(u.id));
+    }
+
+    const total_units = unitScope.length;
+    const red_units = unitScope.filter((u) => u.computed_status === 'RED').length;
+    const green_units = unitScope.filter((u) => u.computed_status === 'GREEN').length;
+    const blocked_units = 0;
+    const stale_units = unitScope.filter(
       (u) => u.computed_status === 'RED' && u.required_green_by && new Date(u.required_green_by) < new Date()
     ).length;
 
