@@ -1091,7 +1091,7 @@ export default function UnitDetailPage() {
                       <Textarea
                         value={notesText}
                         onChange={(e) => setNotesText(e.target.value)}
-                        placeholder="Type a written note for the field team..."
+                        placeholder="Type a brief for the field team..."
                         className="bg-transparent border-0 border-b border-gray-700/60 rounded-none text-white text-sm resize-none focus-visible:ring-0 focus-visible:border-blue-500/50 px-0 min-h-[56px] placeholder:text-gray-600"
                       />
 
