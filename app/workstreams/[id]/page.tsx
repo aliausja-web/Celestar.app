@@ -319,18 +319,22 @@ export default function WorkstreamBoard() {
             <h2 className="text-lg font-medium text-[#e6edf3]">
               {t('workstream.unitsCount', { count: units.length })}
             </h2>
-            <Button onClick={() => router.push(`/workstreams/${workstreamId}/units/new`)} className="bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]" size="sm">
-              <Plus className="w-4 h-4 me-2" />
-              {t('workstream.addUnit')}
-            </Button>
+            {permissions.role && !['FIELD_CONTRIBUTOR', 'CLIENT_VIEWER'].includes(permissions.role) && (
+              <Button onClick={() => router.push(`/workstreams/${workstreamId}/units/new`)} className="bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]" size="sm">
+                <Plus className="w-4 h-4 me-2" />
+                {t('workstream.addUnit')}
+              </Button>
+            )}
           </div>
           {units.length === 0 ? (
             <Card className="bg-[#161b22] border-[#30363d]">
               <CardContent className="py-12 text-center">
                 <p className="text-[#7d8590] mb-4">{t('workstream.noUnits')}</p>
-                <Button onClick={() => router.push(`/workstreams/${workstreamId}/units/new`)} className="bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]">
-                  {t('workstream.createUnit')}
-                </Button>
+                {permissions.role && !['FIELD_CONTRIBUTOR', 'CLIENT_VIEWER'].includes(permissions.role) && (
+                  <Button onClick={() => router.push(`/workstreams/${workstreamId}/units/new`)} className="bg-[#1f6feb]/90 hover:bg-[#1f6feb] text-[#e6edf3]">
+                    {t('workstream.createUnit')}
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
