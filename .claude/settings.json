@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git push*)",
+            "shell": "powershell",
+            "command": "Write-Output '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"i18n CHECK: Before pushing, verify that every new or changed English string in lib/i18n/messages.ts has been propagated to all three other locales in the same file: Arabic (ar), Urdu (ur), and Bengali (bn). If any translations are missing, add them now before proceeding with the push.\"}}'",
+            "statusMessage": "Checking i18n coverage..."
+          }
+        ]
+      }
+    ]
+  }
+}
