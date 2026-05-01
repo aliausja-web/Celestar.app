@@ -1,37 +1,23 @@
 import { getSupabaseServer } from '@/lib/supabase-server';
-import { NextResponse } from 'next/server';
+import { authorize } from '@/lib/auth-utils';
+import { NextRequest, NextResponse } from 'next/server';
 
 /**
  * Attention Queue API - Single view for all items requiring immediate action
  */
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authHeader = request.headers.get('authorization');
+    const { authorized, context, error: authError } = await authorize(authHeader);
+
+    if (!authorized) {
+      return NextResponse.json({ error: authError }, { status: 401 });
+    }
+
     const supabase = getSupabaseServer();
-
-    // Check authentication
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Get user profile with role
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, organization_id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (!profile) {
-      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
-    }
-
-    const userRole = profile.role;
-    const userOrgId = profile.organization_id;
+    const userRole = context!.role;
+    const userOrgId = context!.org_id;
 
     // 1. PENDING PROOFS
     let pendingProofsQuery = supabase
@@ -63,7 +49,7 @@ export async function GET() {
       .eq('is_valid', true)
       .order('uploaded_at', { ascending: true });
 
-    if (userRole === 'CLIENT' || userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
+    if (userRole !== 'PLATFORM_ADMIN') {
       pendingProofsQuery = pendingProofsQuery.eq('units.workstreams.programs.org_id', userOrgId);
     }
 
@@ -96,7 +82,7 @@ export async function GET() {
       .order('required_green_by', { ascending: true })
       .limit(50);
 
-    if (userRole === 'CLIENT' || userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
+    if (userRole !== 'PLATFORM_ADMIN') {
       unitsAtRiskQuery = unitsAtRiskQuery.eq('workstreams.programs.org_id', userOrgId);
     }
 
@@ -132,7 +118,7 @@ export async function GET() {
       .eq('escalation_type', 'manual')
       .order('triggered_at', { ascending: true });
 
-    if (userRole === 'CLIENT' || userRole === 'WORKSTREAM_LEAD' || userRole === 'PROGRAM_OWNER') {
+    if (userRole !== 'PLATFORM_ADMIN') {
       activeEscalationsQuery = activeEscalationsQuery.eq('units.workstreams.programs.org_id', userOrgId);
     }
 
