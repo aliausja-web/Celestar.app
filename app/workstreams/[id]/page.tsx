@@ -23,6 +23,25 @@ import { NotificationBell } from '@/components/notification-bell';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { useLocale } from '@/lib/i18n/context';
 
+function leadUrgencyScore(u: UnitWithProofs): number {
+  if (u.computed_status === 'BLOCKED') return 4;
+  if ((u.current_escalation_level ?? 0) > 0 && u.computed_status === 'RED') return 3;
+  if (u.computed_status === 'RED') return 2;
+  return 1;
+}
+
+function fieldUrgencyScore(u: UnitWithProofs): number {
+  const req = (u.proof_requirements as any)?.required_count || 1;
+  const uploaded = u.proof_count || 0;
+  const esc = (u.current_escalation_level ?? 0) > 0 || u.computed_status === 'BLOCKED';
+  const done = uploaded >= req;
+  if (!done && uploaded === 0 && esc) return 5;
+  if (!done && uploaded > 0 && esc) return 4;
+  if (!done && uploaded === 0 && !esc) return 3;
+  if (!done && uploaded > 0 && !esc) return 2;
+  return 1;
+}
+
 export default function WorkstreamBoard() {
   const params = useParams();
   const router = useRouter();
@@ -129,10 +148,11 @@ export default function WorkstreamBoard() {
     }
   }
 
-  function UnitRow({ unit }: { unit: UnitWithProofs }) {
+  function UnitRow({ unit, isFieldView }: { unit: UnitWithProofs; isFieldView: boolean }) {
     const isGreen = unit.computed_status === 'GREEN';
     const isBlocked = unit.computed_status === 'BLOCKED';
     const isUnconfirmed = unit.is_confirmed === false;
+    const isEscalated = (unit.current_escalation_level ?? 0) > 0;
     const isPastDeadline = unit.required_green_by && new Date(unit.required_green_by) < new Date();
     const statusColor = isBlocked
       ? 'border-yellow-600 bg-yellow-900/40 text-yellow-400 font-semibold'
@@ -142,6 +162,7 @@ export default function WorkstreamBoard() {
 
     const requiredCount = unit.proof_requirements?.required_count || 1;
     const requiredTypes = unit.proof_requirements?.required_types || ['photo'];
+    const allProofsUploaded = unit.proof_count >= requiredCount;
 
     return (
       <Card className={`border-[#30363d] bg-[#161b22] transition-all ${isUnconfirmed ? 'opacity-75 border-dashed' : ''}`}>
@@ -153,6 +174,12 @@ export default function WorkstreamBoard() {
                   {isGreen ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
                   {unit.computed_status}
                 </Badge>
+                {isEscalated && (
+                  <Badge className="border-[#db6d28]/60 bg-[#db6d28]/15 text-[#db6d28] text-xs px-2 py-1 flex items-center gap-1">
+                    <AlertOctagon className="w-3 h-3" />
+                    L{unit.current_escalation_level} {t('workstream.escalated')}
+                  </Badge>
+                )}
                 {isUnconfirmed && (
                   <Badge className="bg-gray-500/20 text-gray-400 border-gray-500/40 text-xs px-2 py-1">
                     {t('workstream.unconfirmedBadge')}
@@ -172,21 +199,22 @@ export default function WorkstreamBoard() {
                 )}
               </div>
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-[#7d8590]">{t('workstream.required')}</span>
-                <div className="flex items-center gap-1">
-                  <Camera className="w-3 h-3 text-[#7d8590]" />
-                  <span className="text-[#e6edf3] font-medium">{unit.proof_count}/{requiredCount}</span>
-                </div>
-                <div className="flex gap-1">
-                  {requiredTypes.map((type) => (
-                    <Badge key={type} variant="outline" className="text-xs px-2 py-0 border-[#30363d] text-[#7d8590]">
-                      <ProofTypeIcon type={type} />
-                      <span className="ms-1">{type}</span>
-                    </Badge>
-                  ))}
-                </div>
+                <Camera className="w-3 h-3 text-[#7d8590]" />
+                <span className={`font-medium ${allProofsUploaded ? 'text-[#3fb950]' : 'text-[#e6edf3]'}`}>
+                  {unit.proof_count}/{requiredCount} {t('workstream.proofsUploaded')}
+                </span>
+                {!isFieldView && (
+                  <div className="flex gap-1">
+                    {requiredTypes.map((type) => (
+                      <Badge key={type} variant="outline" className="text-xs px-2 py-0 border-[#30363d] text-[#7d8590]">
+                        <ProofTypeIcon type={type} />
+                        <span className="ms-1">{type}</span>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
-              {unit.proofs.length > 0 && (
+              {!isFieldView && unit.proofs.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
                   {unit.proofs.slice(0, 3).map((proof) => (
                     <div key={proof.id} className="w-16 h-16 bg-[#0d1117] border border-[#30363d] rounded overflow-hidden flex items-center justify-center">
@@ -224,6 +252,13 @@ export default function WorkstreamBoard() {
       </Card>
     );
   }
+
+  const isFieldView = permissions.role === 'FIELD_CONTRIBUTOR';
+  const sortedUnits = [...units].sort((a, b) =>
+    isFieldView
+      ? fieldUrgencyScore(b) - fieldUrgencyScore(a)
+      : leadUrgencyScore(b) - leadUrgencyScore(a)
+  );
 
   if (loading) {
     return (
@@ -334,7 +369,7 @@ export default function WorkstreamBoard() {
             </Card>
           ) : (
             <div className="space-y-3">
-              {units.map((unit) => <UnitRow key={unit.id} unit={unit} />)}
+              {sortedUnits.map((unit) => <UnitRow key={unit.id} unit={unit} isFieldView={isFieldView} />)}
             </div>
           )}
         </div>
