@@ -1,15 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabase-server';
 import { authorize } from '@/lib/auth-utils';
-import { createClient } from '@supabase/supabase-js';
-
-function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
 
 // GET /api/units/[id] - Get a specific unit with proofs
 export async function GET(
@@ -55,19 +46,8 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
-    // FIELD_CONTRIBUTOR: must have an explicit unit assignment
-    if (context!.role === 'FIELD_CONTRIBUTOR') {
-      const { data: assignment } = await getSupabaseAdmin()
-        .from('unit_assignments')
-        .select('id')
-        .eq('unit_id', params.id)
-        .eq('user_id', context!.user_id)
-        .maybeSingle();
-
-      if (!assignment) {
-        return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
-      }
-    }
+    // All roles (including FIELD_CONTRIBUTOR) can access any unit in their org.
+    // Org-level tenant safety is already enforced above (unitOrgId === userOrgId).
 
     // Get proofs
     const { data: proofs } = await supabase
