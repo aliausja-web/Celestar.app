@@ -46,8 +46,19 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
-    // All roles (including FIELD_CONTRIBUTOR) can access any unit in their org.
-    // Org-level tenant safety is already enforced above (unitOrgId === userOrgId).
+    // FIELD_CONTRIBUTOR: verify they are assigned to this specific unit.
+    if (context!.role === 'FIELD_CONTRIBUTOR') {
+      const { data: assignment } = await supabase
+        .from('unit_assignments')
+        .select('unit_id')
+        .eq('unit_id', params.id)
+        .eq('user_id', context!.user_id)
+        .maybeSingle();
+
+      if (!assignment) {
+        return NextResponse.json({ error: 'Forbidden - not assigned to this unit' }, { status: 403 });
+      }
+    }
 
     // Get proofs
     const { data: proofs } = await supabase

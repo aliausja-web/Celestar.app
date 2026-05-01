@@ -39,8 +39,49 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
-    // All roles (including FIELD_CONTRIBUTOR) see all units in this workstream.
-    // Org-level tenant safety is already enforced above (wsOrgId === context.org_id).
+    // FIELD_CONTRIBUTOR: only return units explicitly assigned to them.
+    // All other roles see every unit in the workstream (org already verified above).
+    if (context!.role === 'FIELD_CONTRIBUTOR') {
+      const { data: assignments } = await supabase
+        .from('unit_assignments')
+        .select('unit_id')
+        .eq('user_id', context!.user_id);
+
+      const assignedIds = (assignments ?? []).map((a: any) => a.unit_id);
+      if (assignedIds.length === 0) {
+        return NextResponse.json([]);
+      }
+
+      const { data: units, error } = await supabase
+        .from('units')
+        .select('*')
+        .eq('workstream_id', workstreamId)
+        .in('id', assignedIds)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      const unitsWithProofs = await Promise.all(
+        (units || []).map(async (unit) => {
+          const { data: proofs } = await supabase
+            .from('unit_proofs')
+            .select('*')
+            .eq('unit_id', unit.id)
+            .eq('is_valid', true)
+            .order('uploaded_at', { ascending: false });
+
+          return {
+            ...unit,
+            proofs: proofs || [],
+            proof_count: proofs?.length || 0,
+            last_proof_time: proofs?.[0]?.uploaded_at || null,
+          };
+        })
+      );
+
+      return NextResponse.json(unitsWithProofs);
+    }
+
     const unitsQuery = supabase
       .from('units')
       .select('*')
