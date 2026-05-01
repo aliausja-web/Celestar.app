@@ -116,19 +116,12 @@ export async function POST(
     const workstreamName = workstreamData?.name || 'Unknown Workstream';
     const programName = (workstreamData?.programs as any)?.name || 'Unknown Program';
 
-    // MANUAL ESCALATION: Notify ALL users in the org + ALL PLATFORM_ADMINs
-    const { data: sameOrgUsers } = await supabase
+    // MANUAL ESCALATION: Notify ALL users within the unit's org only.
+    // PLATFORM_ADMINs from other orgs must NOT receive cross-tenant notifications.
+    const { data: usersToNotify } = await supabase
       .from('profiles')
       .select('user_id, email, full_name, role')
-      .eq('org_id', unitOrgId)
-      .neq('role', 'PLATFORM_ADMIN');
-
-    const { data: platformAdmins } = await supabase
-      .from('profiles')
-      .select('user_id, email, full_name, role')
-      .eq('role', 'PLATFORM_ADMIN');
-
-    const usersToNotify = [...(sameOrgUsers || []), ...(platformAdmins || [])];
+      .eq('org_id', unitOrgId);
 
     // Get escalator's name
     const { data: escalatorProfile } = await supabase
