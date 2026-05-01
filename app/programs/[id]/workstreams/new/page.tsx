@@ -63,7 +63,7 @@ export default function NewWorkstreamPage() {
       }
 
       toast.success('Workstream created successfully');
-      router.push('/programs');
+      router.push(`/programs/${programId}`);
     } catch (error: any) {
       console.error('Error creating workstream:', error);
       toast.error(error.message || 'Failed to create workstream');
@@ -77,7 +77,7 @@ export default function NewWorkstreamPage() {
       <div className="max-w-3xl mx-auto space-y-6">
         <div className="flex items-center gap-4">
           <Button
-            onClick={() => router.push('/programs')}
+            onClick={() => router.push(`/programs/${programId}`)}
             variant="outline"
             className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
           >
@@ -162,7 +162,7 @@ export default function NewWorkstreamPage() {
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => router.push('/programs')}
+                  onClick={() => router.push(`/programs/${programId}`)}
                   variant="outline"
                   className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                 >

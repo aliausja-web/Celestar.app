@@ -176,6 +176,7 @@ export async function PATCH(
       'acceptance_criteria',
       'management_notes',
       'voice_note_url',
+      'briefing_attachments',
       'proof_requirements',
       'escalation_config',
       'requires_reviewer_approval',

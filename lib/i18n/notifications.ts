@@ -51,10 +51,14 @@ export function getNotifContent(
       };
 
     case 'escalation':
+      return {
+        title: t('notifContent.escalationTitle'),
+        message: t('notifContent.escalationMsg', { unit: unitTitle, reason: '' }),
+      };
     case 'manual_escalation':
       return {
         title: t('notifContent.escalationTitle'),
-        message: t('notifContent.escalationMsg', { unit: unitTitle }),
+        message: t('notifContent.escalationMsg', { unit: unitTitle, reason: meta.reason || '' }),
       };
 
     case 'deadline_approaching': {

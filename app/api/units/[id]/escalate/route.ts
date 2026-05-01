@@ -13,7 +13,7 @@ export async function POST(
   try {
     const authHeader = request.headers.get('authorization');
     const { authorized, context, error: authError } = await authorize(authHeader, {
-      requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD', 'CLIENT_VIEWER'],
+      requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD', 'FIELD_CONTRIBUTOR', 'CLIENT_VIEWER'],
     });
 
     if (!authorized) {
@@ -92,6 +92,19 @@ export async function POST(
       .single();
 
     if (escalationError) throw escalationError;
+
+    // Audit trail: record manual escalation as a status event
+    await supabase.from('unit_status_events').insert({
+      unit_id: unitId,
+      event_type: 'manual_escalation',
+      triggered_by: context!.user_id,
+      triggered_by_role: context!.role,
+      reason: reason.trim(),
+      metadata: {
+        escalation_id: escalation.id,
+        mark_as_blocked: actuallyMarkBlocked,
+      },
+    });
 
     // Get workstream and program details for the email
     const { data: workstreamData } = await supabase

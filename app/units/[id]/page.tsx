@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +33,9 @@ import {
   Trash2,
   Pencil,
   Volume2,
+  Paperclip,
+  X,
+  Download,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isPast, differenceInDays } from 'date-fns';
 import { supabase } from '@/lib/firebase';
@@ -41,6 +44,16 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { NotificationBell } from '@/components/notification-bell';
 import { useLocale } from '@/lib/i18n/context';
 import { LanguageSwitcher } from '@/components/language-switcher';
+
+interface BriefingAttachment {
+  id: string;
+  url: string;
+  name: string;
+  mime_type: string;
+  size: number;
+  comment: string;
+  uploaded_at: string;
+}
 
 // Waveform height pattern — long enough to cycle naturally at any bar count
 const WAVE_HEIGHTS = [
@@ -108,6 +121,8 @@ interface Unit {
   management_notes?: string;
   voice_note_signed_url?: string;
   last_voice_note_play?: { played_at: string; full_name: string } | null;
+  // Briefing attachments (reference materials for field team)
+  briefing_attachments?: BriefingAttachment[];
 }
 
 export default function UnitDetailPage() {
@@ -130,6 +145,9 @@ export default function UnitDetailPage() {
   const [escalationReason, setEscalationReason] = useState('');
   const [escalating, setEscalating] = useState(false);
 
+  // lightbox for briefing attachment images
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
   // Notes from Management — view/edit
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesText, setNotesText] = useState('');
@@ -151,21 +169,26 @@ export default function UnitDetailPage() {
   const existingAudioRef = useRef<HTMLAudioElement | null>(null);
   // play-tracking: log once per page load, not on every tap
   const hasLoggedPlayRef = useRef(false);
+  // briefing attachments (edit mode)
+  const [newAttachmentFiles, setNewAttachmentFiles] = useState<Array<{ file: File; comment: string; localId: string }>>([]);
+  const [removedAttachmentIds, setRemovedAttachmentIds] = useState<string[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const [triggerAttachmentPicker, setTriggerAttachmentPicker] = useState(false);
+  const notesSectionRef = useRef<HTMLDivElement | null>(null);
   // waveform: responsive bar count so bars are always ~3px wide on every screen
   const [waveformBarCount, setWaveformBarCount] = useState(60);
-  const waveformContainerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const el = waveformContainerRef.current;
-    if (!el) return;
+  const waveformRoRef = useRef<ResizeObserver | null>(null);
+  // Callback ref: fires the instant the element mounts, regardless of async data timing
+  const waveformContainerRef = useCallback((node: HTMLDivElement | null) => {
+    if (waveformRoRef.current) { waveformRoRef.current.disconnect(); waveformRoRef.current = null; }
+    if (!node) return;
     const ro = new ResizeObserver(([entry]) => {
       const width = entry.contentRect.width;
-      // 3px bar + 2px gap = 5px per bar; min 20, max 120
       setWaveformBarCount(Math.min(120, Math.max(20, Math.floor(width / 5))));
     });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [editingNotes, audioUrlNote]); // re-observe when the active waveform swaps
+    ro.observe(node);
+    waveformRoRef.current = ro;
+  }, []);
 
   useEffect(() => {
     if (unitId) {
@@ -173,6 +196,17 @@ export default function UnitDetailPage() {
       fetchAuditEvents();
     }
   }, [unitId]);
+
+  // After edit mode opens and the file input is mounted, trigger the picker
+  useEffect(() => {
+    if (editingNotes && triggerAttachmentPicker) {
+      const t = setTimeout(() => {
+        attachmentInputRef.current?.click();
+        setTriggerAttachmentPicker(false);
+      }, 80);
+      return () => clearTimeout(t);
+    }
+  }, [editingNotes, triggerAttachmentPicker]);
 
   async function fetchUnit() {
     try {
@@ -337,6 +371,20 @@ export default function UnitDetailPage() {
     return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
   }
 
+  function handleAttachmentSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    const oversized = files.filter(f => f.size > 50 * 1024 * 1024);
+    if (oversized.length) {
+      toast.error(`${oversized.map(f => f.name).join(', ')} exceed the 50 MB limit.`);
+    }
+    const valid = files.filter(f => f.size <= 50 * 1024 * 1024);
+    setNewAttachmentFiles(prev => [
+      ...prev,
+      ...valid.map(file => ({ file, comment: '', localId: `${Date.now()}-${Math.random()}` })),
+    ]);
+    e.target.value = '';
+  }
+
   async function saveNotes() {
     setSavingNotes(true);
     try {
@@ -357,9 +405,39 @@ export default function UnitDetailPage() {
           const { data: urlData } = supabase.storage.from('voice-notes').getPublicUrl(filename);
           voiceNotePath = urlData.publicUrl;
         } catch {
-          toast.warning('Voice note upload failed — saving text notes only.');
+          toast.warning(t('units.voiceNoteUploadFailed'));
         }
       }
+
+      // Upload new briefing attachments
+      const uploadedAttachments: BriefingAttachment[] = [];
+      for (const item of newAttachmentFiles) {
+        try {
+          const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const filename = `${unitId}/${Date.now()}_${safeName}`;
+          const { error: uploadErr } = await supabase.storage
+            .from('briefing-files')
+            .upload(filename, item.file, { contentType: item.file.type });
+          if (uploadErr) throw uploadErr;
+          const { data: urlData } = supabase.storage.from('briefing-files').getPublicUrl(filename);
+          uploadedAttachments.push({
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            url: urlData.publicUrl,
+            name: item.file.name,
+            mime_type: item.file.type,
+            size: item.file.size,
+            comment: item.comment,
+            uploaded_at: new Date().toISOString(),
+          });
+        } catch {
+          toast.warning(`Failed to upload ${item.file.name} — skipped.`);
+        }
+      }
+
+      const existingAttachments = (unit?.briefing_attachments || []).filter(
+        (a: BriefingAttachment) => !removedAttachmentIds.includes(a.id)
+      );
+      const allAttachments = [...existingAttachments, ...uploadedAttachments];
 
       const patchRes = await fetch(`/api/units/${unitId}`, {
         method: 'PATCH',
@@ -367,14 +445,17 @@ export default function UnitDetailPage() {
         body: JSON.stringify({
           management_notes: notesText || null,
           voice_note_url: voiceNotePath,
+          briefing_attachments: allAttachments,
         }),
       });
 
       if (!patchRes.ok) throw new Error((await patchRes.json()).error || 'Save failed');
 
-      toast.success('Notes saved');
+      toast.success(t('units.notesSaved'));
       setEditingNotes(false);
       deleteNewRecording();
+      setNewAttachmentFiles([]);
+      setRemovedAttachmentIds([]);
       await fetchUnit(); // reload to get fresh signed URLs
     } catch (err: any) {
       toast.error(err.message || 'Failed to save notes');
@@ -392,6 +473,8 @@ export default function UnitDetailPage() {
     permissions.isPlatformAdmin ||
     permissions.role === 'PROGRAM_OWNER' ||
     permissions.role === 'WORKSTREAM_LEAD';
+
+  const isFieldContributor = permissions.role === 'FIELD_CONTRIBUTOR';
 
   if (loading) {
     return (
@@ -419,6 +502,15 @@ export default function UnitDetailPage() {
   const approvedCount = unit.proofs.filter(p => p.approval_status === 'approved' && !p.is_superseded).length;
   const pendingCount = unit.proofs.filter(p => p.approval_status === 'pending').length;
 
+  const proofUploadEvents: AuditEvent[] = unit.proofs.map(proof => ({
+    id: `proof-upload-${proof.id}`,
+    event_type: 'proof_uploaded',
+    created_at: proof.uploaded_at,
+    reason: `${proof.type}${proof.uploaded_by_email ? ` · ${proof.uploaded_by_email}` : ''}`,
+  }));
+  const allAuditEvents = [...auditEvents, ...proofUploadEvents]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
   function getExpiryBadge(proof: Proof) {
     if (!proof.expiry_date) return null;
     if (proof.is_expired) {
@@ -437,20 +529,23 @@ export default function UnitDetailPage() {
 
   function getAuditEventLabel(event: AuditEvent) {
     const labels: Record<string, string> = {
-      proof_approved: 'Proof Approved',
-      proof_rejected: 'Proof Rejected',
-      proof_expired: 'Proof Expired',
-      status_computed: 'Status Recomputed',
-      blocked: 'Unit Blocked',
-      unblocked: 'Unit Unblocked',
-      manual_escalation: 'Manual Escalation',
-      unit_confirmed: 'Unit Confirmed',
-      unit_archived: 'Unit Archived',
+      proof_uploaded: t('units.proofUploadedLabel'),
+      proof_approved: t('units.proofApprovedLabel'),
+      proof_rejected: t('units.proofRejectedLabel'),
+      proof_expired: t('units.proofExpiredLabel'),
+      status_computed: t('units.statusRecomputedLabel'),
+      blocked: t('units.unitBlockedAuditLabel'),
+      unblocked: t('units.unitUnblockedLabel'),
+      manual_escalation: t('units.manualEscalationAuditLabel'),
+      unit_confirmed: t('units.unitConfirmedLabel'),
+      unit_archived: t('units.unitArchivedLabel'),
+      voice_note_played: t('units.voiceNotePlayed'),
     };
     return labels[event.event_type] || event.event_type;
   }
 
   function getAuditEventColor(event: AuditEvent) {
+    if (event.event_type === 'proof_uploaded') return 'text-blue-400';
     if (event.event_type === 'proof_approved' || event.new_status === 'GREEN') return 'text-green-400';
     if (event.event_type === 'proof_rejected' || event.event_type === 'proof_expired') return 'text-red-400';
     if (event.event_type === 'manual_escalation') return 'text-orange-400';
@@ -589,29 +684,50 @@ export default function UnitDetailPage() {
             </div>
 
             <div className="flex gap-2 flex-wrap">
-              <Button
-                onClick={() => router.push(`/units/${unitId}/upload?type=photo`)}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <Upload className="w-4 h-4 me-2" />
-                {t('units.uploadPhoto')}
-              </Button>
-              <Button
-                onClick={() => router.push(`/units/${unitId}/upload?type=document`)}
-                variant="outline"
-                className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
-              >
-                <FileText className="w-4 h-4 me-2" />
-                {t('units.uploadDocument')}
-              </Button>
-              {canApproveProofs && !isGreen && (
+              {/* Field contributor actions */}
+              {isFieldContributor && (
+                <>
+                  <Button
+                    onClick={() => router.push(`/units/${unitId}/upload?type=photo`)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Upload className="w-4 h-4 me-2" />
+                    {t('units.uploadPhoto')}
+                  </Button>
+                  <Button
+                    onClick={() => router.push(`/units/${unitId}/upload?type=document`)}
+                    variant="outline"
+                    className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
+                  >
+                    <FileText className="w-4 h-4 me-2" />
+                    {t('units.uploadDocument')}
+                  </Button>
+                  {!isGreen && (
+                    <Button
+                      onClick={() => setShowEscalationDialog(true)}
+                      variant="outline"
+                      className="bg-[#db6d28]/10 border-[#db6d28]/40 text-[#db6d28] hover:bg-[#db6d28]/20"
+                    >
+                      <AlertOctagon className="w-4 h-4 me-2" />
+                      {t('units.escalate')}
+                    </Button>
+                  )}
+                </>
+              )}
+
+              {/* Management actions */}
+              {canEditNotes && (
                 <Button
-                  onClick={() => setShowEscalationDialog(true)}
+                  onClick={() => {
+                    setEditingNotes(true);
+                    setTriggerAttachmentPicker(true);
+                    setTimeout(() => notesSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+                  }}
                   variant="outline"
-                  className="bg-[#db6d28]/10 border-[#db6d28]/40 text-[#db6d28] hover:bg-[#db6d28]/20"
+                  className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                 >
-                  <AlertOctagon className="w-4 h-4 me-2" />
-                  {t('units.escalate')}
+                  <Paperclip className="w-4 h-4 me-2" />
+                  {t('units.attachBriefingMaterial')}
                 </Button>
               )}
             </div>
@@ -620,12 +736,12 @@ export default function UnitDetailPage() {
 
         {/* Notes from Management */}
         {(unit.management_notes || unit.voice_note_signed_url || canEditNotes) && (
-          <Card className="bg-black/25 border-gray-800">
+          <Card ref={notesSectionRef} className="bg-black/25 border-gray-800 overflow-hidden">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-white flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-blue-400" />
-                  Notes from Management
+                  {t('units.notesTitle')}
                 </CardTitle>
                 {canEditNotes && !editingNotes && (
                   <Button
@@ -635,24 +751,24 @@ export default function UnitDetailPage() {
                     className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                   >
                     <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                    {unit.management_notes || unit.voice_note_signed_url ? 'Edit' : 'Add Notes'}
+                    {unit.management_notes || unit.voice_note_signed_url ? t('units.editNotesButton') : t('units.addNotesButton')}
                   </Button>
                 )}
               </div>
               {!editingNotes && (
                 <CardDescription className="text-gray-500">
-                  Requirements, acceptance criteria and guidelines from your workstream lead.
+                  {t('units.notesDesc')}
                 </CardDescription>
               )}
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-0">
 
               {/* View mode */}
               {!editingNotes && (
-                <div className="space-y-3">
-                  {/* Prominent voice note bubble */}
+                <div>
+                  {/* Voice note — naturally full-width, no hack needed with p-0 on CardContent */}
                   {unit.voice_note_signed_url && (
-                    <div>
+                    <>
                       <audio
                         ref={existingAudioRef}
                         src={unit.voice_note_signed_url}
@@ -672,7 +788,6 @@ export default function UnitDetailPage() {
                           } else {
                             existingAudioRef.current.play();
                             setIsPlayingExisting(true);
-                            // Log play once per page load — fire & forget
                             if (!hasLoggedPlayRef.current) {
                               hasLoggedPlayRef.current = true;
                               try {
@@ -687,7 +802,7 @@ export default function UnitDetailPage() {
                             }
                           }
                         }}
-                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/28 border border-blue-500/40 rounded-2xl rounded-tl-sm px-4 py-2.5 transition-colors group"
+                        className="w-full text-left bg-blue-600/20 hover:bg-blue-600/28 border-t border-blue-500/30 px-6 py-4 transition-colors group"
                       >
                         <div className="flex items-center gap-4">
                           <div className={`w-14 h-14 rounded-full flex items-center justify-center shrink-0 shadow-lg transition-colors ${isPlayingExisting ? 'bg-blue-400' : 'bg-blue-500 group-hover:bg-blue-400'}`}>
@@ -695,7 +810,7 @@ export default function UnitDetailPage() {
                               ? <Pause className="w-6 h-6 text-white" />
                               : <Play className="w-6 h-6 text-white fill-white ml-1" />}
                           </div>
-                          <div ref={waveformContainerRef} className="flex items-center gap-[2px] flex-1 h-10 overflow-hidden">
+                          <div ref={waveformContainerRef} className="flex items-center justify-between flex-1 h-10 overflow-hidden">
                             {Array.from({ length: waveformBarCount }, (_, i) => WAVE_HEIGHTS[i % WAVE_HEIGHTS.length]).map((h, i) => (
                               <div
                                 key={i}
@@ -713,58 +828,107 @@ export default function UnitDetailPage() {
                         </div>
                         <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5">
                           <Volume2 className="w-3.5 h-3.5" />
-                          {isPlayingExisting ? 'Playing...' : 'Tap to listen — voice note from management'}
+                          {isPlayingExisting ? t('units.playingLabel') : t('units.tapToListen')}
                         </p>
                       </button>
-                    </div>
+                    </>
                   )}
 
-                  {/* "Heard by" receipt */}
-                  {unit.voice_note_signed_url && unit.last_voice_note_play && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/8 border border-green-500/20 w-fit">
-                      <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
-                      <span className="text-xs text-green-300/80">
-                        Last heard by{' '}
-                        <span className="font-semibold text-green-200">{unit.last_voice_note_play.full_name}</span>
-                        <span className="text-green-400/50 ml-1.5">
-                          · {new Date(unit.last_voice_note_play.played_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}{' '}
-                          {new Date(unit.last_voice_note_play.played_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                  {/* Everything below has normal padding */}
+                  <div className="px-6 pb-5 space-y-3 mt-3">
+                    {/* "Heard by" receipt */}
+                    {unit.voice_note_signed_url && unit.last_voice_note_play && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/8 border border-green-500/20 w-fit">
+                        <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+                        <span className="text-xs text-green-300/80">
+                          {t('units.lastHeardBy')}{' '}
+                          <span className="font-semibold text-green-200">{unit.last_voice_note_play.full_name}</span>
+                          <span className="text-green-400/50 ml-1.5">
+                            · {new Date(unit.last_voice_note_play.played_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}{' '}
+                            {new Date(unit.last_voice_note_play.played_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </span>
-                      </span>
-                    </div>
-                  )}
+                      </div>
+                    )}
 
-                  {/* Text note bubble */}
-                  {unit.management_notes && (
-                    <div className="bg-gray-800/60 border border-gray-700/40 rounded-2xl rounded-tl-sm px-4 py-3">
-                      <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">
-                        {unit.management_notes}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* No instructions — helpful nudge, not a guilt trip */}
-                  {!unit.voice_note_signed_url && !unit.management_notes && (
-                    <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700/50">
-                      <MessageSquare className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
-                      <div>
-                        <p className="text-gray-300 text-sm font-medium">
-                          {canEditNotes ? 'Brief your team before they start' : 'No briefing on this unit yet'}
-                        </p>
-                        <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">
-                          {canEditNotes
-                            ? 'A short voice note or written note gives the field team the context they need to execute correctly: requirements, completion criteria, or instructions.'
-                            : 'Your workstream lead hasn\'t added instructions yet. Check with them if you have questions before starting.'}
+                    {/* Text note bubble */}
+                    {unit.management_notes && (
+                      <div className="bg-gray-800/60 border border-gray-700/40 rounded-2xl rounded-tl-sm px-4 py-3">
+                        <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">
+                          {unit.management_notes}
                         </p>
                       </div>
-                    </div>
-                  )}
+                    )}
+
+                    {/* Reference materials */}
+                    {(unit.briefing_attachments || []).length > 0 && (
+                      <div className="space-y-2 pt-1">
+                        <p className="text-xs text-gray-500 uppercase tracking-wider font-medium px-1">{t('units.referenceMaterialsTitle')}</p>
+                        <div className="grid grid-cols-1 gap-3">
+                          {(unit.briefing_attachments as BriefingAttachment[]).map((att) => (
+                            <div key={att.id} className="bg-gray-900/60 border border-gray-700/50 rounded-xl overflow-hidden">
+                              {att.mime_type.startsWith('image/') && (
+                                <button
+                                  type="button"
+                                  onClick={() => setLightboxUrl(att.url)}
+                                  className="w-full block"
+                                >
+                                  <img src={att.url} alt={att.name} className="w-full object-cover max-h-64 hover:opacity-90 transition-opacity" />
+                                </button>
+                              )}
+                              {att.mime_type.startsWith('video/') && (
+                                <video src={att.url} controls className="w-full max-h-64 bg-black" />
+                              )}
+                              {!att.mime_type.startsWith('image/') && !att.mime_type.startsWith('video/') && (
+                                <div className="flex items-center gap-3 px-4 py-3">
+                                  <FileText className="w-8 h-8 text-blue-400 shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-white truncate font-medium">{att.name}</p>
+                                    <p className="text-xs text-gray-500">{(att.size / 1024).toFixed(0)} KB</p>
+                                  </div>
+                                  <a
+                                    href={att.url}
+                                    download={att.name}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </a>
+                                </div>
+                              )}
+                              {att.comment && (
+                                <div className="px-4 py-2 border-t border-gray-700/50 bg-gray-800/30">
+                                  <p className="text-sm text-gray-300 leading-relaxed">{att.comment}</p>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No instructions nudge */}
+                    {!unit.voice_note_signed_url && !unit.management_notes && !(unit.briefing_attachments || []).length && (
+                      <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-gray-800/50 border border-gray-700/50">
+                        <MessageSquare className="w-4 h-4 text-gray-500 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-gray-300 text-sm font-medium">
+                            {canEditNotes ? t('units.briefTeamNudgeTitle') : t('units.noBriefingTitle')}
+                          </p>
+                          <p className="text-gray-600 text-xs mt-0.5 leading-relaxed">
+                            {canEditNotes ? t('units.briefTeamNudgeDesc') : t('units.noBriefingDesc')}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
               {/* Edit mode — chat-style composer */}
               {editingNotes && (
-                <div className="space-y-4">
+                <div className="px-6 pb-6 pt-2 space-y-4">
                   <div className="bg-black/30 border border-gray-700 rounded-xl overflow-hidden">
 
                     {/* Preview bubbles */}
@@ -795,7 +959,7 @@ export default function UnitDetailPage() {
                               >
                                 {isPlayingNewNote ? <Pause className="w-6 h-6 text-white" /> : <Play className="w-6 h-6 text-white fill-white ml-1" />}
                               </button>
-                              <div ref={waveformContainerRef} className="flex items-center gap-[2px] flex-1 h-10 overflow-hidden">
+                              <div ref={waveformContainerRef} className="flex items-center justify-between flex-1 h-10 overflow-hidden">
                                 {Array.from({ length: waveformBarCount }, (_, i) => WAVE_HEIGHTS[i % WAVE_HEIGHTS.length]).map((h, i) => (
                                   <div
                                     key={i}
@@ -814,7 +978,7 @@ export default function UnitDetailPage() {
                             </div>
                             <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5">
                               <Volume2 className="w-3.5 h-3.5" />
-                              {isPlayingNewNote ? 'Playing...' : 'New recording — tap to preview'}
+                              {isPlayingNewNote ? t('units.playingLabel') : t('units.newRecordingPreview')}
                             </p>
                           </div>
                         )}
@@ -843,7 +1007,7 @@ export default function UnitDetailPage() {
                               >
                                 {isPlayingExisting ? <Pause className="w-6 h-6 text-white" /> : <Play className="w-6 h-6 text-white fill-white ml-1" />}
                               </button>
-                              <div ref={waveformContainerRef} className="flex items-center gap-[2px] flex-1 h-10 overflow-hidden">
+                              <div ref={waveformContainerRef} className="flex items-center justify-between flex-1 h-10 overflow-hidden">
                                 {Array.from({ length: waveformBarCount }, (_, i) => WAVE_HEIGHTS[i % WAVE_HEIGHTS.length]).map((h, i) => (
                                   <div
                                     key={i}
@@ -859,7 +1023,7 @@ export default function UnitDetailPage() {
                             </div>
                             <p className="text-xs text-blue-300/80 mt-2 flex items-center gap-1.5">
                               <Volume2 className="w-3.5 h-3.5" />
-                              {isPlayingExisting ? 'Playing...' : 'Tap to listen — voice note from management'}
+                              {isPlayingExisting ? t('units.playingLabel') : t('units.tapToListen')}
                             </p>
                           </div>
                         )}
@@ -884,7 +1048,7 @@ export default function UnitDetailPage() {
                             <Mic className="w-6 h-6 text-blue-400" />
                           </div>
                           <span className="text-blue-400 text-sm font-medium">
-                            {unit.voice_note_signed_url ? 'Tap to record new voice note' : 'Tap to record voice note'}
+                            {unit.voice_note_signed_url ? t('units.tapToRecordNew') : t('units.tapToRecord')}
                           </span>
                         </button>
                       )}
@@ -904,7 +1068,7 @@ export default function UnitDetailPage() {
                             onClick={stopRecordingNote}
                             className="flex items-center gap-2 px-5 py-2 rounded-full bg-red-600/20 border border-red-500/40 text-red-400 hover:bg-red-600/30 transition-colors text-sm font-medium"
                           >
-                            <Square className="w-3.5 h-3.5 fill-current" /> Stop recording
+                            <Square className="w-3.5 h-3.5 fill-current" /> {t('unitsUpload.stopRecording')}
                           </button>
                         </div>
                       )}
@@ -912,14 +1076,14 @@ export default function UnitDetailPage() {
                       {/* Re-record */}
                       {audioUrlNote && !isRecordingNote && (
                         <button type="button" onClick={deleteNewRecording} className="w-full flex items-center justify-center gap-1.5 py-1 text-gray-600 hover:text-gray-400 text-xs transition-colors">
-                          <Mic className="w-3 h-3" /> Re-record
+                          <Mic className="w-3 h-3" /> {t('units.reRecord')}
                         </button>
                       )}
 
                       {/* Divider */}
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-px bg-gray-700/60" />
-                        <span className="text-xs text-gray-600">written note</span>
+                        <span className="text-xs text-gray-600">{t('units.writtenNoteLabel')}</span>
                         <div className="flex-1 h-px bg-gray-700/60" />
                       </div>
 
@@ -927,8 +1091,87 @@ export default function UnitDetailPage() {
                       <Textarea
                         value={notesText}
                         onChange={(e) => setNotesText(e.target.value)}
-                        placeholder="Type a written note for the field team..."
+                        placeholder="Type a brief for the field team..."
                         className="bg-transparent border-0 border-b border-gray-700/60 rounded-none text-white text-sm resize-none focus-visible:ring-0 focus-visible:border-blue-500/50 px-0 min-h-[56px] placeholder:text-gray-600"
+                      />
+
+                      {/* Divider */}
+                      <div className="flex items-center gap-3 pt-1">
+                        <div className="flex-1 h-px bg-gray-700/60" />
+                        <span className="text-xs text-gray-600">{t('units.referenceMaterialsSection')}</span>
+                        <div className="flex-1 h-px bg-gray-700/60" />
+                      </div>
+
+                      {/* Existing attachments */}
+                      {(unit.briefing_attachments || [])
+                        .filter((a: BriefingAttachment) => !removedAttachmentIds.includes(a.id))
+                        .map((att: BriefingAttachment) => (
+                          <div key={att.id} className="flex items-center gap-3 px-3 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg">
+                            {att.mime_type.startsWith('image/') ? (
+                              <ImageIcon className="w-5 h-5 text-purple-400 shrink-0" />
+                            ) : att.mime_type.startsWith('video/') ? (
+                              <Video className="w-5 h-5 text-blue-400 shrink-0" />
+                            ) : (
+                              <FileText className="w-5 h-5 text-orange-400 shrink-0" />
+                            )}
+                            <span className="text-sm text-gray-300 flex-1 truncate">{att.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setRemovedAttachmentIds(prev => [...prev, att.id])}
+                              className="text-gray-600 hover:text-red-400 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+
+                      {/* New attachments queued */}
+                      {newAttachmentFiles.map((item, idx) => (
+                        <div key={item.localId} className="bg-gray-800/40 border border-gray-700/50 rounded-lg overflow-hidden">
+                          <div className="flex items-center gap-3 px-3 py-2">
+                            {item.file.type.startsWith('image/') ? (
+                              <ImageIcon className="w-5 h-5 text-purple-400 shrink-0" />
+                            ) : item.file.type.startsWith('video/') ? (
+                              <Video className="w-5 h-5 text-blue-400 shrink-0" />
+                            ) : (
+                              <FileText className="w-5 h-5 text-orange-400 shrink-0" />
+                            )}
+                            <span className="text-sm text-gray-200 flex-1 truncate">{item.file.name}</span>
+                            <span className="text-xs text-gray-600 shrink-0">{(item.file.size / 1024).toFixed(0)} KB</span>
+                            <button
+                              type="button"
+                              onClick={() => setNewAttachmentFiles(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-gray-600 hover:text-red-400 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            value={item.comment}
+                            onChange={(e) => setNewAttachmentFiles(prev => prev.map((f, i) => i === idx ? { ...f, comment: e.target.value } : f))}
+                            placeholder={t('units.attachCommentPlaceholder')}
+                            className="w-full bg-transparent border-t border-gray-700/50 px-3 py-2 text-sm text-gray-300 placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50"
+                          />
+                        </div>
+                      ))}
+
+                      {/* Add attachment button */}
+                      <button
+                        type="button"
+                        onClick={() => attachmentInputRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-dashed border-gray-700 hover:border-gray-500 text-gray-600 hover:text-gray-400 text-sm transition-colors"
+                      >
+                        <Paperclip className="w-4 h-4" />
+                        {t('units.attachMaterialPrompt')}
+                      </button>
+                      <input
+                        ref={attachmentInputRef}
+                        type="file"
+                        accept="image/*,video/*,application/pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+                        multiple
+                        className="hidden"
+                        onChange={handleAttachmentSelect}
                       />
                     </div>
                   </div>
@@ -936,11 +1179,17 @@ export default function UnitDetailPage() {
                   {/* Save / Cancel */}
                   <div className="flex gap-2">
                     <Button onClick={saveNotes} disabled={savingNotes} className="bg-blue-600 hover:bg-blue-700 text-white">
-                      {savingNotes ? 'Saving...' : 'Save Notes'}
+                      {savingNotes ? t('units.savingNotes') : t('units.saveNotes')}
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => { setEditingNotes(false); setNotesText(unit.management_notes ?? ''); deleteNewRecording(); }}
+                      onClick={() => {
+                        setEditingNotes(false);
+                        setNotesText(unit.management_notes ?? '');
+                        deleteNewRecording();
+                        setNewAttachmentFiles([]);
+                        setRemovedAttachmentIds([]);
+                      }}
                       disabled={savingNotes}
                       className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                     >
@@ -1125,11 +1374,28 @@ export default function UnitDetailPage() {
                 ))}
               </div>
             )}
+            {auditEvents.filter(e => e.event_type === 'manual_escalation').length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-semibold text-orange-400 uppercase tracking-wide">{t('units.escalationTitle')}</p>
+                {auditEvents.filter(e => e.event_type === 'manual_escalation').map(e => (
+                  <div key={e.id} className="flex items-start gap-3 p-3 rounded-lg border border-orange-500/30 bg-orange-500/10">
+                    <AlertTriangle className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      {e.reason && <p className="text-sm text-orange-200">{e.reason}</p>}
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {e.triggered_by_role && <span className="me-2">({e.triggered_by_role})</span>}
+                        {formatDistanceToNow(new Date(e.created_at), { addSuffix: true })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Audit Trail */}
-        {auditEvents.length > 0 && (
+        {allAuditEvents.length > 0 && (
           <Card className="bg-black/25 border-gray-800">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
@@ -1142,11 +1408,13 @@ export default function UnitDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {auditEvents.map((event) => (
+                {allAuditEvents.map((event) => (
                   <div key={event.id} className="flex gap-3 text-sm">
                     <div className="flex flex-col items-center">
                       <div className={`w-2 h-2 rounded-full mt-1.5 ${
-                        event.event_type === 'proof_approved' || event.new_status === 'GREEN'
+                        event.event_type === 'proof_uploaded'
+                          ? 'bg-blue-500'
+                          : event.event_type === 'proof_approved' || event.new_status === 'GREEN'
                           ? 'bg-green-500'
                           : event.event_type === 'proof_rejected' || event.event_type === 'proof_expired'
                           ? 'bg-red-500'
@@ -1186,6 +1454,18 @@ export default function UnitDetailPage() {
           </Card>
         )}
       </div>
+
+      {/* Briefing image lightbox */}
+      <Dialog open={!!lightboxUrl} onOpenChange={(open) => { if (!open) setLightboxUrl(null); }}>
+        <DialogContent className="max-w-5xl bg-gray-950 border-gray-800 p-2">
+          <DialogHeader className="px-4 pt-2">
+            <DialogTitle className="text-white text-sm font-medium">{t('units.referenceDialog')}</DialogTitle>
+          </DialogHeader>
+          {lightboxUrl && (
+            <img src={lightboxUrl} alt="Reference material" className="w-full rounded-lg object-contain max-h-[80vh]" />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Zoom Dialog (photo/video only) */}
       <Dialog open={showZoomDialog} onOpenChange={setShowZoomDialog}>

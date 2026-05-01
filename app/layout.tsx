@@ -1,22 +1,10 @@
 import './globals.css';
 import type { Metadata } from 'next';
-import { DM_Sans, Space_Grotesk } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import { Providers } from '@/components/providers';
 import { LocaleProvider } from '@/lib/i18n/context';
 
-const dmSans = DM_Sans({
-  subsets: ['latin'],
-  variable: '--font-sans',
-  weight: ['300', '400', '500', '600', '700'],
-  display: 'swap',
-});
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ['latin'],
-  variable: '--font-heading',
-  weight: ['300', '400', '500', '600', '700'],
-  display: 'swap',
-});
+const inter = Inter({ subsets: ['latin'] });
 
 // All pages use Supabase auth at runtime — prevent static prerendering
 export const dynamic = 'force-dynamic';
@@ -33,7 +21,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${dmSans.variable} ${spaceGrotesk.variable} font-sans antialiased`}>
+      <body className={inter.className}>
         <LocaleProvider>
           <Providers>
             {children}
