@@ -139,6 +139,8 @@ const en = {
     successEscalation: 'Escalation sent to {count} recipient(s)',
     noRecipients: 'Escalation recorded — no recipients currently assigned',
     unconfirmedBadge: 'Unconfirmed',
+    escalated: 'Escalated',
+    proofsUploaded: 'proofs uploaded',
   },
   units: {
     back: 'Back',
@@ -722,6 +724,8 @@ const ar: Messages = {
     successEscalation: 'تم إرسال التصعيد إلى {count} مستلم(ين)',
     noRecipients: 'تم تسجيل التصعيد — لا يوجد مستلمون معينون حالياً',
     unconfirmedBadge: 'غير مؤكد',
+    escalated: 'مُصعَّد',
+    proofsUploaded: 'إثبات مرفوع',
   },
   units: {
     back: 'رجوع',
@@ -1305,6 +1309,8 @@ const ur: Messages = {
     successEscalation: '{count} وصول کنندہ(ان) کو تصعید بھیج دیا گیا',
     noRecipients: 'تصعید ریکارڈ کیا گیا — فی الحال کوئی وصول کنندہ مقرر نہیں',
     unconfirmedBadge: 'غیر تصدیق شدہ',
+    escalated: 'تصعید شدہ',
+    proofsUploaded: 'ثبوت اپلوڈ',
   },
   units: {
     back: 'واپس',
@@ -1888,6 +1894,8 @@ const bn: Messages = {
     successEscalation: '{count} জন প্রাপককে এস্কেলেশন পাঠানো হয়েছে',
     noRecipients: 'এস্কেলেশন রেকর্ড করা হয়েছে — বর্তমানে কোনো প্রাপক নির্ধারিত নেই',
     unconfirmedBadge: 'অনিশ্চিত',
+    escalated: 'এস্কেলেটেড',
+    proofsUploaded: 'প্রমাণ আপলোড',
   },
   units: {
     back: 'ফিরে যান',

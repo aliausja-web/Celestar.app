@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { UnitWithProofs, WorkstreamWithMetrics } from '@/lib/types';
 import {
   AlertTriangle, CheckCircle2, Clock, Camera, ChevronLeft,
-  FileText, Video, Image as ImageIcon, Plus, Mic, Paperclip,
+  FileText, Video, Image as ImageIcon, Plus, Mic, Paperclip, AlertOctagon,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isValid } from 'date-fns';
 import { supabase } from '@/lib/firebase';
@@ -19,6 +19,25 @@ import { getWorkstreamTypeLabel } from '@/lib/workstream-types';
 import { NotificationBell } from '@/components/notification-bell';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { useLocale } from '@/lib/i18n/context';
+
+function leadUrgencyScore(u: UnitWithProofs): number {
+  if (u.computed_status === 'BLOCKED') return 4;
+  if ((u.current_escalation_level ?? 0) > 0 && u.computed_status === 'RED') return 3;
+  if (u.computed_status === 'RED') return 2;
+  return 1;
+}
+
+function fieldUrgencyScore(u: UnitWithProofs): number {
+  const req = (u.proof_requirements as any)?.required_count || 1;
+  const uploaded = u.proof_count || 0;
+  const esc = (u.current_escalation_level ?? 0) > 0 || u.computed_status === 'BLOCKED';
+  const done = uploaded >= req;
+  if (!done && uploaded === 0 && esc) return 5;
+  if (!done && uploaded > 0 && esc) return 4;
+  if (!done && uploaded === 0 && !esc) return 3;
+  if (!done && uploaded > 0 && !esc) return 2;
+  return 1;
+}
 
 export default function WorkstreamBoard() {
   const params = useParams();
@@ -82,16 +101,17 @@ export default function WorkstreamBoard() {
     }
   }
 
-  function UnitRow({ unit }: { unit: UnitWithProofs }) {
+  function UnitRow({ unit, isFieldView }: { unit: UnitWithProofs; isFieldView: boolean }) {
     const isGreen = unit.computed_status === 'GREEN';
     const isBlocked = unit.computed_status === 'BLOCKED';
     const isUnconfirmed = unit.is_confirmed === false;
-    const isFieldContributor = permissions.role === 'FIELD_CONTRIBUTOR';
+    const isEscalated = (unit.current_escalation_level ?? 0) > 0;
     const deadlineDate = unit.required_green_by ? new Date(unit.required_green_by) : null;
     const validDeadline = deadlineDate && isValid(deadlineDate) ? deadlineDate : null;
     const isPastDeadline = validDeadline && validDeadline < new Date();
     const requiredCount = unit.proof_requirements?.required_count || 1;
     const requiredTypes = unit.proof_requirements?.required_types || ['photo'];
+    const allProofsUploaded = unit.proof_count >= requiredCount;
     const briefingAttachments = ((unit as any).briefing_attachments || []) as Array<{ id: string; url: string; name: string; mime_type: string }>;
     const managementNotes = (unit as any).management_notes as string | null;
     const voiceNoteUrl = (unit as any).voice_note_url as string | null;
@@ -114,12 +134,20 @@ export default function WorkstreamBoard() {
         onClick={() => router.push(`/units/${unit.id}`)}
       >
         <CardContent className="p-4 space-y-3">
-          {/* Status + Title row */}
+          {/* Status + Escalation + Title row */}
           <div className="flex items-start gap-3">
-            <Badge className={`${statusBadgeStyle} font-bold text-sm px-3 py-1.5 flex items-center gap-1.5 shrink-0`}>
-              {isGreen ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-              {unit.computed_status}
-            </Badge>
+            <div className="flex flex-col gap-1 shrink-0">
+              <Badge className={`${statusBadgeStyle} font-bold text-sm px-3 py-1.5 flex items-center gap-1.5`}>
+                {isGreen ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                {unit.computed_status}
+              </Badge>
+              {isEscalated && (
+                <Badge className="border-[#db6d28]/60 bg-[#db6d28]/15 text-[#db6d28] text-xs px-2 py-1 flex items-center gap-1">
+                  <AlertOctagon className="w-3 h-3" />
+                  L{unit.current_escalation_level} {t('workstream.escalated')}
+                </Badge>
+              )}
+            </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-[#e6edf3] font-semibold text-base leading-snug">{unit.title}</h3>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-xs text-[#7d8590]">
@@ -135,13 +163,14 @@ export default function WorkstreamBoard() {
             </div>
           </div>
 
-          {/* Workstream Lead+: proof thumbnails */}
-          {!isFieldContributor && (
+          {/* Workstream Lead+: proof count + thumbnails */}
+          {!isFieldView && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-xs text-[#7d8590]">
                 <Camera className="w-3 h-3" />
-                <span className="font-medium text-[#e6edf3]">{unit.proof_count}</span>
-                <span>/ {requiredCount} {t('workstream.required')}</span>
+                <span className={`font-medium ${allProofsUploaded ? 'text-[#3fb950]' : 'text-[#e6edf3]'}`}>
+                  {unit.proof_count}/{requiredCount} {t('workstream.proofsUploaded')}
+                </span>
                 {unit.last_proof_time && isValid(new Date(unit.last_proof_time)) && (
                   <span className="text-[#484f58]">· {t('workstream.lastProof')} {formatDistanceToNow(new Date(unit.last_proof_time), { addSuffix: true })}</span>
                 )}
@@ -175,14 +204,14 @@ export default function WorkstreamBoard() {
             </div>
           )}
 
-          {/* Field Contributor: briefing + notes */}
-          {isFieldContributor && (
+          {/* Field Contributor: proof count + briefing + notes */}
+          {isFieldView && (
             <div className="space-y-2">
-              {/* Proof count pill */}
               <div className="flex items-center gap-2 text-xs text-[#7d8590]">
                 <Camera className="w-3 h-3" />
-                <span className="font-medium text-[#e6edf3]">{unit.proof_count}</span>
-                <span>/ {requiredCount}</span>
+                <span className={`font-medium ${allProofsUploaded ? 'text-[#3fb950]' : 'text-[#e6edf3]'}`}>
+                  {unit.proof_count}/{requiredCount} {t('workstream.proofsUploaded')}
+                </span>
                 <div className="flex gap-1 ms-1">
                   {requiredTypes.map((type) => (
                     <Badge key={type} variant="outline" className="text-xs px-1.5 py-0 border-[#30363d] text-[#7d8590]">
@@ -192,13 +221,11 @@ export default function WorkstreamBoard() {
                   ))}
                 </div>
               </div>
-              {/* Notes snippet */}
               {managementNotes && (
                 <p className="text-xs text-[#7d8590] line-clamp-2 italic border-l-2 border-[#30363d] pl-2">
                   {managementNotes}
                 </p>
               )}
-              {/* Voice note + briefing attachment indicators */}
               {(voiceNoteUrl || briefingAttachments.length > 0) && (
                 <div className="flex items-center gap-3 text-xs text-[#7d8590]">
                   {voiceNoteUrl && (
@@ -215,7 +242,6 @@ export default function WorkstreamBoard() {
                   )}
                 </div>
               )}
-              {/* Last proof time */}
               {unit.last_proof_time && isValid(new Date(unit.last_proof_time)) && (
                 <p className="text-xs text-[#484f58]">{t('workstream.lastProof')} {formatDistanceToNow(new Date(unit.last_proof_time), { addSuffix: true })}</p>
               )}
@@ -225,6 +251,13 @@ export default function WorkstreamBoard() {
       </Card>
     );
   }
+
+  const isFieldView = permissions.role === 'FIELD_CONTRIBUTOR';
+  const sortedUnits = [...units].sort((a, b) =>
+    isFieldView
+      ? fieldUrgencyScore(b) - fieldUrgencyScore(a)
+      : leadUrgencyScore(b) - leadUrgencyScore(a)
+  );
 
   if (loading) {
     return (
@@ -339,12 +372,11 @@ export default function WorkstreamBoard() {
             </Card>
           ) : (
             <div className="space-y-3">
-              {units.map((unit) => <UnitRow key={unit.id} unit={unit} />)}
+              {sortedUnits.map((unit) => <UnitRow key={unit.id} unit={unit} isFieldView={isFieldView} />)}
             </div>
           )}
         </div>
       </div>
-
     </div>
   );
 }
