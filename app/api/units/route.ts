@@ -61,8 +61,23 @@ export async function GET(request: NextRequest) {
 
       if (error) throw error;
 
+      const unitIds = (units || []).map((u: any) => u.id);
+
+      // Derive escalation level live from unit_escalations — don't trust the denormalized column
+      const { data: activeEscalations } = await supabase
+        .from('unit_escalations')
+        .select('unit_id, level')
+        .in('unit_id', unitIds)
+        .eq('status', 'active');
+
+      const escalationMap = new Map<string, number>();
+      for (const esc of activeEscalations ?? []) {
+        const current = escalationMap.get(esc.unit_id) ?? 0;
+        if (esc.level > current) escalationMap.set(esc.unit_id, esc.level);
+      }
+
       const unitsWithProofs = await Promise.all(
-        (units || []).map(async (unit) => {
+        (units || []).map(async (unit: any) => {
           const { data: proofs } = await supabase
             .from('unit_proofs')
             .select('*')
@@ -75,6 +90,7 @@ export async function GET(request: NextRequest) {
             proofs: proofs || [],
             proof_count: proofs?.length || 0,
             last_proof_time: proofs?.[0]?.uploaded_at || null,
+            current_escalation_level: escalationMap.get(unit.id) ?? unit.current_escalation_level ?? 0,
           };
         })
       );
@@ -92,9 +108,24 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
+    const unitIds = (units || []).map((u: any) => u.id);
+
+    // Derive escalation level live from unit_escalations — don't trust the denormalized column
+    const { data: activeEscalations } = await supabase
+      .from('unit_escalations')
+      .select('unit_id, level')
+      .in('unit_id', unitIds)
+      .eq('status', 'active');
+
+    const escalationMap = new Map<string, number>();
+    for (const esc of activeEscalations ?? []) {
+      const current = escalationMap.get(esc.unit_id) ?? 0;
+      if (esc.level > current) escalationMap.set(esc.unit_id, esc.level);
+    }
+
     // Get proofs for each unit
     const unitsWithProofs = await Promise.all(
-      (units || []).map(async (unit) => {
+      (units || []).map(async (unit: any) => {
         const { data: proofs } = await supabase
           .from('unit_proofs')
           .select('*')
@@ -107,6 +138,7 @@ export async function GET(request: NextRequest) {
           proofs: proofs || [],
           proof_count: proofs?.length || 0,
           last_proof_time: proofs?.[0]?.uploaded_at || null,
+          current_escalation_level: escalationMap.get(unit.id) ?? unit.current_escalation_level ?? 0,
         };
       })
     );
