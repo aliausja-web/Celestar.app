@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   ArrowLeft, Info, Bell, ChevronDown, ChevronUp, Shield,
-  Mic, Square, Play, Pause, Trash2, MessageSquare,
+  Mic, Square, Play, Pause, Trash2, MessageSquare, Paperclip, X, FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/firebase';
@@ -23,6 +23,10 @@ export default function NewUnitPage() {
   const [loading, setLoading] = useState(false);
   const [showAdvancedAlerts, setShowAdvancedAlerts] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+
+  // Brief attachments
+  const [briefFiles, setBriefFiles] = useState<File[]>([]);
+  const briefInputRef = useRef<HTMLInputElement | null>(null);
 
   // Voice recorder
   const [isRecording, setIsRecording] = useState(false);
@@ -104,6 +108,33 @@ export default function NewUnitPage() {
     return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
   }
 
+  async function uploadBriefFiles(): Promise<Array<{ id: string; url: string; name: string; mime_type: string; size: number; comment: string; uploaded_at: string }>> {
+    if (!briefFiles.length || !workstreamId) return [];
+    const uploaded = [];
+    for (const file of briefFiles) {
+      try {
+        const filename = `${workstreamId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        const { error } = await supabase.storage
+          .from('briefing-files')
+          .upload(filename, file, { contentType: file.type });
+        if (error) throw error;
+        const { data } = supabase.storage.from('briefing-files').getPublicUrl(filename);
+        uploaded.push({
+          id: crypto.randomUUID(),
+          url: data.publicUrl,
+          name: file.name,
+          mime_type: file.type,
+          size: file.size,
+          comment: '',
+          uploaded_at: new Date().toISOString(),
+        });
+      } catch {
+        toast.warning(`Could not upload "${file.name}" — unit will be created without it.`);
+      }
+    }
+    return uploaded;
+  }
+
   async function uploadVoiceNote(): Promise<string | null> {
     if (!audioBlob || !workstreamId) return null;
     try {
@@ -138,7 +169,10 @@ export default function NewUnitPage() {
       if (sessionError || !session) throw new Error('Not authenticated. Please log in again.');
 
       const token = session.access_token;
-      const voiceNoteUrl = await uploadVoiceNote();
+      const [voiceNoteUrl, briefingAttachments] = await Promise.all([
+        uploadVoiceNote(),
+        uploadBriefFiles(),
+      ]);
 
       const response = await fetch('/api/units', {
         method: 'POST',
@@ -152,6 +186,7 @@ export default function NewUnitPage() {
           description: formData.description || null,
           management_notes: formData.management_notes || null,
           voice_note_url: voiceNoteUrl,
+          briefing_attachments: briefingAttachments.length > 0 ? briefingAttachments : null,
           owner: formData.owner || null,
           deadline: formData.deadline || null,
           required_proof_count: formData.required_proof_count,
@@ -178,6 +213,7 @@ export default function NewUnitPage() {
 
       if (createAnother) {
         deleteRecording();
+        setBriefFiles([]);
         setFormData({
           name: '', description: '', management_notes: '', owner: '', deadline: '',
           required_proof_count: 1, required_proof_types: ['photo'] as string[],
@@ -377,6 +413,48 @@ export default function NewUnitPage() {
                       placeholder="Type a written note for the field team..."
                       className="bg-transparent border-0 border-b border-gray-700/60 rounded-none text-white text-sm resize-none focus-visible:ring-0 focus-visible:border-blue-500/50 px-0 min-h-[56px] placeholder:text-gray-600"
                     />
+
+                    {/* Brief attachments */}
+                    <div>
+                      {briefFiles.length > 0 && (
+                        <div className="space-y-1.5 mb-2">
+                          {briefFiles.map((file, idx) => (
+                            <div key={idx} className="flex items-center gap-2 bg-gray-800/50 border border-gray-700/50 rounded-lg px-3 py-2">
+                              <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                              <span className="text-gray-300 text-xs flex-1 truncate">{file.name}</span>
+                              <span className="text-gray-600 text-xs shrink-0">{(file.size / 1024).toFixed(0)} KB</span>
+                              <button
+                                type="button"
+                                onClick={() => setBriefFiles(briefFiles.filter((_, i) => i !== idx))}
+                                className="text-gray-600 hover:text-red-400 transition-colors shrink-0"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <input
+                        ref={briefInputRef}
+                        type="file"
+                        multiple
+                        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                        className="hidden"
+                        onChange={(e) => {
+                          const picked = Array.from(e.target.files || []);
+                          setBriefFiles((prev) => [...prev, ...picked]);
+                          e.target.value = '';
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => briefInputRef.current?.click()}
+                        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors py-1"
+                      >
+                        <Paperclip className="w-3.5 h-3.5" />
+                        Attach brief / reference file
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
