@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, ArrowLeft, Check, CheckCheck } from 'lucide-react';
+import { Bell, ArrowLeft, Check, CheckCheck, AlertTriangle, AlertOctagon, CheckCircle2, XCircle, Clock, Paperclip, RefreshCw, Megaphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/firebase';
@@ -113,13 +113,14 @@ export default function NotificationsPage() {
 
   function getTypeIcon(type: string) {
     switch (type) {
-      case 'escalation': return '⚠️';
-      case 'manual_escalation': return '🚨';
-      case 'proof_approved': return '✅';
-      case 'proof_rejected': return '❌';
-      case 'deadline_approaching': return '⏰';
-      case 'status_change': return '🔄';
-      default: return '📢';
+      case 'escalation': return <AlertTriangle className="w-4 h-4 text-amber-400" />;
+      case 'manual_escalation': return <AlertOctagon className="w-4 h-4 text-red-400" />;
+      case 'proof_approved': return <CheckCircle2 className="w-4 h-4 text-green-400" />;
+      case 'proof_rejected': return <XCircle className="w-4 h-4 text-red-400" />;
+      case 'proof_submitted': return <Paperclip className="w-4 h-4 text-blue-400" />;
+      case 'deadline_approaching': return <Clock className="w-4 h-4 text-orange-400" />;
+      case 'status_change': return <RefreshCw className="w-4 h-4 text-blue-400" />;
+      default: return <Megaphone className="w-4 h-4 text-gray-400" />;
     }
   }
 
@@ -208,7 +209,7 @@ export default function NotificationsPage() {
                     return (
                       <>
                         <div className="flex items-center gap-2 mb-1">
-                          <span>{getTypeIcon(notification.type)}</span>
+                          <span className="shrink-0">{getTypeIcon(notification.type)}</span>
                           <p className={`font-medium truncate ${!notification.is_read ? 'text-white' : 'text-gray-400'}`}>
                             {content.title}
                           </p>

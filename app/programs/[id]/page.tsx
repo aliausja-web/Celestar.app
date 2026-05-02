@@ -11,6 +11,7 @@ import { supabase } from '@/lib/firebase';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { getWorkstreamTypeLabel } from '@/lib/workstream-types';
+import { usePermissions } from '@/hooks/use-permissions';
 
 interface Program {
   id: string;
@@ -35,6 +36,7 @@ export default function ProgramDetailPage() {
   const router = useRouter();
   const programId = params.id as string;
 
+  const { role } = usePermissions();
   const [program, setProgram] = useState<Program | null>(null);
   const [workstreams, setWorkstreams] = useState<Workstream[]>([]);
   const [loading, setLoading] = useState(true);
@@ -191,26 +193,30 @@ export default function ProgramDetailPage() {
             <h2 className="text-xl font-bold text-white">
               Workstreams ({workstreams.length})
             </h2>
-            <Button
-              onClick={() => router.push(`/programs/${programId}/workstreams/new`)}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Workstream
-            </Button>
+            {role !== 'FIELD_CONTRIBUTOR' && role !== 'CLIENT_VIEWER' && (
+              <Button
+                onClick={() => router.push(`/programs/${programId}/workstreams/new`)}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Workstream
+              </Button>
+            )}
           </div>
 
           {workstreams.length === 0 ? (
             <Card className="bg-black/25 border-gray-800">
               <CardContent className="py-12 text-center">
                 <p className="text-gray-500 mb-4">No workstreams found for this program</p>
-                <Button
-                  onClick={() => router.push(`/programs/${programId}/workstreams/new`)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create First Workstream
-                </Button>
+                {role !== 'FIELD_CONTRIBUTOR' && role !== 'CLIENT_VIEWER' && (
+                  <Button
+                    onClick={() => router.push(`/programs/${programId}/workstreams/new`)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create First Workstream
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (

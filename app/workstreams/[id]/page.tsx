@@ -21,21 +21,22 @@ import { LanguageSwitcher } from '@/components/language-switcher';
 import { useLocale } from '@/lib/i18n/context';
 
 function leadUrgencyScore(u: UnitWithProofs): number {
-  if (u.computed_status === 'BLOCKED') return 4;
-  if ((u.current_escalation_level ?? 0) > 0 && u.computed_status === 'RED') return 3;
-  if (u.computed_status === 'RED') return 2;
+  const isRed = u.computed_status === 'RED' || u.computed_status === 'BLOCKED';
+  const isEscalated = (u.current_escalation_level ?? 0) > 0;
+  const hasPendingProofs = (u.proofs ?? []).some(p => p.approval_status === 'pending');
+  if (isRed && isEscalated) return 4;
+  if (isRed && hasPendingProofs) return 3;
+  if (isRed) return 2;
   return 1;
 }
 
 function fieldUrgencyScore(u: UnitWithProofs): number {
-  const req = (u.proof_requirements as any)?.required_count || 1;
   const uploaded = u.proof_count || 0;
-  const esc = (u.current_escalation_level ?? 0) > 0 || u.computed_status === 'BLOCKED';
-  const done = uploaded >= req;
-  if (!done && uploaded === 0 && esc) return 5;
-  if (!done && uploaded > 0 && esc) return 4;
-  if (!done && uploaded === 0 && !esc) return 3;
-  if (!done && uploaded > 0 && !esc) return 2;
+  const isEscalated = (u.current_escalation_level ?? 0) > 0;
+  const isGreen = u.computed_status === 'GREEN';
+  if (uploaded === 0 && isEscalated) return 4;
+  if (uploaded === 0) return 3;
+  if (!isGreen) return 2;
   return 1;
 }
 
@@ -118,6 +119,8 @@ export default function WorkstreamBoard() {
 
     const leftBorderColor = isBlocked
       ? 'border-l-yellow-500'
+      : isEscalated
+      ? 'border-l-orange-500'
       : isGreen
       ? 'border-l-[#238636]'
       : 'border-l-red-500';
@@ -130,7 +133,7 @@ export default function WorkstreamBoard() {
 
     return (
       <Card
-        className={`border-[#30363d] border-l-4 ${leftBorderColor} bg-[#161b22] transition-all cursor-pointer hover:bg-[#1c2128] ${isUnconfirmed ? 'opacity-75' : ''}`}
+        className={`border-[#30363d] border-l-4 ${leftBorderColor} ${isEscalated ? 'bg-orange-950/20' : 'bg-[#161b22]'} transition-all cursor-pointer hover:bg-[#1c2128] ${isUnconfirmed ? 'opacity-75' : ''}`}
         onClick={() => router.push(`/units/${unit.id}`)}
       >
         <CardContent className="p-4 space-y-3">
