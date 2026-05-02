@@ -51,6 +51,11 @@ export async function GET(
         .eq('user_id', context!.user_id);
       const assignedIds = new Set((assignments ?? []).map((a: any) => a.unit_id));
       unitScope = unitScope.filter((u) => assignedIds.has(u.id));
+
+      // Deny access entirely if they have no assigned units in this workstream
+      if (unitScope.length === 0) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     const total_units = unitScope.length;

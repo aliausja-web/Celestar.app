@@ -32,6 +32,41 @@ export async function GET(
       return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
     }
 
+    // FIELD_CONTRIBUTOR: only accessible if they have assigned units inside this program
+    if (context!.role === 'FIELD_CONTRIBUTOR') {
+      const { data: assignments } = await supabase
+        .from('unit_assignments')
+        .select('unit_id')
+        .eq('user_id', context!.user_id);
+
+      const assignedIds = (assignments ?? []).map((a: any) => a.unit_id);
+      let allowed = false;
+
+      if (assignedIds.length > 0) {
+        const { data: unitRows } = await supabase
+          .from('units')
+          .select('workstream_id')
+          .in('id', assignedIds);
+
+        const workstreamIds = [...new Set((unitRows ?? []).map((u: any) => u.workstream_id))];
+
+        if (workstreamIds.length > 0) {
+          const { data: wsRows } = await supabase
+            .from('workstreams')
+            .select('program_id')
+            .in('id', workstreamIds)
+            .eq('program_id', params.id)
+            .limit(1);
+
+          allowed = (wsRows ?? []).length > 0;
+        }
+      }
+
+      if (!allowed) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     return NextResponse.json(program);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

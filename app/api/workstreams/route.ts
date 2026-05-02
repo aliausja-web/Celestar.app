@@ -47,6 +47,29 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
+    // FIELD_CONTRIBUTOR: only return workstreams that contain at least one assigned unit
+    if (context!.role === 'FIELD_CONTRIBUTOR') {
+      const { data: assignments } = await supabase
+        .from('unit_assignments')
+        .select('unit_id')
+        .eq('user_id', context!.user_id);
+
+      const assignedIds = (assignments ?? []).map((a: any) => a.unit_id);
+      if (assignedIds.length === 0) {
+        return NextResponse.json([]);
+      }
+
+      const wsIds = (workstreams ?? []).map((w: any) => w.id);
+      const { data: unitRows } = await supabase
+        .from('units')
+        .select('workstream_id')
+        .in('id', assignedIds)
+        .in('workstream_id', wsIds);
+
+      const allowedWsIds = new Set((unitRows ?? []).map((u: any) => u.workstream_id));
+      return NextResponse.json((workstreams ?? []).filter((w: any) => allowedWsIds.has(w.id)));
+    }
+
     return NextResponse.json(workstreams || []);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

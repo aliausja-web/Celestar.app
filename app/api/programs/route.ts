@@ -25,6 +25,34 @@ export async function GET(request: NextRequest) {
       query = query.eq('org_id', context!.org_id);
     }
 
+    // FIELD_CONTRIBUTOR: only programs that contain at least one of their assigned units
+    if (context!.role === 'FIELD_CONTRIBUTOR') {
+      const { data: assignments } = await supabase
+        .from('unit_assignments')
+        .select('unit_id')
+        .eq('user_id', context!.user_id);
+
+      const assignedIds = (assignments ?? []).map((a: any) => a.unit_id);
+      if (assignedIds.length === 0) {
+        return NextResponse.json([]);
+      }
+
+      const { data: unitRows } = await supabase
+        .from('units')
+        .select('workstream_id')
+        .in('id', assignedIds);
+
+      const workstreamIds = [...new Set((unitRows ?? []).map((u: any) => u.workstream_id))];
+
+      const { data: workstreamRows } = await supabase
+        .from('workstreams')
+        .select('program_id')
+        .in('id', workstreamIds);
+
+      const programIds = [...new Set((workstreamRows ?? []).map((w: any) => w.program_id))];
+      query = query.in('id', programIds);
+    }
+
     const { data: programs, error } = await query;
 
     if (error) throw error;

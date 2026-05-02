@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, AlertTriangle, AlertOctagon, CheckCircle2, XCircle, Clock, Paperclip, Megaphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -124,17 +124,19 @@ export function NotificationBell() {
   function getTypeIcon(type: string) {
     switch (type) {
       case 'escalation':
-        return '⚠️';
+        return <AlertTriangle className="w-4 h-4 text-amber-400" />;
+      case 'manual_escalation':
+        return <AlertOctagon className="w-4 h-4 text-red-400" />;
       case 'proof_approved':
-        return '✅';
+        return <CheckCircle2 className="w-4 h-4 text-green-400" />;
       case 'proof_rejected':
-        return '❌';
+        return <XCircle className="w-4 h-4 text-red-400" />;
       case 'proof_submitted':
-        return '📎';
+        return <Paperclip className="w-4 h-4 text-blue-400" />;
       case 'deadline_approaching':
-        return '⏰';
+        return <Clock className="w-4 h-4 text-orange-400" />;
       default:
-        return '📢';
+        return <Megaphone className="w-4 h-4 text-gray-400" />;
     }
   }
 
@@ -201,7 +203,7 @@ export function NotificationBell() {
                       return (
                         <>
                           <div className="flex items-start gap-2 mb-1">
-                            <span className="text-sm">{getTypeIcon(notification.type)}</span>
+                            <span className="shrink-0 mt-0.5">{getTypeIcon(notification.type)}</span>
                             <p className="text-sm font-medium text-white truncate flex-1">
                               {content.title}
                             </p>
