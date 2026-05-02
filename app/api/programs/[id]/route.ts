@@ -48,7 +48,7 @@ export async function GET(
           .select('workstream_id')
           .in('id', assignedIds);
 
-        const workstreamIds = [...new Set((unitRows ?? []).map((u: any) => u.workstream_id))];
+        const workstreamIds = Array.from(new Set((unitRows ?? []).map((u: any) => u.workstream_id)));
 
         if (workstreamIds.length > 0) {
           const { data: wsRows } = await supabase

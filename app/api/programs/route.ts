@@ -42,14 +42,14 @@ export async function GET(request: NextRequest) {
         .select('workstream_id')
         .in('id', assignedIds);
 
-      const workstreamIds = [...new Set((unitRows ?? []).map((u: any) => u.workstream_id))];
+      const workstreamIds = Array.from(new Set((unitRows ?? []).map((u: any) => u.workstream_id)));
 
       const { data: workstreamRows } = await supabase
         .from('workstreams')
         .select('program_id')
         .in('id', workstreamIds);
 
-      const programIds = [...new Set((workstreamRows ?? []).map((w: any) => w.program_id))];
+      const programIds = Array.from(new Set((workstreamRows ?? []).map((w: any) => w.program_id)));
       query = query.in('id', programIds);
     }
 
