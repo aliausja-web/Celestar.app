@@ -93,6 +93,14 @@ export async function POST(
 
     if (escalationError) throw escalationError;
 
+    // Stamp current_escalation_level on the unit so the frontend sort/indicator works.
+    // Only raise — never lower — the level (automatic escalations may have set it higher).
+    const newLevel = Math.max(unit.current_escalation_level ?? 0, 1);
+    await supabase
+      .from('units')
+      .update({ current_escalation_level: newLevel })
+      .eq('id', unitId);
+
     // Audit trail: record manual escalation as a status event
     await supabase.from('unit_status_events').insert({
       unit_id: unitId,
