@@ -164,58 +164,64 @@ export default function WorkstreamBoard() {
                 {isUnconfirmed && <span className="text-gray-500 italic">{t('workstream.unconfirmedBadge')}</span>}
               </div>
             </div>
+
+            {/* Right: proof progress */}
+            <div className="shrink-0 flex flex-col items-center gap-1.5 pl-3 border-l border-[#30363d] min-w-[52px]">
+              <span className="leading-none">
+                <span className={`text-xl font-bold ${allProofsUploaded ? 'text-[#3fb950]' : 'text-[#e6edf3]'}`}>
+                  {unit.proof_count}
+                </span>
+                <span className="text-[#484f58] text-sm font-normal">/{requiredCount}</span>
+              </span>
+              <div className="w-full h-1 bg-[#21262d] rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${allProofsUploaded ? 'bg-[#238636]' : unit.proof_count > 0 ? 'bg-blue-500' : 'bg-transparent'}`}
+                  style={{ width: `${Math.min((unit.proof_count / requiredCount) * 100, 100)}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-[#484f58] uppercase tracking-wide">{t('workstream.proofsUploaded').split(' ')[0]}</span>
+            </div>
           </div>
 
-          {/* Workstream Lead+: proof count + thumbnails */}
-          {!isFieldView && (
+          {/* Workstream Lead+: proof thumbnails */}
+          {!isFieldView && unit.proofs.length > 0 && (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs text-[#7d8590]">
-                <Camera className="w-3 h-3" />
-                <span className={`font-medium ${allProofsUploaded ? 'text-[#3fb950]' : 'text-[#e6edf3]'}`}>
-                  {unit.proof_count}/{requiredCount} {t('workstream.proofsUploaded')}
-                </span>
-                {unit.last_proof_time && isValid(new Date(unit.last_proof_time)) && (
-                  <span className="text-[#484f58]">· {t('workstream.lastProof')} {formatDistanceToNow(new Date(unit.last_proof_time), { addSuffix: true })}</span>
+              {unit.last_proof_time && isValid(new Date(unit.last_proof_time)) && (
+                <p className="text-xs text-[#484f58]">{t('workstream.lastProof')} {formatDistanceToNow(new Date(unit.last_proof_time), { addSuffix: true })}</p>
+              )}
+              <div className="flex gap-2 flex-wrap">
+                {unit.proofs.slice(0, 5).map((proof) => (
+                  <div
+                    key={proof.id}
+                    onClick={(e) => { e.stopPropagation(); router.push(`/units/${unit.id}`); }}
+                    className={`w-14 h-14 rounded border overflow-hidden flex items-center justify-center cursor-pointer transition-all hover:scale-105 hover:border-[#58a6ff] ${
+                      proof.approval_status === 'approved' ? 'border-[#238636]/60 bg-[#0d1117]' :
+                      proof.approval_status === 'rejected' ? 'border-red-700/60 bg-[#0d1117]' :
+                      'border-[#30363d] bg-[#0d1117]'
+                    }`}
+                  >
+                    {proof.type === 'photo' ? (
+                      <img src={proof.url} alt="Proof" className="w-full h-full object-cover" />
+                    ) : (
+                      <ProofTypeIcon type={proof.type} />
+                    )}
+                  </div>
+                ))}
+                {unit.proofs.length > 5 && (
+                  <div className="w-14 h-14 bg-[#0d1117] border border-[#30363d] rounded flex items-center justify-center text-xs text-[#7d8590] font-medium">
+                    +{unit.proofs.length - 5}
+                  </div>
                 )}
               </div>
-              {unit.proofs.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  {unit.proofs.slice(0, 5).map((proof) => (
-                    <div
-                      key={proof.id}
-                      onClick={(e) => { e.stopPropagation(); router.push(`/units/${unit.id}`); }}
-                      className={`w-14 h-14 rounded border overflow-hidden flex items-center justify-center cursor-pointer transition-all hover:scale-105 hover:border-[#58a6ff] ${
-                        proof.approval_status === 'approved' ? 'border-[#238636]/60 bg-[#0d1117]' :
-                        proof.approval_status === 'rejected' ? 'border-red-700/60 bg-[#0d1117]' :
-                        'border-[#30363d] bg-[#0d1117]'
-                      }`}
-                    >
-                      {proof.type === 'photo' ? (
-                        <img src={proof.url} alt="Proof" className="w-full h-full object-cover" />
-                      ) : (
-                        <ProofTypeIcon type={proof.type} />
-                      )}
-                    </div>
-                  ))}
-                  {unit.proofs.length > 5 && (
-                    <div className="w-14 h-14 bg-[#0d1117] border border-[#30363d] rounded flex items-center justify-center text-xs text-[#7d8590] font-medium">
-                      +{unit.proofs.length - 5}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
-          {/* Field Contributor: proof count + briefing + notes */}
+          {/* Field Contributor: required types + briefing + notes */}
           {isFieldView && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-xs text-[#7d8590]">
                 <Camera className="w-3 h-3" />
-                <span className={`font-medium ${allProofsUploaded ? 'text-[#3fb950]' : 'text-[#e6edf3]'}`}>
-                  {unit.proof_count}/{requiredCount} {t('workstream.proofsUploaded')}
-                </span>
-                <div className="flex gap-1 ms-1">
+                <div className="flex gap-1">
                   {requiredTypes.map((type) => (
                     <Badge key={type} variant="outline" className="text-xs px-1.5 py-0 border-[#30363d] text-[#7d8590]">
                       <ProofTypeIcon type={type} />
