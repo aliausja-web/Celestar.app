@@ -694,14 +694,6 @@ export default function UnitDetailPage() {
                     <Upload className="w-4 h-4 me-2" />
                     {t('units.uploadPhoto')}
                   </Button>
-                  <Button
-                    onClick={() => router.push(`/units/${unitId}/upload?type=document`)}
-                    variant="outline"
-                    className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
-                  >
-                    <FileText className="w-4 h-4 me-2" />
-                    {t('units.uploadDocument')}
-                  </Button>
                   {!isGreen && (
                     <Button
                       onClick={() => setShowEscalationDialog(true)}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,32 +15,13 @@ import {
   RotateCcw,
   Square,
   Circle,
-  FileText,
-  Upload,
-  ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/firebase';
 import { useLocale } from '@/lib/i18n/context';
 import { LanguageSwitcher } from '@/components/language-switcher';
 
-type ProofType = 'photo' | 'video' | 'document';
-
-// Governance document file types — permits, RFPs, Pre-Qualification, ToR, contracts, etc.
-const DOCUMENT_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx';
-const DOCUMENT_MIME_TYPES: Record<string, string> = {
-  pdf:  'application/pdf',
-  doc:  'application/msword',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  xls:  'application/vnd.ms-excel',
-  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-};
-
-async function computeSHA256(buffer: ArrayBuffer): Promise<string> {
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
+type ProofType = 'photo' | 'video';
 
 export default function UploadProofPage() {
   const router = useRouter();
@@ -51,10 +32,10 @@ export default function UploadProofPage() {
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState('');
 
-  // Pre-select proof type from URL query param (?type=document, ?type=video, etc.)
+  // Pre-select proof type from URL query param (?type=video, etc.)
   const initialType = (searchParams.get('type') as ProofType | null) ?? 'photo';
   const [proofType, setProofType] = useState<ProofType>(
-    ['photo', 'video', 'document'].includes(initialType) ? initialType : 'photo'
+    initialType === 'video' ? 'video' : 'photo'
   );
 
   // Camera/video state
@@ -64,12 +45,6 @@ export default function UploadProofPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [cameraActive, setCameraActive] = useState(false);
-
-  // Document state
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [fileHash, setFileHash] = useState<string | null>(null);
-  const [hashLoading, setHashLoading] = useState(false);
-  const [documentCategory, setDocumentCategory] = useState<string>('');
 
   // Unit proof configuration (fetched on load)
   const [unitConfig, setUnitConfig] = useState<{
@@ -81,23 +56,9 @@ export default function UploadProofPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Document categories — defined inside component so t() is available
-  const DOCUMENT_CATEGORIES = [
-    { value: 'permit',             label: t('unitsUpload.docCatPermitLabel'),    description: t('unitsUpload.docCatPermitDesc') },
-    { value: 'rfp',                label: t('unitsUpload.docCatRfpLabel'),        description: t('unitsUpload.docCatRfpDesc') },
-    { value: 'pre_qualification',  label: t('unitsUpload.docCatPreQualLabel'),    description: t('unitsUpload.docCatPreQualDesc') },
-    { value: 'terms_of_reference', label: t('unitsUpload.docCatTorLabel'),        description: t('unitsUpload.docCatTorDesc') },
-    { value: 'contract',           label: t('unitsUpload.docCatContractLabel'),   description: t('unitsUpload.docCatContractDesc') },
-    { value: 'certificate',        label: t('unitsUpload.docCatCertLabel'),       description: t('unitsUpload.docCatCertDesc') },
-    { value: 'insurance',          label: t('unitsUpload.docCatInsuranceLabel'),  description: t('unitsUpload.docCatInsuranceDesc') },
-    { value: 'financial',          label: t('unitsUpload.docCatFinancialLabel'),  description: t('unitsUpload.docCatFinancialDesc') },
-    { value: 'other',              label: t('unitsUpload.docCatOtherLabel'),      description: t('unitsUpload.docCatOtherDesc') },
-  ];
 
   // Fetch unit configuration for proof requirements
   useEffect(() => {
@@ -124,13 +85,11 @@ export default function UploadProofPage() {
 
   // Update timestamp every second (used for watermark and display)
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // When proof type changes, stop any active camera/recording and reset camera state
+  // Stop camera/recording when proof type changes or on unmount
   useEffect(() => {
     return () => {
       stopCamera();
@@ -138,7 +97,6 @@ export default function UploadProofPage() {
     };
   }, [proofType]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Stop camera and recording on unmount
   useEffect(() => {
     return () => {
       stopCamera();
@@ -193,10 +151,6 @@ export default function UploadProofPage() {
       setStream(null);
     }
     setCameraActive(false);
-  }
-
-  async function handleActivateCamera() {
-    await startCamera();
   }
 
   function capturePhoto() {
@@ -294,42 +248,14 @@ export default function UploadProofPage() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
-  // Document file selection + hash computation
-  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSelectedFile(file);
-    setFileHash(null);
-    setHashLoading(true);
-    try {
-      const buffer = await file.arrayBuffer();
-      const hash = await computeSHA256(buffer);
-      setFileHash(hash);
-      toast.success(t('unitsUpload.hashComputedToast'));
-    } catch {
-      toast.error(t('unitsUpload.errorHashFailed'));
-    } finally {
-      setHashLoading(false);
-    }
-  }, [t]);
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (proofType !== 'document' && !capturedMedia) {
+    if (!capturedMedia) {
       toast.error(t('unitsUpload.errorNoMedia').replace('{type}', proofType));
       return;
     }
-    if (proofType === 'document' && !selectedFile) {
-      toast.error(t('unitsUpload.errorNoDocument'));
-      return;
-    }
-    if (proofType === 'document' && !documentCategory) {
-      toast.error(t('unitsUpload.errorNoCategory'));
-      return;
-    }
 
-    // Validate required governance fields
     if (unitConfig?.requires_reference_number && !referenceNumber.trim()) {
       toast.error(t('unitsUpload.errorRefRequired'));
       return;
@@ -347,20 +273,13 @@ export default function UploadProofPage() {
       }
       const token = session.access_token;
 
+      const timestamp = Date.now();
       let uploadPath: string;
       let fileMimeType: string;
-      let fileForUpload: File;
       let originalFileName: string;
+      let fileForUpload: File;
 
-      const timestamp = Date.now();
-
-      if (proofType === 'document') {
-        const ext = selectedFile!.name.split('.').pop()?.toLowerCase() || 'pdf';
-        originalFileName = selectedFile!.name;
-        uploadPath = `${unitId}/${timestamp}.${ext}`;
-        fileMimeType = DOCUMENT_MIME_TYPES[ext] || selectedFile!.type || 'application/octet-stream';
-        fileForUpload = new File([selectedFile!], uploadPath, { type: fileMimeType });
-      } else if (proofType === 'photo') {
+      if (proofType === 'photo') {
         originalFileName = `proof_${timestamp}.jpg`;
         uploadPath = `${unitId}/${timestamp}.jpg`;
         fileMimeType = 'image/jpeg';
@@ -383,17 +302,14 @@ export default function UploadProofPage() {
 
       if (uploadError) throw uploadError;
 
-      // Build proof payload
       const proofPayload: Record<string, any> = {
         type: proofType,
         file_path: uploadData.path,
         notes: notes || null,
-        captured_at: proofType !== 'document' ? currentTime.toISOString() : null,
+        captured_at: currentTime.toISOString(),
         file_name: originalFileName,
         file_size: fileForUpload.size,
         mime_type: fileMimeType,
-        file_hash: fileHash || null,
-        document_category: proofType === 'document' ? documentCategory : null,
         reference_number: referenceNumber.trim() || null,
         expiry_date: expiryDate || null,
       };
@@ -428,9 +344,6 @@ export default function UploadProofPage() {
     router.back();
   }
 
-  const isDocumentMode = proofType === 'document';
-  const canSubmit = isDocumentMode ? !!selectedFile : !!capturedMedia;
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-black to-gray-950 p-6">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -456,17 +369,13 @@ export default function UploadProofPage() {
           <CardHeader>
             <CardTitle className="text-white">{t('unitsUpload.cardTitle')}</CardTitle>
             <CardDescription className="text-gray-400">
-              {isDocumentMode
-                ? t('unitsUpload.descDocument')
-                : proofType === 'photo'
-                ? t('unitsUpload.descPhoto')
-                : t('unitsUpload.descVideo')}
+              {proofType === 'photo' ? t('unitsUpload.descPhoto') : t('unitsUpload.descVideo')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Proof Type Selection */}
-              {!capturedMedia && !selectedFile && (
+              {!capturedMedia && (
                 <div className="space-y-2">
                   <Label htmlFor="proofType" className="text-gray-300">
                     {t('unitsUpload.proofTypeLabel')} <span className="text-red-400">*</span>
@@ -477,8 +386,6 @@ export default function UploadProofPage() {
                       stopCamera();
                       stopRecording();
                       setCapturedMedia(null);
-                      setSelectedFile(null);
-                      setFileHash(null);
                       setCameraActive(false);
                       setProofType(value as ProofType);
                     }}
@@ -499,232 +406,115 @@ export default function UploadProofPage() {
                           {t('unitsUpload.videoOption')}
                         </div>
                       </SelectItem>
-                      <SelectItem value="document" className="text-white">
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4" />
-                          {t('unitsUpload.documentOption')}
-                        </div>
-                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               )}
 
-              {/* ── DOCUMENT MODE ── */}
-              {isDocumentMode && (
-                <div className="space-y-4">
-                  {/* Document Category */}
-                  <div className="space-y-2">
-                    <Label htmlFor="document_category" className="text-gray-300">
-                      {t('unitsUpload.docCategoryLabel')} <span className="text-red-400">*</span>
-                    </Label>
-                    <Select
-                      value={documentCategory}
-                      onValueChange={setDocumentCategory}
-                    >
-                      <SelectTrigger className="bg-black/40 border-gray-700 text-white">
-                        <SelectValue placeholder={t('unitsUpload.docCategoryPlaceholder')} />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-950 border-gray-700">
-                        {DOCUMENT_CATEGORIES.map((cat) => (
-                          <SelectItem key={cat.value} value={cat.value} className="text-white">
-                            <div>
-                              <div className="font-medium">{cat.label}</div>
-                              <div className="text-xs text-gray-400">{cat.description}</div>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-gray-500">
-                      {t('unitsUpload.docCategoryHelp')}
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-gray-300">
-                      {t('unitsUpload.docFileLabel')} <span className="text-red-400">*</span>
-                    </Label>
-                    {!selectedFile ? (
-                      <div
-                        onClick={() => fileInputRef.current?.click()}
-                        className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center cursor-pointer hover:border-blue-500/50 hover:bg-blue-500/5 transition-all"
-                      >
-                        <Upload className="w-10 h-10 text-gray-500 mx-auto mb-3" />
-                        <p className="text-gray-400">{t('unitsUpload.docFileClick')}</p>
-                        <p className="text-gray-600 text-xs mt-1">{t('unitsUpload.docFileMax')}</p>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept={DOCUMENT_ACCEPT}
-                          onChange={handleFileSelect}
-                          className="hidden"
-                        />
-                      </div>
-                    ) : (
-                      <div className="bg-gray-900/50 border border-gray-700 rounded-lg p-4 space-y-3">
-                        <div className="flex items-center gap-3">
-                          <FileText className="w-8 h-8 text-blue-400 shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white font-medium truncate">{selectedFile.name}</p>
-                            <p className="text-gray-500 text-xs">
-                              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedFile(null);
-                              setFileHash(null);
-                              if (fileInputRef.current) fileInputRef.current.value = '';
-                            }}
-                            className="bg-black/25 border-gray-700 text-gray-300"
-                          >
-                            <RotateCcw className="w-3 h-3 me-1" />
-                            {t('unitsUpload.changeFile')}
-                          </Button>
+              {/* Camera / video capture */}
+              <div className="space-y-2">
+                <Label className="text-gray-300">
+                  {proofType === 'photo' ? t('unitsUpload.photoOption') : t('unitsUpload.videoOption')} <span className="text-red-400">*</span>
+                </Label>
+                <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+                  {!capturedMedia ? (
+                    <>
+                      {!cameraActive && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-900/80">
+                          <Camera className="w-12 h-12 text-gray-500" />
+                          <p className="text-gray-400 text-sm">{t('unitsUpload.tapCamera')}</p>
                         </div>
-
-                        {/* Hash display */}
-                        {hashLoading && (
-                          <p className="text-yellow-400 text-xs flex items-center gap-2">
-                            <span className="animate-pulse">{t('unitsUpload.computingHash')}</span>
-                          </p>
-                        )}
-                        {fileHash && !hashLoading && (
-                          <div className="flex items-center gap-2 bg-green-900/20 border border-green-800/50 rounded p-2">
-                            <ShieldCheck className="w-4 h-4 text-green-400 shrink-0" />
-                            <div>
-                              <p className="text-green-400 text-xs font-medium">{t('unitsUpload.hashComputed')}</p>
-                              <p className="text-gray-500 text-xs font-mono">{fileHash.slice(0, 16)}…</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                      )}
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className={`w-full h-full object-cover ${!cameraActive ? 'invisible' : ''}`}
+                      />
+                      {cameraActive && proofType === 'photo' && (
+                        <div className="absolute bottom-4 right-4 bg-black/70 text-white px-3 py-2 rounded font-mono text-sm">
+                          {currentTime.toLocaleString('en-US', {
+                            year: 'numeric', month: '2-digit', day: '2-digit',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+                          })}
+                        </div>
+                      )}
+                      {isRecording && (
+                        <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 text-white px-3 py-2 rounded-full">
+                          <Circle className="w-3 h-3 fill-white animate-pulse" />
+                          <span className="font-mono text-sm">REC {formatDuration(recordingDuration)}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    proofType === 'photo' ? (
+                      <img src={capturedMedia} alt="Captured proof" className="w-full h-full object-contain" />
+                    ) : (
+                      <video src={capturedMedia} controls className="w-full h-full object-contain" />
+                    )
+                  )}
                 </div>
-              )}
+                <canvas ref={canvasRef} className="hidden" />
 
-              {/* ── CAMERA MODE (photo/video) ── */}
-              {!isDocumentMode && (
-                <div className="space-y-2">
-                  <Label className="text-gray-300">
-                    {proofType === 'photo' ? t('unitsUpload.photoOption') : t('unitsUpload.videoOption')} <span className="text-red-400">*</span>
-                  </Label>
-                  <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
-                    {!capturedMedia ? (
-                      <>
-                        {!cameraActive && (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gray-900/80">
-                            <Camera className="w-12 h-12 text-gray-500" />
-                            <p className="text-gray-400 text-sm">{t('unitsUpload.tapCamera')}</p>
-                          </div>
-                        )}
-                        <video
-                          ref={videoRef}
-                          autoPlay
-                          playsInline
-                          muted
-                          className={`w-full h-full object-cover ${!cameraActive ? 'invisible' : ''}`}
-                        />
-                        {cameraActive && proofType === 'photo' && (
-                          <div className="absolute bottom-4 right-4 bg-black/70 text-white px-3 py-2 rounded font-mono text-sm">
-                            {currentTime.toLocaleString('en-US', {
-                              year: 'numeric', month: '2-digit', day: '2-digit',
-                              hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
-                            })}
-                          </div>
-                        )}
-                        {isRecording && (
-                          <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 text-white px-3 py-2 rounded-full">
-                            <Circle className="w-3 h-3 fill-white animate-pulse" />
-                            <span className="font-mono text-sm">REC {formatDuration(recordingDuration)}</span>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      proofType === 'photo' ? (
-                        <img src={capturedMedia} alt="Captured proof" className="w-full h-full object-contain" />
-                      ) : (
-                        <video src={capturedMedia} controls className="w-full h-full object-contain" />
-                      )
-                    )}
-                  </div>
-                  <canvas ref={canvasRef} className="hidden" />
-
-                  <div className="flex gap-2">
-                    {!capturedMedia ? (
-                      proofType === 'photo' ? (
-                        !cameraActive ? (
-                          <Button
-                            type="button"
-                            onClick={handleActivateCamera}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                          >
-                            <Camera className="w-4 h-4 me-2" />
-                            {t('unitsUpload.capturePhoto')}
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            onClick={capturePhoto}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                            disabled={!stream}
-                          >
-                            <Camera className="w-4 h-4 me-2" />
-                            {t('unitsUpload.capturePhoto')}
-                          </Button>
-                        )
-                      ) : (
-                        !cameraActive ? (
-                          <Button
-                            type="button"
-                            onClick={handleActivateCamera}
-                            className="w-full bg-red-600 hover:bg-red-700 text-white"
-                          >
-                            <Circle className="w-4 h-4 me-2" />
-                            {t('unitsUpload.startRecording')}
-                          </Button>
-                        ) : !isRecording ? (
-                          <Button
-                            type="button"
-                            onClick={startVideoRecording}
-                            className="w-full bg-red-600 hover:bg-red-700 text-white"
-                            disabled={!stream}
-                          >
-                            <Circle className="w-4 h-4 me-2" />
-                            {t('unitsUpload.startRecording')}
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            onClick={stopRecording}
-                            className="w-full bg-gray-600 hover:bg-gray-700 text-white"
-                          >
-                            <Square className="w-4 h-4 me-2" />
-                            {t('unitsUpload.stopRecording')}
-                          </Button>
-                        )
-                      )
-                    ) : (
+                <div className="flex gap-2">
+                  {!capturedMedia ? (
+                    proofType === 'photo' ? (
                       <Button
                         type="button"
-                        onClick={retakeMedia}
-                        variant="outline"
-                        className="w-full bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
+                        onClick={!cameraActive ? startCamera : capturePhoto}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                        disabled={cameraActive && !stream}
                       >
-                        <RotateCcw className="w-4 h-4 me-2" />
-                        {proofType === 'photo' ? t('unitsUpload.retakePhoto') : t('unitsUpload.retakeVideo')}
+                        <Camera className="w-4 h-4 me-2" />
+                        {t('unitsUpload.capturePhoto')}
                       </Button>
-                    )}
-                  </div>
+                    ) : (
+                      !cameraActive ? (
+                        <Button
+                          type="button"
+                          onClick={startCamera}
+                          className="w-full bg-red-600 hover:bg-red-700 text-white"
+                        >
+                          <Circle className="w-4 h-4 me-2" />
+                          {t('unitsUpload.startRecording')}
+                        </Button>
+                      ) : !isRecording ? (
+                        <Button
+                          type="button"
+                          onClick={startVideoRecording}
+                          className="w-full bg-red-600 hover:bg-red-700 text-white"
+                          disabled={!stream}
+                        >
+                          <Circle className="w-4 h-4 me-2" />
+                          {t('unitsUpload.startRecording')}
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          onClick={stopRecording}
+                          className="w-full bg-gray-600 hover:bg-gray-700 text-white"
+                        >
+                          <Square className="w-4 h-4 me-2" />
+                          {t('unitsUpload.stopRecording')}
+                        </Button>
+                      )
+                    )
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={retakeMedia}
+                      variant="outline"
+                      className="w-full bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
+                    >
+                      <RotateCcw className="w-4 h-4 me-2" />
+                      {proofType === 'photo' ? t('unitsUpload.retakePhoto') : t('unitsUpload.retakeVideo')}
+                    </Button>
+                  )}
                 </div>
-              )}
+              </div>
 
-              {/* ── GOVERNANCE STRUCTURED FIELDS ── */}
+              {/* Governance structured fields */}
               {unitConfig?.requires_reference_number && (
                 <div className="space-y-2">
                   <Label htmlFor="reference_number" className="text-gray-300">
@@ -816,7 +606,7 @@ export default function UploadProofPage() {
                 </div>
                 <Button
                   type="submit"
-                  disabled={loading || !canSubmit}
+                  disabled={loading || !capturedMedia}
                   className="w-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
                 >
                   {loading ? t('unitsUpload.uploading') : t('unitsUpload.submit')}

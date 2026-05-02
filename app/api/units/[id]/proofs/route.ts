@@ -76,7 +76,7 @@ export async function POST(
     }
 
     // File extension validation
-    const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf', 'mp4', 'mov', 'webm', 'doc', 'docx', 'xls', 'xlsx'];
+    const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'mov', 'webm'];
     const fileName = filePath.split('/').pop() || '';
     const extension = fileName.split('.').pop()?.toLowerCase();
     if (!extension || !ALLOWED_EXTENSIONS.includes(extension)) {
@@ -86,25 +86,17 @@ export async function POST(
       );
     }
 
-    // Proof type validation
-    const ALLOWED_TYPES = ['photo', 'document', 'video', 'link', 'file'];
+    // Proof type validation — document upload is not supported (v1: photo and video only)
+    const ALLOWED_TYPES = ['photo', 'video'];
     const proofType = body.type || 'photo';
     if (!ALLOWED_TYPES.includes(proofType)) {
-      return NextResponse.json({ error: 'Invalid proof type' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid proof type. Only photo and video are accepted.' }, { status: 400 });
     }
 
-    // MIME type validation for document uploads
+    // MIME type validation
     const ALLOWED_MIME_TYPES: Record<string, string[]> = {
       photo: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
       video: ['video/mp4', 'video/quicktime', 'video/webm'],
-      document: [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/octet-stream', // fallback for some browsers
-      ],
     };
     if (body.mime_type && ALLOWED_MIME_TYPES[proofType]) {
       const allowed = ALLOWED_MIME_TYPES[proofType];
@@ -138,26 +130,6 @@ export async function POST(
         { error: 'This unit requires an expiry date for each proof submission' },
         { status: 400 }
       );
-    }
-
-    // Document category validation (required for document proof type)
-    const ALLOWED_DOCUMENT_CATEGORIES = [
-      'permit', 'rfp', 'pre_qualification', 'terms_of_reference',
-      'contract', 'certificate', 'insurance', 'financial', 'other',
-    ];
-    if (proofType === 'document') {
-      if (!body.document_category) {
-        return NextResponse.json(
-          { error: 'Document category is required for document proof submissions (e.g. permit, rfp, pre_qualification)' },
-          { status: 400 }
-        );
-      }
-      if (!ALLOWED_DOCUMENT_CATEGORIES.includes(body.document_category)) {
-        return NextResponse.json(
-          { error: `Invalid document_category. Must be one of: ${ALLOWED_DOCUMENT_CATEGORIES.join(', ')}` },
-          { status: 400 }
-        );
-      }
     }
 
     // Validate expiry date format and ensure it is not already past
