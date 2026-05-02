@@ -214,6 +214,7 @@ export async function POST(request: NextRequest) {
           requires_reviewer_approval: body.requires_reviewer_approval ?? true,
           requires_reference_number: body.requires_reference_number ?? false,
           requires_expiry_date: body.requires_expiry_date ?? false,
+          briefing_attachments: body.briefing_attachments ?? null,
         },
       ])
       .select()
