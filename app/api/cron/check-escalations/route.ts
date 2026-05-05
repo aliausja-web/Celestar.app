@@ -15,6 +15,151 @@ function getSupabaseAdmin() {
   );
 }
 
+// Level → roles that should be notified
+const ESCALATION_LEVEL_ROLES: Record<number, string[]> = {
+  1: ['WORKSTREAM_LEAD'],
+  2: ['PROGRAM_OWNER', 'WORKSTREAM_LEAD'],
+  3: ['PLATFORM_ADMIN', 'PROGRAM_OWNER'],
+};
+
+/**
+ * After the DB RPCs create unit_escalation records, this function queries for
+ * any escalations triggered since runStartTime, builds email + in-app notification
+ * payloads, and calls the send-escalation-emails Edge Function to dispatch them.
+ */
+async function dispatchAutomaticEscalationNotifications(
+  supabase: ReturnType<typeof createClient>,
+  runStartTime: string
+): Promise<number> {
+  // Find escalations created in this run
+  const { data: newEscalations, error } = await supabase
+    .from('unit_escalations')
+    .select(`
+      id,
+      unit_id,
+      level,
+      triggered_at,
+      units!inner(
+        title,
+        workstreams!inner(
+          name,
+          programs!inner(
+            name,
+            org_id
+          )
+        )
+      )
+    `)
+    .eq('status', 'active')
+    .gte('triggered_at', runStartTime);
+
+  if (error || !newEscalations || newEscalations.length === 0) return 0;
+
+  const emailNotifications: any[] = [];
+  const inAppNotifications: any[] = [];
+
+  for (const esc of newEscalations) {
+    const unit = esc.units as any;
+    const workstream = unit?.workstreams;
+    const program = workstream?.programs;
+    const orgId = program?.org_id;
+    if (!orgId) continue;
+
+    const targetRoles = ESCALATION_LEVEL_ROLES[esc.level] || ['WORKSTREAM_LEAD'];
+
+    // Fetch users to notify for this escalation level
+    const { data: recipients } = await supabase
+      .from('profiles')
+      .select('user_id, email, full_name, role')
+      .eq('org_id', orgId)
+      .in('role', targetRoles);
+
+    if (!recipients || recipients.length === 0) continue;
+
+    const levelLabel = esc.level === 1 ? 'L1' : esc.level === 2 ? 'L2' : 'L3';
+    const subject = `[${levelLabel} Escalation] "${unit.title}" requires attention`;
+
+    for (const recipient of recipients) {
+      emailNotifications.push({
+        escalation_id: esc.id,
+        recipient_email: recipient.email,
+        recipient_name: recipient.full_name || recipient.email.split('@')[0],
+        channel: 'email',
+        subject,
+        message: `Automatic escalation triggered for unit "${unit.title}" in workstream "${workstream.name}" (${program.name}). Level: ${esc.level}. Please review and take action.`,
+        template_data: {
+          unit_title: unit.title,
+          workstream_name: workstream.name,
+          program_name: program.name,
+          escalation_level: esc.level,
+          priority: esc.level >= 3 ? 'critical' : esc.level === 2 ? 'high' : 'normal',
+        },
+        status: 'pending',
+      });
+
+      if (recipient.user_id) {
+        inAppNotifications.push({
+          user_id: recipient.user_id,
+          title: `${levelLabel} Escalation: ${unit.title}`,
+          message: `"${unit.title}" has been automatically escalated to level ${esc.level}. Immediate review required.`,
+          type: 'automatic_escalation',
+          priority: esc.level >= 3 ? 'critical' : esc.level === 2 ? 'high' : 'normal',
+          related_unit_id: esc.unit_id,
+          related_escalation_id: esc.id,
+          action_url: `/units/${esc.unit_id}`,
+          metadata: {
+            escalation_level: esc.level,
+            unit_title: unit.title,
+          },
+        });
+      }
+    }
+  }
+
+  if (emailNotifications.length > 0) {
+    // Deduplicate by recipient + subject
+    const seen = new Set<string>();
+    const unique = emailNotifications.filter((n) => {
+      const key = `${n.recipient_email}:${n.subject}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    await supabase.from('escalation_notifications').insert(unique);
+  }
+
+  if (inAppNotifications.length > 0) {
+    const seen = new Set<string>();
+    const unique = inAppNotifications.filter((n: any) => {
+      const key = `${n.user_id}:${n.title}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    await supabase.from('in_app_notifications').insert(unique);
+  }
+
+  // Trigger Edge Function to dispatch the queued emails
+  if (emailNotifications.length > 0) {
+    try {
+      await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-escalation-emails`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    } catch (edgeFnError: any) {
+      console.error('[CRON] Edge Function call failed:', edgeFnError.message);
+    }
+  }
+
+  return emailNotifications.length + inAppNotifications.length;
+}
+
 /**
  * INTEGRITY MODE: Escalation Checker Cron Job
  *
@@ -63,6 +208,7 @@ export async function GET(request: NextRequest) {
 
   try {
     console.log('[CRON] Starting escalation check...', new Date().toISOString());
+    const runStartTime = new Date().toISOString();
 
     // Call the new hierarchical model escalation engine
     const { data: unitData, error: unitError } = await supabaseAdmin.rpc(
@@ -94,6 +240,19 @@ export async function GET(request: NextRequest) {
       expiry: expiryResult,
     });
 
+    // Dispatch notifications for any newly created automatic escalations.
+    // The DB RPCs create unit_escalations records but don't send emails or in-app alerts —
+    // we do that here so automatic escalations are as visible as manual ones.
+    let notificationsDispatched = 0;
+    try {
+      notificationsDispatched = await dispatchAutomaticEscalationNotifications(
+        supabaseAdmin,
+        runStartTime
+      );
+    } catch (notifError: any) {
+      console.error('[CRON] Notification dispatch failed (non-fatal):', notifError.message);
+    }
+
     // Update run record on success
     await supabaseAdmin
       .from('cron_runs')
@@ -112,6 +271,7 @@ export async function GET(request: NextRequest) {
       zone_escalations_created: zoneResult.escalations_created,
       proofs_expired: expiryResult.proofs_expired,
       units_reverted_by_expiry: expiryResult.units_reverted,
+      notifications_dispatched: notificationsDispatched,
       timestamp: new Date().toISOString(),
       errors: {
         unit_error: unitError?.message || null,

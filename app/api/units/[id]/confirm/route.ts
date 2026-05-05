@@ -96,6 +96,28 @@ export async function POST(
       },
     });
 
+    // Notify field contributors and workstream leads that the unit is now active
+    const { data: recipients } = await supabase
+      .from('profiles')
+      .select('user_id')
+      .eq('org_id', unitOrgId)
+      .in('role', ['FIELD_CONTRIBUTOR', 'WORKSTREAM_LEAD']);
+
+    if (recipients && recipients.length > 0) {
+      await supabase.from('in_app_notifications').insert(
+        recipients.map((r: any) => ({
+          user_id: r.user_id,
+          title: 'Unit Confirmed',
+          message: `"${unit.title}" has been confirmed and is now active. Field contributors may begin work.`,
+          type: 'unit_confirmed',
+          priority: 'normal',
+          related_unit_id: params.id,
+          action_url: `/units/${params.id}`,
+          metadata: { unit_title: unit.title },
+        }))
+      );
+    }
+
     return NextResponse.json({
       ...unit,
       message: 'Unit confirmed successfully. It will now count toward workstream metrics.',

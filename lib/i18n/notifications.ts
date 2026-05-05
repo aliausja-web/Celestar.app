@@ -82,6 +82,33 @@ export function getNotifContent(
       };
     }
 
+    case 'unit_confirmed':
+      return {
+        title: t('notifContent.unitConfirmedTitle'),
+        message: t('notifContent.unitConfirmedMsg', { unit: unitTitle }),
+      };
+
+    case 'unit_unblocked':
+      return {
+        title: t('notifContent.unitUnblockedTitle'),
+        message: t('notifContent.unitUnblockedMsg', {
+          unit: unitTitle,
+          resolver: meta.resolved_by || '',
+          note: meta.resolution_note || '',
+        }),
+      };
+
+    case 'automatic_escalation':
+      return {
+        title: t('notifContent.autoEscalationTitle', {
+          level: meta.escalation_level || '?',
+        }),
+        message: t('notifContent.autoEscalationMsg', {
+          unit: unitTitle,
+          level: meta.escalation_level || '?',
+        }),
+      };
+
     default:
       return { title: notification.title, message: notification.message };
   }

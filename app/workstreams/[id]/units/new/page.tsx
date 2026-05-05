@@ -14,10 +14,12 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/firebase';
+import { useLocale } from '@/lib/i18n/context';
 
 export default function NewUnitPage() {
   const router = useRouter();
   const params = useParams();
+  const { t } = useLocale();
   const workstreamId = params?.id as string | undefined;
 
   const [loading, setLoading] = useState(false);
@@ -85,7 +87,7 @@ export default function NewUnitPage() {
       setRecordingSeconds(0);
       timerRef.current = setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
     } catch {
-      toast.error('Microphone access denied. Please allow microphone permissions.');
+      toast.error(t('unitNew.micDenied'));
     }
   }
 
@@ -129,7 +131,7 @@ export default function NewUnitPage() {
           uploaded_at: new Date().toISOString(),
         });
       } catch {
-        toast.warning(`Could not upload "${file.name}" — unit will be created without it.`);
+        toast.warning(t('unitNew.errorBriefUpload', { name: file.name }));
       }
     }
     return uploaded;
@@ -146,7 +148,7 @@ export default function NewUnitPage() {
       const { data } = supabase.storage.from('voice-notes').getPublicUrl(filename);
       return data.publicUrl;
     } catch {
-      toast.warning('Voice note could not be saved — unit will be created without it.');
+      toast.warning(t('unitNew.errorVoiceUpload'));
       return null;
     }
   }
@@ -155,18 +157,18 @@ export default function NewUnitPage() {
     e.preventDefault();
 
     if (!formData.name) {
-      toast.error('Unit name is required');
+      toast.error(t('unitNew.errorNameRequired'));
       return;
     }
     if (!workstreamId) {
-      toast.error('Workstream ID not found');
+      toast.error(t('unitNew.errorWorkstreamMissing'));
       return;
     }
 
     setLoading(true);
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session) throw new Error('Not authenticated. Please log in again.');
+      if (sessionError || !session) throw new Error(t('unitNew.errorNotAuthenticated'));
 
       const token = session.access_token;
       const [voiceNoteUrl, briefingAttachments] = await Promise.all([
@@ -206,10 +208,10 @@ export default function NewUnitPage() {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to create unit');
+      if (!response.ok) throw new Error(data.error || t('unitNew.errorFailed'));
 
-      toast.success('Unit created successfully');
-      const createAnother = confirm('Unit created! Would you like to create another unit for this workstream?');
+      toast.success(t('unitNew.successCreated'));
+      const createAnother = confirm(t('unitNew.createAgainConfirm'));
 
       if (createAnother) {
         deleteRecording();
@@ -225,7 +227,7 @@ export default function NewUnitPage() {
       }
     } catch (error: any) {
       console.error('Error creating unit:', error);
-      toast.error(error.message || 'Failed to create unit');
+      toast.error(error.message || t('unitNew.errorFailed'));
     } finally {
       setLoading(false);
     }
@@ -243,19 +245,19 @@ export default function NewUnitPage() {
             className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
+            {t('common.back')}
           </Button>
           <div>
-            <h1 className="text-3xl font-black text-white">Create New Unit</h1>
-            <p className="text-gray-500">Add a new execution unit to the workstream</p>
+            <h1 className="text-3xl font-black text-white">{t('unitNew.pageTitle')}</h1>
+            <p className="text-gray-500">{t('unitNew.pageSubtitle')}</p>
           </div>
         </div>
 
         <Card className="bg-black/25 border-gray-800">
           <CardHeader>
-            <CardTitle className="text-white">Unit Details</CardTitle>
+            <CardTitle className="text-white">{t('unitNew.cardTitle')}</CardTitle>
             <CardDescription className="text-gray-400">
-              Enter the basic information for the new unit
+              {t('unitNew.cardDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -264,13 +266,13 @@ export default function NewUnitPage() {
               {/* Unit Name */}
               <div className="space-y-2">
                 <Label htmlFor="name" className="text-gray-300">
-                  Unit Name <span className="text-red-400">*</span>
+                  {t('unitNew.unitNameLabel')} <span className="text-red-400">*</span>
                 </Label>
                 <Input
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., Booth Setup - Main Stage"
+                  placeholder={t('unitNew.unitNamePlaceholder')}
                   className="bg-black/40 border-gray-700 text-white"
                   required
                 />
@@ -278,7 +280,7 @@ export default function NewUnitPage() {
 
               {/* Deadline */}
               <div className="space-y-2">
-                <Label htmlFor="deadline" className="text-gray-300">Deadline</Label>
+                <Label htmlFor="deadline" className="text-gray-300">{t('unitNew.deadlineLabel')}</Label>
                 <Input
                   id="deadline"
                   type="datetime-local"
@@ -292,10 +294,10 @@ export default function NewUnitPage() {
               <div className="pt-2 border-t border-gray-800">
                 <div className="flex items-center gap-2 mb-1">
                   <MessageSquare className="w-4 h-4 text-blue-400" />
-                  <h3 className="text-white font-semibold">Notes from Management</h3>
+                  <h3 className="text-white font-semibold">{t('unitNew.notesTitle')}</h3>
                 </div>
                 <p className="text-sm text-gray-500 mb-4">
-                  Voice and written guidance for the field team: requirements, acceptance criteria, instructions.
+                  {t('unitNew.notesSubtitle')}
                 </p>
 
                 {/* Unified chat-style composer */}
@@ -367,8 +369,8 @@ export default function NewUnitPage() {
                         <div className="w-14 h-14 rounded-full bg-blue-600/20 border-2 border-blue-500/50 flex items-center justify-center group-hover:bg-blue-600/30 transition-colors">
                           <Mic className="w-6 h-6 text-blue-400" />
                         </div>
-                        <span className="text-blue-400 text-sm font-medium">Tap to record voice note</span>
-                        <span className="text-gray-600 text-xs">Field team will hear this before starting</span>
+                        <span className="text-blue-400 text-sm font-medium">{t('unitNew.tapToRecord')}</span>
+                        <span className="text-gray-600 text-xs">{t('unitNew.tapToRecordHint')}</span>
                       </button>
                     )}
 
@@ -387,7 +389,7 @@ export default function NewUnitPage() {
                           onClick={stopRecording}
                           className="flex items-center gap-2 px-5 py-2 rounded-full bg-red-600/20 border border-red-500/40 text-red-400 hover:bg-red-600/30 transition-colors text-sm font-medium"
                         >
-                          <Square className="w-3.5 h-3.5 fill-current" /> Stop recording
+                          <Square className="w-3.5 h-3.5 fill-current" /> {t('unitNew.stopRecording')}
                         </button>
                       </div>
                     )}
@@ -395,14 +397,14 @@ export default function NewUnitPage() {
                     {/* Re-record link */}
                     {audioUrl && !isRecording && (
                       <button type="button" onClick={deleteRecording} className="w-full flex items-center justify-center gap-1.5 py-1 text-gray-600 hover:text-gray-400 text-xs transition-colors">
-                        <Mic className="w-3 h-3" /> Re-record voice note
+                        <Mic className="w-3 h-3" /> {t('unitNew.reRecord')}
                       </button>
                     )}
 
                     {/* Divider */}
                     <div className="flex items-center gap-3">
                       <div className="flex-1 h-px bg-gray-700/60" />
-                      <span className="text-xs text-gray-600">written note</span>
+                      <span className="text-xs text-gray-600">{t('unitNew.writtenNoteDivider')}</span>
                       <div className="flex-1 h-px bg-gray-700/60" />
                     </div>
 
@@ -410,7 +412,7 @@ export default function NewUnitPage() {
                     <Textarea
                       value={formData.management_notes}
                       onChange={(e) => setFormData({ ...formData, management_notes: e.target.value })}
-                      placeholder="Type a written note for the field team..."
+                      placeholder={t('unitNew.writtenNotePlaceholder')}
                       className="bg-transparent border-0 border-b border-gray-700/60 rounded-none text-white text-sm resize-none focus-visible:ring-0 focus-visible:border-blue-500/50 px-0 min-h-[56px] placeholder:text-gray-600"
                     />
 
@@ -452,7 +454,7 @@ export default function NewUnitPage() {
                         className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors py-1"
                       >
                         <Paperclip className="w-3.5 h-3.5" />
-                        Attach brief / reference file
+                        {t('unitNew.attachBrief')}
                       </button>
                     </div>
                   </div>
@@ -467,7 +469,7 @@ export default function NewUnitPage() {
                   onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
                 >
                   {showAdvancedOptions ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  Advanced Options
+                  {t('unitNew.advancedOptions')}
                 </button>
 
                 {showAdvancedOptions && (
@@ -475,24 +477,24 @@ export default function NewUnitPage() {
 
                     {/* Description */}
                     <div className="space-y-2">
-                      <Label htmlFor="description" className="text-gray-300">Description</Label>
+                      <Label htmlFor="description" className="text-gray-300">{t('unitNew.descriptionLabel')}</Label>
                       <Textarea
                         id="description"
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        placeholder="Brief description of the unit..."
+                        placeholder={t('unitNew.descriptionPlaceholder')}
                         className="bg-black/40 border-gray-700 text-white min-h-[100px]"
                       />
                     </div>
 
                     {/* Owner */}
                     <div className="space-y-2">
-                      <Label htmlFor="owner" className="text-gray-300">Owner</Label>
+                      <Label htmlFor="owner" className="text-gray-300">{t('unitNew.ownerLabel')}</Label>
                       <Input
                         id="owner"
                         value={formData.owner}
                         onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
-                        placeholder="Responsible person or team"
+                        placeholder={t('unitNew.ownerPlaceholder')}
                         className="bg-black/40 border-gray-700 text-white"
                       />
                     </div>
@@ -501,10 +503,10 @@ export default function NewUnitPage() {
                     <div>
                       <div className="flex items-center gap-2 mb-2">
                         <Shield className="w-4 h-4 text-purple-400" />
-                        <h4 className="text-white font-semibold">Proof Validation Rules</h4>
+                        <h4 className="text-white font-semibold">{t('unitNew.validationRulesTitle')}</h4>
                       </div>
                       <p className="text-sm text-gray-400 mb-3">
-                        Additional evidence requirements — configure when needed for regulated or contractual units.
+                        {t('unitNew.validationRulesDesc')}
                       </p>
                       <div className="space-y-4 bg-black/20 p-4 rounded-lg border border-gray-700">
                         <div className="flex items-start gap-3">
@@ -518,10 +520,10 @@ export default function NewUnitPage() {
                           />
                           <div>
                             <Label htmlFor="requires_reviewer_approval" className="text-gray-300 font-medium cursor-pointer">
-                              Require reviewer approval
+                              {t('unitNew.requireReviewerLabel')}
                             </Label>
                             <p className="text-xs text-gray-500 mt-0.5">
-                              Proofs must be explicitly approved by a Workstream Lead or Program Owner before counting toward GREEN. (Default: on)
+                              {t('unitNew.requireReviewerDesc')}
                             </p>
                           </div>
                         </div>
@@ -537,10 +539,10 @@ export default function NewUnitPage() {
                           />
                           <div>
                             <Label htmlFor="requires_reference_number" className="text-gray-300 font-medium cursor-pointer">
-                              Require reference number
+                              {t('unitNew.requireRefNumberLabel')}
                             </Label>
                             <p className="text-xs text-gray-500 mt-0.5">
-                              Each proof must include a structured reference (permit number, certificate ID, invoice ref, etc.)
+                              {t('unitNew.requireRefNumberDesc')}
                             </p>
                           </div>
                         </div>
@@ -556,10 +558,10 @@ export default function NewUnitPage() {
                           />
                           <div>
                             <Label htmlFor="requires_expiry_date" className="text-gray-300 font-medium cursor-pointer">
-                              Require expiry date (time-bound proofs)
+                              {t('unitNew.requireExpiryLabel')}
                             </Label>
                             <p className="text-xs text-gray-500 mt-0.5">
-                              Each proof must include a validity expiry date. Expired proofs are automatically revoked and the unit reverts to RED.
+                              {t('unitNew.requireExpiryDesc')}
                             </p>
                           </div>
                         </div>
@@ -573,17 +575,16 @@ export default function NewUnitPage() {
               <div className="pt-6 border-t border-gray-800">
                 <div className="flex items-center gap-2 mb-4">
                   <Info className="w-4 h-4 text-blue-400" />
-                  <h3 className="text-white font-semibold">Proof Requirements</h3>
+                  <h3 className="text-white font-semibold">{t('unitNew.proofReqTitle')}</h3>
                 </div>
                 <p className="text-sm text-gray-400 mb-4">
-                  Configure how many proofs are needed and what types are required for this unit to turn GREEN.
-                  Proofs must be approved by a Program Owner or Workstream Lead.
+                  {t('unitNew.proofReqDesc')}
                 </p>
 
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="required_proof_count" className="text-gray-300">
-                      Required Number of Approved Proofs <span className="text-red-400">*</span>
+                      {t('unitNew.proofCountLabel')} <span className="text-red-400">*</span>
                     </Label>
                     <Input
                       id="required_proof_count"
@@ -596,14 +597,14 @@ export default function NewUnitPage() {
                       required
                     />
                     <p className="text-xs text-gray-500">
-                      Unit will only turn GREEN after this many proofs are uploaded AND approved
+                      {t('unitNew.proofCountHint')}
                     </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-gray-300">Required Proof Types</Label>
+                    <Label className="text-gray-300">{t('unitNew.proofTypesLabel')}</Label>
                     <p className="text-xs text-gray-500 mb-2">
-                      Select which types of proofs are required (at least one of each selected type must be approved)
+                      {t('unitNew.proofTypesDesc')}
                     </p>
                     <div className="space-y-2">
                       {['photo', 'video'].map((type) => (
@@ -628,7 +629,7 @@ export default function NewUnitPage() {
                     </div>
                     {formData.required_proof_types.length === 0 && (
                       <p className="text-xs text-yellow-400 mt-2">
-                        ⚠️ At least one proof type should be selected
+                        {t('unitNew.proofTypeWarning')}
                       </p>
                     )}
                   </div>
@@ -643,10 +644,10 @@ export default function NewUnitPage() {
                 >
                   <div className="flex items-center gap-2">
                     <Bell className="w-4 h-4 text-orange-400" />
-                    <h3 className="text-white font-semibold">Deadline Alerts</h3>
+                    <h3 className="text-white font-semibold">{t('unitNew.deadlineAlertsTitle')}</h3>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">{formData.urgency_alerts_enabled ? 'On' : 'Off'}</span>
+                    <span className="text-xs text-gray-400">{formData.urgency_alerts_enabled ? t('unitNew.alertsOn') : t('unitNew.alertsOff')}</span>
                     {showAdvancedAlerts
                       ? <ChevronUp className="w-4 h-4 text-gray-400" />
                       : <ChevronDown className="w-4 h-4 text-gray-400" />}
@@ -664,7 +665,7 @@ export default function NewUnitPage() {
                       className="border-gray-600"
                     />
                     <Label htmlFor="urgency_alerts_enabled" className="text-gray-300 font-normal cursor-pointer">
-                      Enable Alerts
+                      {t('unitNew.enableAlertsLabel')}
                     </Label>
                   </div>
                 )}
@@ -675,33 +676,33 @@ export default function NewUnitPage() {
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1.5">
                           <span className="w-5 h-5 rounded-full bg-yellow-500/20 text-yellow-400 flex items-center justify-center font-bold shrink-0">1</span>
-                          <span className="text-gray-300 font-medium">Workstream Lead</span>
+                          <span className="text-gray-300 font-medium">{t('unitNew.alertL1Role')}</span>
                         </div>
-                        <p className="text-gray-500 pl-6">When half the time to deadline has passed</p>
+                        <p className="text-gray-500 pl-6">{t('unitNew.alertL1Desc')}</p>
                       </div>
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1.5">
                           <span className="w-5 h-5 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold shrink-0">2</span>
-                          <span className="text-gray-300 font-medium">Program Owner</span>
+                          <span className="text-gray-300 font-medium">{t('unitNew.alertL2Role')}</span>
                         </div>
-                        <p className="text-gray-500 pl-6">When three-quarters of the time has passed</p>
+                        <p className="text-gray-500 pl-6">{t('unitNew.alertL2Desc')}</p>
                       </div>
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1.5">
                           <span className="w-5 h-5 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center font-bold shrink-0">3</span>
-                          <span className="text-gray-300 font-medium">Platform Admin</span>
+                          <span className="text-gray-300 font-medium">{t('unitNew.alertL3Role')}</span>
                         </div>
-                        <p className="text-gray-500 pl-6">When 90% of the time has passed</p>
+                        <p className="text-gray-500 pl-6">{t('unitNew.alertL3Desc')}</p>
                       </div>
                     </div>
 
                     <div className="bg-black/30 border border-gray-700 rounded p-3 space-y-1.5">
-                      <p className="text-xs text-gray-400 font-medium">How this works for your unit</p>
+                      <p className="text-xs text-gray-400 font-medium">{t('unitNew.alertHowTitle')}</p>
                       <p className="text-xs text-gray-500">
-                        Alert timing is calculated from unit creation to the deadline you set above — so alerts fire at the right moment regardless of whether the deadline is 3 days or 3 months away.
+                        {t('unitNew.alertHowDesc')}
                       </p>
                       <p className="text-xs text-gray-600 italic">
-                        e.g. 10-day deadline → alerts on day 5, day 7.5, day 9 &nbsp;·&nbsp; 60-day deadline → alerts on day 30, day 45, day 54
+                        {t('unitNew.alertExample')}
                       </p>
                     </div>
                   </div>
@@ -715,7 +716,7 @@ export default function NewUnitPage() {
                   disabled={loading}
                   className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  {loading ? 'Creating...' : 'Create Unit'}
+                  {loading ? t('common.creating') : t('unitNew.createButton')}
                 </Button>
                 <Button
                   type="button"
@@ -723,7 +724,7 @@ export default function NewUnitPage() {
                   variant="outline"
                   className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
               </div>
 
