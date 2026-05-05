@@ -123,6 +123,11 @@ interface Unit {
   last_voice_note_play?: { played_at: string; full_name: string } | null;
   // Briefing attachments (reference materials for field team)
   briefing_attachments?: BriefingAttachment[];
+  // Block state
+  is_blocked?: boolean;
+  blocked_reason?: string | null;
+  blocked_at?: string | null;
+  blocked_by?: string | null;
 }
 
 export default function UnitDetailPage() {
@@ -144,6 +149,9 @@ export default function UnitDetailPage() {
   const [showEscalationDialog, setShowEscalationDialog] = useState(false);
   const [escalationReason, setEscalationReason] = useState('');
   const [escalating, setEscalating] = useState(false);
+  const [showUnblockDialog, setShowUnblockDialog] = useState(false);
+  const [resolutionNote, setResolutionNote] = useState('');
+  const [unblocking, setUnblocking] = useState(false);
 
   // lightbox for briefing attachment images
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -329,6 +337,31 @@ export default function UnitDetailPage() {
     }
   }
 
+  async function handleUnblock() {
+    if (!resolutionNote.trim()) return;
+    setUnblocking(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const response = await fetch(`/api/units/${unitId}/unblock`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolution_note: resolutionNote }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to unblock unit');
+      toast.success(t('units.unblockSuccess'));
+      setShowUnblockDialog(false);
+      setResolutionNote('');
+      await fetchUnit();
+      await fetchAuditEvents();
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setUnblocking(false);
+    }
+  }
+
   // Voice recorder helpers for notes editing
   async function startRecordingNote() {
     try {
@@ -469,6 +502,10 @@ export default function UnitDetailPage() {
     permissions.role === 'PROGRAM_OWNER' ||
     permissions.role === 'WORKSTREAM_LEAD';
 
+  const canUnblock =
+    permissions.isPlatformAdmin ||
+    permissions.role === 'PROGRAM_OWNER';
+
   const canEditNotes =
     permissions.isPlatformAdmin ||
     permissions.role === 'PROGRAM_OWNER' ||
@@ -498,6 +535,7 @@ export default function UnitDetailPage() {
   }
 
   const isGreen = unit.computed_status === 'GREEN';
+  const isBlocked = !!unit.is_blocked;
   const isPastDeadline = unit.required_green_by && new Date(unit.required_green_by) < new Date();
   const approvedCount = unit.proofs.filter(p => p.approval_status === 'approved' && !p.is_superseded).length;
   const pendingCount = unit.proofs.filter(p => p.approval_status === 'pending').length;
@@ -615,14 +653,46 @@ export default function UnitDetailPage() {
           <NotificationBell />
           <Badge
             className={`${
-              isGreen
+              isBlocked
+                ? 'bg-orange-500/20 text-orange-300 border-orange-500/50'
+                : isGreen
                 ? 'bg-green-500/20 text-green-300 border-green-500/50'
                 : 'bg-red-500/20 text-red-300 border-red-500/50'
             } border`}
           >
-            {isGreen ? 'GREEN' : 'RED'}
+            {isBlocked ? 'BLOCKED' : isGreen ? 'GREEN' : 'RED'}
           </Badge>
         </div>
+
+        {/* Blocked banner — shown to everyone so the whole team sees the reason */}
+        {isBlocked && (
+          <div className="bg-orange-950/40 border border-orange-700/60 rounded-xl p-4 flex gap-3">
+            <AlertOctagon className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0 space-y-1">
+              <p className="text-orange-300 font-semibold text-sm">{t('units.blockedBannerTitle')}</p>
+              {unit.blocked_reason && (
+                <p className="text-orange-200/80 text-sm">
+                  <span className="font-medium">{t('units.blockedBannerReason')}</span>{' '}
+                  {unit.blocked_reason}
+                </p>
+              )}
+              {unit.blocked_at && (
+                <p className="text-orange-400/60 text-xs">
+                  {t('units.blockedBannerBlockedAt')}{' '}
+                  {format(new Date(unit.blocked_at), 'MMM d, yyyy HH:mm')}
+                </p>
+              )}
+              {canUnblock && (
+                <button
+                  onClick={() => setShowUnblockDialog(true)}
+                  className="mt-2 text-xs text-green-400 hover:text-green-300 underline transition-colors"
+                >
+                  {t('units.unblockButton')} →
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Unit Info Card */}
         <Card className="bg-black/25 border-gray-800">
@@ -708,6 +778,16 @@ export default function UnitDetailPage() {
               )}
 
               {/* Management actions */}
+              {unit?.is_blocked && canUnblock && (
+                <Button
+                  onClick={() => setShowUnblockDialog(true)}
+                  variant="outline"
+                  className="bg-green-900/30 border-green-700/60 text-green-400 hover:bg-green-900/50"
+                >
+                  <CheckCircle className="w-4 h-4 me-2" />
+                  {t('units.unblockButton')}
+                </Button>
+              )}
               {canEditNotes && (
                 <Button
                   onClick={() => {
@@ -1542,6 +1622,50 @@ export default function UnitDetailPage() {
               className="bg-[#db6d28]/80 hover:bg-[#db6d28] text-white"
             >
               {escalating ? t('units.escalatingButton') : t('units.escalateButton')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unblock Dialog */}
+      <Dialog open={showUnblockDialog} onOpenChange={setShowUnblockDialog}>
+        <DialogContent className="bg-gray-950 border-gray-800 max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-white">{t('units.unblockTitle')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="bg-green-900/20 border border-green-700/40 rounded p-3">
+              <p className="text-sm text-green-400">
+                {t('units.unblockWarning')}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="unit_resolution_note" className="text-gray-300">
+                {t('units.unblockReasonLabel')} <span className="text-red-400">*</span>
+              </Label>
+              <Textarea
+                id="unit_resolution_note"
+                value={resolutionNote}
+                onChange={(e) => setResolutionNote(e.target.value)}
+                placeholder={t('units.unblockReasonPlaceholder')}
+                className="bg-black/40 border-gray-700 text-white min-h-[120px]"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => { setShowUnblockDialog(false); setResolutionNote(''); }}
+              className="bg-black/25 border-gray-700 text-gray-300"
+            >
+              {t('units.cancelButton')}
+            </Button>
+            <Button
+              onClick={handleUnblock}
+              disabled={!resolutionNote.trim() || unblocking}
+              className="bg-green-700 hover:bg-green-600 text-white"
+            >
+              {unblocking ? t('units.unblockingButton') : t('units.unblockButton')}
             </Button>
           </div>
         </DialogContent>
