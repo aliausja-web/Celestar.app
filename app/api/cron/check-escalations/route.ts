@@ -67,14 +67,34 @@ async function dispatchAutomaticEscalationNotifications(
 
     const targetRoles = ESCALATION_LEVEL_ROLES[esc.level] || ['WORKSTREAM_LEAD'];
 
-    // Fetch users to notify for this escalation level
-    const { data: recipients } = await supabase
+    // Fetch org-scoped users for the target roles (non-PLATFORM_ADMIN)
+    const orgTargetRoles = targetRoles.filter(r => r !== 'PLATFORM_ADMIN');
+
+    const { data: orgRecipients } = orgTargetRoles.length > 0
+      ? await supabase
+          .from('profiles')
+          .select('user_id, email, full_name, role')
+          .eq('org_id', orgId)
+          .in('role', orgTargetRoles)
+      : { data: [] };
+
+    // PLATFORM_ADMINs always receive their targeted escalations regardless of org.
+    // For L3 they are explicitly targeted; they are also always included so they
+    // have full visibility across all tenants.
+    const { data: platformAdmins } = await supabase
       .from('profiles')
       .select('user_id, email, full_name, role')
-      .eq('org_id', orgId)
-      .in('role', targetRoles);
+      .eq('role', 'PLATFORM_ADMIN');
 
-    if (!recipients || recipients.length === 0) continue;
+    // Deduplicate (handles PLATFORM_ADMIN who also belongs to same org)
+    const seenRecipientIds = new Set<string>();
+    const recipients = [...(orgRecipients || []), ...(platformAdmins || [])].filter(r => {
+      if (seenRecipientIds.has(r.user_id)) return false;
+      seenRecipientIds.add(r.user_id);
+      return true;
+    });
+
+    if (recipients.length === 0) continue;
 
     const levelLabel = esc.level === 1 ? 'L1' : esc.level === 2 ? 'L2' : 'L3';
     const subject = `[${levelLabel} Escalation] "${unit.title}" requires attention`;
