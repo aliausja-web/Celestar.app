@@ -28,7 +28,7 @@ const ESCALATION_LEVEL_ROLES: Record<number, string[]> = {
  * payloads, and calls the send-escalation-emails Edge Function to dispatch them.
  */
 async function dispatchAutomaticEscalationNotifications(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   runStartTime: string
 ): Promise<number> {
   // Find escalations created in this run
@@ -58,7 +58,7 @@ async function dispatchAutomaticEscalationNotifications(
   const emailNotifications: any[] = [];
   const inAppNotifications: any[] = [];
 
-  for (const esc of newEscalations) {
+  for (const esc of newEscalations as any[]) {
     const unit = esc.units as any;
     const workstream = unit?.workstreams;
     const program = workstream?.programs;
@@ -79,7 +79,7 @@ async function dispatchAutomaticEscalationNotifications(
     const levelLabel = esc.level === 1 ? 'L1' : esc.level === 2 ? 'L2' : 'L3';
     const subject = `[${levelLabel} Escalation] "${unit.title}" requires attention`;
 
-    for (const recipient of recipients) {
+    for (const recipient of recipients as any[]) {
       emailNotifications.push({
         escalation_id: esc.id,
         recipient_email: recipient.email,
@@ -125,7 +125,7 @@ async function dispatchAutomaticEscalationNotifications(
       seen.add(key);
       return true;
     });
-    await supabase.from('escalation_notifications').insert(unique);
+    await (supabase as any).from('escalation_notifications').insert(unique);
   }
 
   if (inAppNotifications.length > 0) {
@@ -136,7 +136,7 @@ async function dispatchAutomaticEscalationNotifications(
       seen.add(key);
       return true;
     });
-    await supabase.from('in_app_notifications').insert(unique);
+    await (supabase as any).from('in_app_notifications').insert(unique);
   }
 
   // Trigger Edge Function to dispatch the queued emails
