@@ -24,6 +24,7 @@ export default function NewUnitPage() {
 
   const [loading, setLoading] = useState(false);
   const [showAdvancedAlerts, setShowAdvancedAlerts] = useState(false);
+  const [proofCountInput, setProofCountInput] = useState('1');
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   // Brief attachments
@@ -588,11 +589,25 @@ export default function NewUnitPage() {
                     </Label>
                     <Input
                       id="required_proof_count"
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={formData.required_proof_count}
-                      onChange={(e) => setFormData({ ...formData, required_proof_count: parseInt(e.target.value) || 1 })}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={proofCountInput}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/\D/g, '');
+                        setProofCountInput(raw);
+                        setFormData({ ...formData, required_proof_count: parseInt(raw) || 0 });
+                      }}
+                      onBlur={() => {
+                        const val = parseInt(proofCountInput);
+                        if (!val || val < 1) {
+                          setProofCountInput('1');
+                          setFormData({ ...formData, required_proof_count: 1 });
+                        } else if (val > 10) {
+                          setProofCountInput('10');
+                          setFormData({ ...formData, required_proof_count: 10 });
+                        }
+                      }}
                       className="bg-black/40 border-gray-700 text-white"
                       required
                     />

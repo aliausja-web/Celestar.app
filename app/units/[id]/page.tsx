@@ -152,6 +152,8 @@ export default function UnitDetailPage() {
   const [showUnblockDialog, setShowUnblockDialog] = useState(false);
   const [resolutionNote, setResolutionNote] = useState('');
   const [unblocking, setUnblocking] = useState(false);
+  const [escalationStatuses, setEscalationStatuses] = useState<Record<string, string>>({});
+  const [resolvingEscalationId, setResolvingEscalationId] = useState<string | null>(null);
 
   // lightbox for briefing attachment images
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -253,8 +255,41 @@ export default function UnitDetailPage() {
       if (!error && data) {
         setAuditEvents(data);
       }
+
+      // Fetch escalation statuses to know which are active vs resolved
+      const { data: escalations } = await supabase
+        .from('unit_escalations')
+        .select('id, status')
+        .eq('unit_id', unitId);
+
+      if (escalations) {
+        const statusMap: Record<string, string> = {};
+        escalations.forEach((e: { id: string; status: string }) => { statusMap[e.id] = e.status; });
+        setEscalationStatuses(statusMap);
+      }
     } catch {
       // Audit trail is non-critical — silently fail
+    }
+  }
+
+  async function handleResolveEscalation(escalationId: string) {
+    setResolvingEscalationId(escalationId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const response = await fetch(`/api/units/${unitId}/escalate`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ escalation_id: escalationId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to resolve escalation');
+      toast.success('Escalation marked as resolved');
+      await fetchAuditEvents();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to resolve escalation');
+    } finally {
+      setResolvingEscalationId(null);
     }
   }
 
@@ -1449,18 +1484,43 @@ export default function UnitDetailPage() {
             {auditEvents.filter(e => e.event_type === 'manual_escalation').length > 0 && (
               <div className="mt-4 space-y-2">
                 <p className="text-xs font-semibold text-orange-400 uppercase tracking-wide">{t('units.escalationTitle')}</p>
-                {auditEvents.filter(e => e.event_type === 'manual_escalation').map(e => (
-                  <div key={e.id} className="flex items-start gap-3 p-3 rounded-lg border border-orange-500/30 bg-orange-500/10">
-                    <AlertTriangle className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      {e.reason && <p className="text-sm text-orange-200">{e.reason}</p>}
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {e.triggered_by_role && <span className="me-2">({e.triggered_by_role})</span>}
-                        {formatDistanceToNow(new Date(e.created_at), { addSuffix: true })}
-                      </p>
+                {auditEvents.filter(e => e.event_type === 'manual_escalation').map(e => {
+                  const escalationId = e.metadata?.escalation_id;
+                  const status = escalationId ? (escalationStatuses[escalationId] ?? 'active') : 'active';
+                  const isResolved = status === 'resolved';
+                  const canResolve = !isResolved && escalationId && (
+                    permissions.role === 'WORKSTREAM_LEAD' ||
+                    permissions.role === 'PROGRAM_OWNER' ||
+                    permissions.isPlatformAdmin
+                  );
+                  return (
+                    <div key={e.id} className={`flex items-start gap-3 p-3 rounded-lg border ${isResolved ? 'border-green-500/30 bg-green-500/10' : 'border-orange-500/30 bg-orange-500/10'}`}>
+                      {isResolved
+                        ? <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+                        : <AlertTriangle className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" />
+                      }
+                      <div className="flex-1 min-w-0">
+                        {e.reason && <p className={`text-sm ${isResolved ? 'text-green-200' : 'text-orange-200'}`}>{e.reason}</p>}
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {e.triggered_by_role && <span className="me-2">({e.triggered_by_role})</span>}
+                          {formatDistanceToNow(new Date(e.created_at), { addSuffix: true })}
+                          {isResolved && <span className="ms-2 text-green-400 font-medium">{t('units.escalationResolved')}</span>}
+                        </p>
+                      </div>
+                      {canResolve && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleResolveEscalation(escalationId)}
+                          disabled={resolvingEscalationId === escalationId}
+                          className="text-xs text-green-400 hover:text-green-300 hover:bg-green-500/10 shrink-0 h-7 px-2"
+                        >
+                          {resolvingEscalationId === escalationId ? t('units.escalationResolving') : t('units.escalationMarkResolved')}
+                        </Button>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

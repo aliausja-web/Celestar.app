@@ -6,6 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Plus, ChevronLeft, Calendar, Building2 } from 'lucide-react';
 import { supabase } from '@/lib/firebase';
 import { toast } from 'sonner';
@@ -40,6 +45,12 @@ export default function ProgramDetailPage() {
   const [program, setProgram] = useState<Program | null>(null);
   const [workstreams, setWorkstreams] = useState<Workstream[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [showCreateWorkstreamDialog, setShowCreateWorkstreamDialog] = useState(false);
+  const [newWorkstreamName, setNewWorkstreamName] = useState('');
+  const [newWorkstreamType, setNewWorkstreamType] = useState('');
+  const [newWorkstreamDescription, setNewWorkstreamDescription] = useState('');
+  const [creatingWorkstream, setCreatingWorkstream] = useState(false);
 
   useEffect(() => {
     if (programId) {
@@ -110,6 +121,38 @@ export default function ProgramDetailPage() {
       setWorkstreams([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCreateWorkstream(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newWorkstreamName) return;
+    setCreatingWorkstream(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const response = await fetch('/api/workstreams', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          program_id: programId,
+          name: newWorkstreamName,
+          type: newWorkstreamType || null,
+          description: newWorkstreamDescription || null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to create workstream');
+      toast.success('Workstream created successfully');
+      setShowCreateWorkstreamDialog(false);
+      setNewWorkstreamName('');
+      setNewWorkstreamType('');
+      setNewWorkstreamDescription('');
+      fetchWorkstreams();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create workstream');
+    } finally {
+      setCreatingWorkstream(false);
     }
   }
 
@@ -195,7 +238,7 @@ export default function ProgramDetailPage() {
             </h2>
             {role !== 'FIELD_CONTRIBUTOR' && role !== 'CLIENT_VIEWER' && (
               <Button
-                onClick={() => router.push(`/programs/${programId}/workstreams/new`)}
+                onClick={() => setShowCreateWorkstreamDialog(true)}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -210,7 +253,7 @@ export default function ProgramDetailPage() {
                 <p className="text-gray-500 mb-4">No workstreams found for this program</p>
                 {role !== 'FIELD_CONTRIBUTOR' && role !== 'CLIENT_VIEWER' && (
                   <Button
-                    onClick={() => router.push(`/programs/${programId}/workstreams/new`)}
+                    onClick={() => setShowCreateWorkstreamDialog(true)}
                     className="bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -243,6 +286,55 @@ export default function ProgramDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Create Workstream Dialog */}
+      <Dialog open={showCreateWorkstreamDialog} onOpenChange={(open) => {
+        setShowCreateWorkstreamDialog(open);
+        if (!open) { setNewWorkstreamName(''); setNewWorkstreamType(''); setNewWorkstreamDescription(''); }
+      }}>
+        <DialogContent className="bg-gray-950 border-gray-800">
+          <DialogHeader>
+            <DialogTitle className="text-white">Create Workstream</DialogTitle>
+            <DialogDescription className="text-gray-400">Add a new workstream to this program</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateWorkstream} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="ws-name" className="text-gray-300">Name <span className="text-red-400">*</span></Label>
+              <Input id="ws-name" value={newWorkstreamName} onChange={(e) => setNewWorkstreamName(e.target.value)} placeholder="e.g., Riyadh Season Launch" className="bg-black/40 border-gray-700 text-white" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ws-type" className="text-gray-300">Type</Label>
+              <Select value={newWorkstreamType} onValueChange={setNewWorkstreamType}>
+                <SelectTrigger className="bg-black/40 border-gray-700 text-white">
+                  <SelectValue placeholder="Select type (optional)" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-950 border-gray-700">
+                  <SelectItem value="site" className="text-white">Site</SelectItem>
+                  <SelectItem value="build_fitout" className="text-white">Build / Fit-Out</SelectItem>
+                  <SelectItem value="mep_utilities" className="text-white">MEP / Utilities</SelectItem>
+                  <SelectItem value="install_logistics" className="text-white">Install & Logistics</SelectItem>
+                  <SelectItem value="it_systems" className="text-white">IT / Systems</SelectItem>
+                  <SelectItem value="test_commission" className="text-white">Test / Commission</SelectItem>
+                  <SelectItem value="operations_live" className="text-white">Operations (Live)</SelectItem>
+                  <SelectItem value="compliance_permits" className="text-white">Compliance / Permits</SelectItem>
+                  <SelectItem value="branding_creative" className="text-white">Branding / Creative</SelectItem>
+                  <SelectItem value="other" className="text-white">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ws-desc" className="text-gray-300">Description</Label>
+              <Textarea id="ws-desc" value={newWorkstreamDescription} onChange={(e) => setNewWorkstreamDescription(e.target.value)} placeholder="Brief description..." className="bg-black/40 border-gray-700 text-white min-h-[80px]" />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <Button type="submit" disabled={creatingWorkstream} className="bg-blue-600 hover:bg-blue-700 text-white">
+                {creatingWorkstream ? 'Creating...' : 'Create Workstream'}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowCreateWorkstreamDialog(false)} className="bg-black/25 border-gray-700 text-gray-300 hover:bg-black/40">Cancel</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

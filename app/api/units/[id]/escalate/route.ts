@@ -293,3 +293,69 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+// PATCH /api/units/[id]/escalate - Manually resolve an active escalation
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const authHeader = request.headers.get('authorization');
+    const { authorized, context, error: authError } = await authorize(authHeader, {
+      requireRole: ['PLATFORM_ADMIN', 'PROGRAM_OWNER', 'WORKSTREAM_LEAD'],
+    });
+
+    if (!authorized) {
+      return NextResponse.json({ error: authError }, { status: 403 });
+    }
+
+    const supabase = getSupabaseServer();
+    const unitId = params.id;
+    const body = await request.json();
+    const { escalation_id } = body;
+
+    if (!escalation_id) {
+      return NextResponse.json({ error: 'escalation_id is required' }, { status: 400 });
+    }
+
+    // Verify unit belongs to user's org
+    const { data: unit, error: unitError } = await supabase
+      .from('units')
+      .select('*, workstreams!inner(program_id, programs!inner(org_id))')
+      .eq('id', unitId)
+      .single();
+
+    if (unitError || !unit) {
+      return NextResponse.json({ error: 'Unit not found' }, { status: 404 });
+    }
+
+    const unitOrgId = (unit.workstreams as any)?.programs?.org_id;
+    if (context!.role !== 'PLATFORM_ADMIN' && unitOrgId !== context!.org_id) {
+      return NextResponse.json({ error: 'Forbidden - cross-tenant access denied' }, { status: 403 });
+    }
+
+    // Resolve the escalation
+    const { error: updateError } = await supabase
+      .from('unit_escalations')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .eq('id', escalation_id)
+      .eq('unit_id', unitId)
+      .eq('status', 'active');
+
+    if (updateError) throw updateError;
+
+    // Audit trail
+    await supabase.from('unit_status_events').insert({
+      unit_id: unitId,
+      event_type: 'escalation_resolved',
+      triggered_by: context!.user_id,
+      triggered_by_role: context!.role,
+      reason: 'Manually resolved by ' + context!.role,
+      metadata: { escalation_id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
