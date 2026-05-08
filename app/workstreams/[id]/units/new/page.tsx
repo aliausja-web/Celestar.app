@@ -287,7 +287,7 @@ export default function NewUnitPage() {
                   type="datetime-local"
                   value={formData.deadline}
                   onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
-                  className="bg-black/40 border-gray-700 text-white"
+                  className="bg-black/40 border-gray-700 text-white [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-70 [&::-webkit-calendar-picker-indicator]:cursor-pointer"
                 />
               </div>
 

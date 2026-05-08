@@ -201,7 +201,7 @@ export default function NewProgramPage() {
                   <Label htmlFor="start_time" className="text-gray-300">{t('programNew.startDateLabel')}</Label>
                   <Input
                     id="start_time"
-                    type="datetime-local"
+                    type="date"
                     value={formData.start_time}
                     onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
                     className="bg-black/40 border-gray-700 text-white"
@@ -211,7 +211,7 @@ export default function NewProgramPage() {
                   <Label htmlFor="end_time" className="text-gray-300">{t('programNew.endDateLabel')}</Label>
                   <Input
                     id="end_time"
-                    type="datetime-local"
+                    type="date"
                     value={formData.end_time}
                     onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
                     className="bg-black/40 border-gray-700 text-white"

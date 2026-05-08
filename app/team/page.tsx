@@ -677,7 +677,7 @@ export default function TeamManagementPage() {
                     type="text"
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase() })}
-                    placeholder="e.g. john_doe"
+                    placeholder="Username"
                     autoCapitalize="none"
                     autoCorrect="off"
                     className="w-full px-4 py-2.5 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm font-mono"
@@ -708,7 +708,7 @@ export default function TeamManagementPage() {
                     type="text"
                     value={formData.full_name}
                     onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    placeholder="e.g. Jane Smith"
+                    placeholder="Full name"
                     className="w-full px-4 py-2.5 bg-gray-900 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
                   />
                 </div>

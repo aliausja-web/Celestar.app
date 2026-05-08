@@ -300,7 +300,7 @@ export default function ProgramDetailPage() {
           <form onSubmit={handleCreateWorkstream} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="ws-name" className="text-gray-300">Name <span className="text-red-400">*</span></Label>
-              <Input id="ws-name" value={newWorkstreamName} onChange={(e) => setNewWorkstreamName(e.target.value)} placeholder="e.g., Riyadh Season Launch" className="bg-black/40 border-gray-700 text-white" required />
+              <Input id="ws-name" value={newWorkstreamName} onChange={(e) => setNewWorkstreamName(e.target.value)} placeholder="Workstream name" className="bg-black/40 border-gray-700 text-white" required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="ws-type" className="text-gray-300">Type</Label>
