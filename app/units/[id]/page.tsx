@@ -1412,7 +1412,7 @@ export default function UnitDetailPage() {
 
                         {/* Notes */}
                         {proof.notes && (
-                          <p className="text-gray-400 italic">"{proof.notes}"</p>
+                          <p className="text-gray-400 italic">&quot;{proof.notes}&quot;</p>
                         )}
 
                         {proof.validation_notes && (

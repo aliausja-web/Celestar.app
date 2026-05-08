@@ -471,7 +471,7 @@ export default function TeamManagementPage() {
 
           {searching && visiblePrograms.length === 0 && (
             <p className="text-gray-500 text-xs italic text-center py-4 px-3">
-              No units match "{search}"
+              No units match &quot;{search}&quot;
             </p>
           )}
         </div>
