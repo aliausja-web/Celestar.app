@@ -529,6 +529,8 @@ const en = {
     unitUnblockedMsg: '"{unit}" unblocked by {resolver}. Resolution: {note}',
     autoEscalationTitle: 'Automatic Escalation (L{level})',
     autoEscalationMsg: '"{unit}" has been automatically escalated to level {level}. Immediate review required.',
+    deadlineAlertTitle: '[L{level}] Deadline Alert',
+    deadlineAlertMsg: '"{unit}" is {pct}% through its deadline window — L{level} alert.',
   },
   zoneTable: {
     noDeadline: 'No deadline',
@@ -1192,6 +1194,8 @@ const ar: Messages = {
     unitUnblockedMsg: 'تم رفع الإيقاف عن "{unit}" بواسطة {resolver}. الحل: {note}',
     autoEscalationTitle: 'تصعيد تلقائي (المستوى {level})',
     autoEscalationMsg: 'تم تصعيد "{unit}" تلقائياً إلى المستوى {level}. يلزم المراجعة الفورية.',
+    deadlineAlertTitle: '[مستوى {level}] تنبيه الموعد النهائي',
+    deadlineAlertMsg: '"{unit}" استنفدت {pct}٪ من نافذة الموعد النهائي — تنبيه مستوى {level}.',
   },
   zoneTable: {
     noDeadline: 'لا يوجد موعد',
@@ -1855,6 +1859,8 @@ const ur: Messages = {
     unitUnblockedMsg: '"{unit}" کی بلاکنگ {resolver} نے ہٹائی۔ حل: {note}',
     autoEscalationTitle: 'خودکار اسکیلیشن (سطح {level})',
     autoEscalationMsg: '"{unit}" خودکار طور پر سطح {level} پر اسکیلیٹ ہو گئی ہے۔ فوری جائزہ ضروری ہے۔',
+    deadlineAlertTitle: '[سطح {level}] آخری تاریخ کا انتباہ',
+    deadlineAlertMsg: '"{unit}" اپنی آخری تاریخ کا {pct}٪ استعمال کر چکی ہے — سطح {level} انتباہ۔',
   },
   zoneTable: {
     noDeadline: 'کوئی آخری تاریخ نہیں',
@@ -2518,6 +2524,8 @@ const bn: Messages = {
     unitUnblockedMsg: '"{unit}" {resolver} দ্বারা আনব্লক হয়েছে। সমাধান: {note}',
     autoEscalationTitle: 'স্বয়ংক্রিয় এস্কেলেশন (স্তর {level})',
     autoEscalationMsg: '"{unit}" স্বয়ংক্রিয়ভাবে স্তর {level} তে এস্কেলেট হয়েছে। তাৎক্ষণিক পর্যালোচনা প্রয়োজন।',
+    deadlineAlertTitle: '[স্তর {level}] সময়সীমার সতর্কতা',
+    deadlineAlertMsg: '"{unit}" তার সময়সীমার {pct}% ব্যবহার করেছে — স্তর {level} সতর্কতা।',
   },
   zoneTable: {
     noDeadline: 'কোনো সময়সীমা নেই',

@@ -109,6 +109,18 @@ export function getNotifContent(
         }),
       };
 
+    case 'deadline_alert':
+      return {
+        title: t('notifContent.deadlineAlertTitle', {
+          level: meta.alert_level || '?',
+        }),
+        message: t('notifContent.deadlineAlertMsg', {
+          unit: unitTitle,
+          level: meta.alert_level || '?',
+          pct: meta.percentage_elapsed || '?',
+        }),
+      };
+
     default:
       return { title: notification.title, message: notification.message };
   }
