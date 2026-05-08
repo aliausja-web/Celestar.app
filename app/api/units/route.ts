@@ -186,13 +186,17 @@ export async function POST(request: NextRequest) {
       required_types: body.required_proof_types || ['photo'],
     };
 
-    // Use provided escalation_config or set default
+    // Use provided escalation_config or set default.
+    // Each level notifies exactly one tier — escalating upward, not cumulative:
+    //   L1 (50%) → Workstream Lead   (early heads-up)
+    //   L2 (75%) → Program Owner     (lead already notified, owner reviews)
+    //   L3 (90%) → Platform Admin    (critical, system-level visibility)
     const escalationConfig = body.escalation_config || {
       enabled: true,
       thresholds: [
         { level: 1, percentage_elapsed: 50, target_roles: ['WORKSTREAM_LEAD'] },
-        { level: 2, percentage_elapsed: 75, target_roles: ['PROGRAM_OWNER', 'WORKSTREAM_LEAD'] },
-        { level: 3, percentage_elapsed: 90, target_roles: ['PLATFORM_ADMIN', 'PROGRAM_OWNER'] }
+        { level: 2, percentage_elapsed: 75, target_roles: ['PROGRAM_OWNER'] },
+        { level: 3, percentage_elapsed: 90, target_roles: ['PLATFORM_ADMIN'] },
       ]
     };
 
