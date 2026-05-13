@@ -507,7 +507,7 @@ export default function TeamManagementPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
       {/* Header */}
       <div className="border-b border-gray-700 bg-gray-800/50 backdrop-blur-sm">
-        <div className="max-w-5xl mx-auto px-6 py-5">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
@@ -538,7 +538,7 @@ export default function TeamManagementPage() {
       </div>
 
       {/* Body */}
-      <div className="max-w-5xl mx-auto px-6 py-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         {error && !showCreateDialog && !showEditDialog && (
           <div className="flex items-center gap-2 mb-6 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-300 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -562,89 +562,91 @@ export default function TeamManagementPage() {
           </div>
         ) : (
           <div className="bg-gray-800/60 rounded-xl border border-gray-700 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-700">
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-700">
               <span className="text-gray-300 text-sm font-medium">
                 {users.length !== 1
                   ? t('team.contributorCountPlural', { count: users.length })
                   : t('team.contributorCount', { count: users.length })}
               </span>
             </div>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-700 bg-gray-800/40">
-                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colUsername')}</th>
-                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colDisplayName')}</th>
-                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colAssignedUnits')}</th>
-                  <th className="text-left py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colAdded')}</th>
-                  <th className="text-right py-3 px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colActions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr
-                    key={user.user_id}
-                    className="border-b border-gray-700/50 hover:bg-gray-700/20 transition-colors"
-                  >
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-yellow-600/20">
-                          <User className="w-4 h-4 text-yellow-400" />
-                        </div>
-                        <span className="text-white font-mono text-sm font-medium">
-                          {user.username ?? '—'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-gray-300 text-sm">
-                      {user.display_name}
-                    </td>
-                    <td className="py-4 px-6">
-                      {user.assigned_units.length === 0 ? (
-                        <span className="text-gray-500 text-sm italic">{t('team.noUnitsAssigned')}</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-1">
-                          {user.assigned_units.slice(0, 2).map((u) => (
-                            <span
-                              key={u.unit_id}
-                              className="inline-block px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-blue-300 text-xs"
-                              title={u.unit_title}
-                            >
-                              {u.unit_title.length > 22 ? u.unit_title.slice(0, 20) + '…' : u.unit_title}
-                            </span>
-                          ))}
-                          {user.assigned_units.length > 2 && (
-                            <span className="inline-block px-2 py-0.5 bg-gray-700 rounded text-gray-400 text-xs">
-                              {t('team.moreUnits', { count: user.assigned_units.length - 2 })}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-gray-400 text-sm">
-                      {new Date(user.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openEditDialog(user)}
-                          className="p-2 hover:bg-blue-500/10 rounded-lg text-blue-400 hover:text-blue-300 transition-colors"
-                          title={t('team.editDialogTitle')}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(user.user_id, user.username)}
-                          disabled={deletingId === user.user_id}
-                          className="p-2 hover:bg-red-500/10 rounded-lg text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[600px]">
+                <thead>
+                  <tr className="border-b border-gray-700 bg-gray-800/40">
+                    <th className="text-left py-3 px-4 sm:px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colUsername')}</th>
+                    <th className="text-left py-3 px-4 sm:px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colDisplayName')}</th>
+                    <th className="text-left py-3 px-4 sm:px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colAssignedUnits')}</th>
+                    <th className="text-left py-3 px-4 sm:px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colAdded')}</th>
+                    <th className="text-right py-3 px-4 sm:px-6 text-gray-400 font-medium text-xs uppercase tracking-wider">{t('team.colActions')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr
+                      key={user.user_id}
+                      className="border-b border-gray-700/50 hover:bg-gray-700/20 transition-colors"
+                    >
+                      <td className="py-4 px-4 sm:px-6">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-yellow-600/20">
+                            <User className="w-4 h-4 text-yellow-400" />
+                          </div>
+                          <span className="text-white font-mono text-sm font-medium">
+                            {user.username ?? '—'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 sm:px-6 text-gray-300 text-sm">
+                        {user.display_name}
+                      </td>
+                      <td className="py-4 px-4 sm:px-6">
+                        {user.assigned_units.length === 0 ? (
+                          <span className="text-gray-500 text-sm italic">{t('team.noUnitsAssigned')}</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {user.assigned_units.slice(0, 2).map((u) => (
+                              <span
+                                key={u.unit_id}
+                                className="inline-block px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-blue-300 text-xs"
+                                title={u.unit_title}
+                              >
+                                {u.unit_title.length > 22 ? u.unit_title.slice(0, 20) + '…' : u.unit_title}
+                              </span>
+                            ))}
+                            {user.assigned_units.length > 2 && (
+                              <span className="inline-block px-2 py-0.5 bg-gray-700 rounded text-gray-400 text-xs">
+                                {t('team.moreUnits', { count: user.assigned_units.length - 2 })}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-4 px-4 sm:px-6 text-gray-400 text-sm whitespace-nowrap">
+                        {new Date(user.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="py-4 px-4 sm:px-6 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openEditDialog(user)}
+                            className="p-2 hover:bg-blue-500/10 rounded-lg text-blue-400 hover:text-blue-300 transition-colors"
+                            title={t('team.editDialogTitle')}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(user.user_id, user.username)}
+                            disabled={deletingId === user.user_id}
+                            className="p-2 hover:bg-red-500/10 rounded-lg text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

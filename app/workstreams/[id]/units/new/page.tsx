@@ -603,9 +603,6 @@ export default function NewUnitPage() {
                         if (!val || val < 1) {
                           setProofCountInput('1');
                           setFormData({ ...formData, required_proof_count: 1 });
-                        } else if (val > 10) {
-                          setProofCountInput('10');
-                          setFormData({ ...formData, required_proof_count: 10 });
                         }
                       }}
                       className="bg-black/40 border-gray-700 text-white"

@@ -147,7 +147,7 @@ export default function WorkstreamBoard() {
               {isEscalated && (
                 <Badge className="border-[#db6d28]/60 bg-[#db6d28]/15 text-[#db6d28] text-xs px-2 py-1 flex items-center gap-1">
                   <AlertOctagon className="w-3 h-3" />
-                  L{unit.current_escalation_level} {t('workstream.escalated')}
+                  {t('workstream.escalated')}
                 </Badge>
               )}
             </div>
