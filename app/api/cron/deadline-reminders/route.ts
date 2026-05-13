@@ -1,267 +1,299 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getSupabaseServer } from '@/lib/supabase-server';
 
-// Create Supabase admin client (needed to write to cron_runs bypassing RLS)
 function getSupabaseAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
+    { auth: { autoRefreshToken: false, persistSession: false } }
   );
 }
 
-// POST /api/cron/deadline-reminders - Check for approaching deadlines and send notifications
-// This endpoint should be called by a cron job (e.g., daily at 9 AM)
+/**
+ * Default alert thresholds — used when a unit has no escalation_config or
+ * when escalation_config.thresholds is empty.
+ *
+ * Each level notifies exactly ONE tier, escalating upward:
+ *   L1 (50%) → Workstream Lead   — early heads-up, still time to recover
+ *   L2 (75%) → Program Owner     — lead already notified, owner must review
+ *   L3 (90%) → Platform Admin    — critical, system-level visibility needed
+ */
+const DEFAULT_THRESHOLDS = [
+  { level: 1, percentage_elapsed: 50, target_roles: ['WORKSTREAM_LEAD'] },
+  { level: 2, percentage_elapsed: 75, target_roles: ['PROGRAM_OWNER'] },
+  { level: 3, percentage_elapsed: 90, target_roles: ['PLATFORM_ADMIN'] },
+];
+
+/** Returns the % of deadline window that has elapsed (capped at 100). */
+function calcPercentElapsed(createdAt: string, deadline: string): number {
+  const now = Date.now();
+  const created = new Date(createdAt).getTime();
+  const due = new Date(deadline).getTime();
+  if (due <= created) return 100;
+  return Math.min(100, ((now - created) / (due - created)) * 100);
+}
+
+function alertSubject(unitTitle: string, level: number, pct: number): string {
+  const roundedPct = Math.round(pct);
+  if (level === 1) return `[L1 Alert] "${unitTitle}" is ${roundedPct}% through its deadline`;
+  if (level === 2) return `[L2 Alert] Action Required: "${unitTitle}" — ${roundedPct}% elapsed`;
+  return `[L3 CRITICAL] "${unitTitle}" is ${roundedPct}% through its deadline — intervene now`;
+}
+
+function alertMessage(
+  unitTitle: string,
+  workstreamName: string,
+  programName: string,
+  level: number,
+  pct: number
+): string {
+  const roundedPct = Math.round(pct);
+  if (level === 1) {
+    return (
+      `Heads up — "${unitTitle}" in ${workstreamName} (${programName}) is ${roundedPct}% through its deadline window.\n\n` +
+      `This is an early alert. Please make sure the unit is on track for on-time delivery.`
+    );
+  }
+  if (level === 2) {
+    return (
+      `Action required — "${unitTitle}" in ${workstreamName} (${programName}) has used ${roundedPct}% of its deadline window.\n\n` +
+      `The Workstream Lead was notified at the 50% mark. Please review progress and intervene if delivery is at risk.`
+    );
+  }
+  return (
+    `CRITICAL — "${unitTitle}" in ${workstreamName} (${programName}) is ${roundedPct}% through its deadline window with no GREEN status.\n\n` +
+    `The Workstream Lead and Program Owner have been notified at earlier thresholds. Immediate intervention is required.`
+  );
+}
+
+/**
+ * POST /api/cron/deadline-reminders
+ *
+ * Percentage-based deadline alert engine. For each non-GREEN unit, calculates
+ * how much of the deadline window has elapsed and fires the appropriate level
+ * alert when a threshold is crossed for the first time.
+ *
+ * L1 (50%) → Workstream Lead
+ * L2 (75%) → Program Owner
+ * L3 (90%) → Platform Admin
+ *
+ * Deduplication: once an alert for a given (unit, level) pair has been queued
+ * or sent it is never re-sent, so this endpoint is safe to call every few hours.
+ *
+ * Call daily (or multiple times a day) with Authorization: Bearer <CRON_SECRET>
+ */
 export async function POST(request: NextRequest) {
-  // Verify cron secret to prevent unauthorized access (mandatory)
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {
-    console.error('CRON_SECRET not configured - rejecting request for security');
-    return NextResponse.json({ error: 'Server misconfiguration: CRON_SECRET not set' }, { status: 500 });
+    console.error('[deadline-reminders] CRON_SECRET not configured');
+    return NextResponse.json(
+      { error: 'Server misconfiguration: CRON_SECRET not set' },
+      { status: 500 }
+    );
   }
 
-  // Allow if CRON_SECRET matches OR if called from Supabase Edge Function with service role key
-  if (authHeader !== `Bearer ${cronSecret}`) {
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (authHeader !== `Bearer ${supabaseServiceKey}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  // Accept both the cron secret and the Supabase service role key (for edge-function calls)
+  if (
+    authHeader !== `Bearer ${cronSecret}` &&
+    authHeader !== `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
+  ) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const supabaseAdmin = getSupabaseAdmin();
-  const supabase = getSupabaseServer();
+  const supabase = getSupabaseAdmin();
   const runId = crypto.randomUUID();
 
-  // Insert run start record
-  await supabaseAdmin.from('cron_runs').insert({
+  await supabase.from('cron_runs').insert({
     id: runId,
     job_name: 'deadline-reminders',
     status: 'running',
   });
 
   try {
-    const now = new Date();
-    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-
-    // Shared query shape (no lead_email/owner_email — those columns don't exist)
-    const unitSelect = `
-      id,
-      title,
-      required_green_by,
-      computed_status,
-      workstreams!inner(
+    // ── 1. Fetch all non-GREEN units that have both a creation time and a deadline ──
+    const { data: units, error: unitsError } = await supabase
+      .from('units')
+      .select(`
         id,
-        name,
-        program_id,
-        programs!inner(
+        title,
+        created_at,
+        required_green_by,
+        computed_status,
+        escalation_config,
+        workstreams!inner(
           id,
           name,
-          org_id
+          programs!inner(
+            id,
+            name,
+            org_id
+          )
         )
-      )
-    `;
+      `)
+      .not('computed_status', 'eq', 'GREEN')
+      .not('required_green_by', 'is', null)
+      .not('created_at', 'is', null);
 
-    // Find units with approaching deadlines (next 3 days) that aren't completed
-    const { data: approachingUnits, error: approachingError } = await supabase
-      .from('units')
-      .select(unitSelect)
-      .gte('required_green_by', now.toISOString())
-      .lte('required_green_by', threeDaysFromNow.toISOString())
-      .not('computed_status', 'eq', 'GREEN');
+    if (unitsError) throw unitsError;
 
-    if (approachingError) throw approachingError;
+    if (!units || units.length === 0) {
+      await supabase
+        .from('cron_runs')
+        .update({ status: 'success', completed_at: new Date().toISOString(), records_processed: 0 })
+        .eq('id', runId);
+      return NextResponse.json({ success: true, units_checked: 0, alerts_queued: 0 });
+    }
 
-    // Find overdue units
-    const { data: overdueUnits, error: overdueError } = await supabase
-      .from('units')
-      .select(unitSelect)
-      .lt('required_green_by', now.toISOString())
-      .not('computed_status', 'eq', 'GREEN');
+    // ── 2. Load already-sent/pending alerts to prevent duplicate notifications ──
+    // We stamp unit_id + alert_level into template_data when we queue the notification,
+    // so we can cheaply check whether a given (unit, level) has already fired.
+    const { data: alreadySentRaw } = await supabase
+      .from('escalation_notifications')
+      .select('template_data')
+      .not('template_data->>alert_level', 'is', null)
+      .in('status', ['pending', 'sent']);
 
-    if (overdueError) throw overdueError;
+    const sentKeys = new Set<string>(
+      (alreadySentRaw || [])
+        .filter((n) => n.template_data?.unit_id && n.template_data?.alert_level)
+        .map((n) => `${n.template_data.unit_id}:${n.template_data.alert_level}`)
+    );
 
-    const notifications: any[] = [];
+    // ── 3. Walk every unit and check which thresholds have been crossed ──
+    const emailNotifications: any[] = [];
     const inAppNotifications: any[] = [];
 
-    // Helper: look up recipients by org_id + role from profiles table
-    const getRecipientsByRole = async (orgId: string, role: string) => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('user_id, email, full_name')
-        .eq('org_id', orgId)
-        .eq('role', role);
-      return (data || []).filter((p: any) => p.email);
-    };
-
-    // Process approaching deadline notifications
-    for (const unit of approachingUnits || []) {
-      const workstream = unit.workstreams as any;
+    for (const unit of units) {
+      const workstream = (unit.workstreams as any);
       const program = workstream?.programs;
       const orgId = program?.org_id;
       if (!orgId) continue;
 
-      const deadline = new Date(unit.required_green_by);
-      const daysUntil = Math.ceil((deadline.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+      const config = (unit.escalation_config as any) ?? {};
+      // Respect the per-unit "enabled" flag (defaults to true if absent)
+      if (config.enabled === false) continue;
 
-      // Notify workstream leads in the org
-      const wsLeads = await getRecipientsByRole(orgId, 'WORKSTREAM_LEAD');
-      for (const lead of wsLeads) {
-        notifications.push({
-          escalation_id: null,
-          recipient_email: lead.email,
-          recipient_name: lead.full_name || lead.email.split('@')[0],
-          channel: 'email',
-          subject: `Deadline Approaching: "${unit.title}" - ${daysUntil} day${daysUntil === 1 ? '' : 's'} left`,
-          message: `Unit "${unit.title}" in workstream "${workstream.name}" has a deadline approaching.\n\nDeadline: ${deadline.toLocaleDateString()}\nDays remaining: ${daysUntil}\nCurrent status: ${unit.computed_status || 'IN PROGRESS'}\n\nPlease ensure this unit is completed on time.`,
-          template_data: {
-            unit_title: unit.title,
-            workstream_name: workstream.name,
-            deadline: deadline.toISOString(),
-            days_remaining: daysUntil,
-            priority: daysUntil <= 1 ? 'critical' : 'high',
-          },
-          status: 'pending',
-        });
-        // Create in-app notification
-        if (lead.user_id) {
-          inAppNotifications.push({
-            user_id: lead.user_id,
-            title: `Deadline Approaching: ${unit.title}`,
-            message: `${daysUntil} day${daysUntil === 1 ? '' : 's'} until deadline for "${unit.title}" in ${workstream.name}.`,
-            type: 'deadline_approaching',
-            priority: daysUntil <= 1 ? 'critical' : 'high',
-            related_unit_id: unit.id,
-            action_url: `/units/${unit.id}`,
-            metadata: { days_remaining: daysUntil },
-          });
-        }
-      }
+      const thresholds: Array<{
+        level: number;
+        percentage_elapsed: number;
+        target_roles: string[];
+      }> = Array.isArray(config.thresholds) && config.thresholds.length > 0
+        ? config.thresholds
+        : DEFAULT_THRESHOLDS;
 
-      // Also notify program owners if deadline is tomorrow
-      if (daysUntil <= 1) {
-        const progOwners = await getRecipientsByRole(orgId, 'PROGRAM_OWNER');
-        for (const owner of progOwners) {
-          notifications.push({
-            escalation_id: null,
-            recipient_email: owner.email,
-            recipient_name: owner.full_name || owner.email.split('@')[0],
-            channel: 'email',
-            subject: `URGENT: "${unit.title}" deadline is TOMORROW`,
-            message: `URGENT: Unit "${unit.title}" deadline is tomorrow!\n\nProgram: ${program.name}\nWorkstream: ${workstream.name}\nDeadline: ${deadline.toLocaleDateString()}\nCurrent status: ${unit.computed_status || 'IN PROGRESS'}\n\nImmediate attention required.`,
-            template_data: {
-              unit_title: unit.title,
-              program_name: program.name,
-              workstream_name: workstream.name,
-              deadline: deadline.toISOString(),
-              priority: 'critical',
-            },
-            status: 'pending',
-          });
-          if (owner.user_id) {
-            inAppNotifications.push({
-              user_id: owner.user_id,
-              title: `URGENT: "${unit.title}" deadline is TOMORROW`,
-              message: `Immediate attention required for "${unit.title}" in ${workstream.name}.`,
-              type: 'deadline_approaching',
-              priority: 'critical',
-              related_unit_id: unit.id,
-              action_url: `/units/${unit.id}`,
-              metadata: { days_remaining: daysUntil },
+      const pct = calcPercentElapsed(unit.created_at, unit.required_green_by);
+
+      for (const threshold of thresholds) {
+        // Skip if this threshold hasn't been reached yet
+        if (pct < threshold.percentage_elapsed) continue;
+
+        // Skip if we've already sent this level for this unit
+        const alertKey = `${unit.id}:${threshold.level}`;
+        if (sentKeys.has(alertKey)) continue;
+
+        const priority =
+          threshold.level >= 3 ? 'critical' : threshold.level === 2 ? 'high' : 'normal';
+        const subject = alertSubject(unit.title, threshold.level, pct);
+        const message = alertMessage(unit.title, workstream.name, program.name, threshold.level, pct);
+
+        for (const role of threshold.target_roles) {
+          let recipientRows: { user_id: string; email: string; full_name: string | null }[] = [];
+
+          if (role === 'PLATFORM_ADMIN') {
+            // Platform admins have system-wide scope — no org filter
+            const { data } = await supabase
+              .from('profiles')
+              .select('user_id, email, full_name')
+              .eq('role', 'PLATFORM_ADMIN');
+            recipientRows = data || [];
+          } else {
+            const { data } = await supabase
+              .from('profiles')
+              .select('user_id, email, full_name')
+              .eq('org_id', orgId)
+              .eq('role', role);
+            recipientRows = data || [];
+          }
+
+          for (const r of recipientRows) {
+            if (!r.email) continue;
+
+            emailNotifications.push({
+              escalation_id: null,
+              recipient_email: r.email,
+              recipient_name: r.full_name || r.email.split('@')[0],
+              channel: 'email',
+              subject,
+              message,
+              template_data: {
+                unit_id: unit.id,
+                unit_title: unit.title,
+                workstream_name: workstream.name,
+                program_name: program.name,
+                alert_level: String(threshold.level),
+                percentage_elapsed: String(Math.round(pct)),
+                priority,
+              },
+              status: 'pending',
             });
+
+            if (r.user_id) {
+              const inAppMsg =
+                threshold.level === 1
+                  ? `"${unit.title}" is ${Math.round(pct)}% through its deadline. Make sure delivery stays on track.`
+                  : threshold.level === 2
+                  ? `"${unit.title}" has used ${Math.round(pct)}% of its deadline window. Immediate review required.`
+                  : `CRITICAL: "${unit.title}" is ${Math.round(pct)}% through its deadline with no GREEN status.`;
+
+              inAppNotifications.push({
+                user_id: r.user_id,
+                title: `[L${threshold.level}] Deadline Alert: ${unit.title}`,
+                message: inAppMsg,
+                type: 'deadline_alert',
+                priority,
+                related_unit_id: unit.id,
+                action_url: `/units/${unit.id}`,
+                metadata: {
+                  alert_level: threshold.level,
+                  percentage_elapsed: Math.round(pct),
+                  unit_title: unit.title,
+                },
+              });
+            }
           }
         }
       }
     }
 
-    // Process overdue notifications
-    for (const unit of overdueUnits || []) {
-      const workstream = unit.workstreams as any;
-      const program = workstream?.programs;
-      const orgId = program?.org_id;
-      if (!orgId) continue;
+    // ── 4. Deduplicate before inserting ──
+    // Email: one record per (recipient, unit, level)
+    const seenEmailKeys = new Set<string>();
+    const uniqueEmails = emailNotifications.filter((n) => {
+      const key = `${n.recipient_email}:${n.template_data.unit_id}:${n.template_data.alert_level}`;
+      if (seenEmailKeys.has(key)) return false;
+      seenEmailKeys.add(key);
+      return true;
+    });
 
-      const deadline = new Date(unit.required_green_by);
-      const daysOverdue = Math.ceil((now.getTime() - deadline.getTime()) / (24 * 60 * 60 * 1000));
+    // In-app: one record per (user, unit, level)
+    const seenInAppKeys = new Set<string>();
+    const uniqueInApp = inAppNotifications.filter((n) => {
+      const key = `${n.user_id}:${n.related_unit_id}:${n.metadata.alert_level}`;
+      if (seenInAppKeys.has(key)) return false;
+      seenInAppKeys.add(key);
+      return true;
+    });
 
-      // Notify both workstream leads and program owners for overdue
-      const wsLeads = await getRecipientsByRole(orgId, 'WORKSTREAM_LEAD');
-      const progOwners = await getRecipientsByRole(orgId, 'PROGRAM_OWNER');
-      const allRecipients = [...wsLeads, ...progOwners];
-      const seen = new Set<string>();
+    // ── 5. Persist and dispatch ──
+    let alertsQueued = 0;
 
-      for (const recipient of allRecipients) {
-        if (seen.has(recipient.email)) continue;
-        seen.add(recipient.email);
-        notifications.push({
-          escalation_id: null,
-          recipient_email: recipient.email,
-          recipient_name: recipient.full_name || recipient.email.split('@')[0],
-          channel: 'email',
-          subject: `OVERDUE: "${unit.title}" - ${daysOverdue} day${daysOverdue === 1 ? '' : 's'} past deadline`,
-          message: `OVERDUE ALERT: Unit "${unit.title}" is past its deadline!\n\nProgram: ${program?.name}\nWorkstream: ${workstream?.name}\nDeadline was: ${deadline.toLocaleDateString()}\nDays overdue: ${daysOverdue}\nCurrent status: ${unit.computed_status || 'IN PROGRESS'}\n\nThis requires immediate escalation and resolution.`,
-          template_data: {
-            unit_title: unit.title,
-            program_name: program?.name,
-            workstream_name: workstream?.name,
-            deadline: deadline.toISOString(),
-            days_overdue: daysOverdue,
-            priority: 'critical',
-          },
-          status: 'pending',
-        });
-        if (recipient.user_id) {
-          inAppNotifications.push({
-            user_id: recipient.user_id,
-            title: `OVERDUE: "${unit.title}"`,
-            message: `"${unit.title}" is ${daysOverdue} day${daysOverdue === 1 ? '' : 's'} past deadline. Immediate action required.`,
-            type: 'deadline_approaching',
-            priority: 'critical',
-            related_unit_id: unit.id,
-            action_url: `/units/${unit.id}`,
-            metadata: { days_overdue: daysOverdue },
-          });
-        }
-      }
-    }
+    if (uniqueEmails.length > 0) {
+      await supabase.from('escalation_notifications').insert(uniqueEmails);
+      alertsQueued = uniqueEmails.length;
 
-    // Insert notifications (dedupe by email + unit)
-    let notificationsQueued = 0;
-
-    if (notifications.length > 0) {
-      // Simple dedupe by recipient + subject
-      const seen = new Set();
-      const uniqueNotifications = notifications.filter(n => {
-        const key = `${n.recipient_email}:${n.subject}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-      await supabase.from('escalation_notifications').insert(uniqueNotifications);
-      notificationsQueued = uniqueNotifications.length;
-
-      // Insert in-app notifications
-      if (inAppNotifications.length > 0) {
-        const seenInApp = new Set();
-        const uniqueInApp = inAppNotifications.filter((n: any) => {
-          const key = `${n.user_id}:${n.title}`;
-          if (seenInApp.has(key)) return false;
-          seenInApp.add(key);
-          return true;
-        });
-        await supabase.from('in_app_notifications').insert(uniqueInApp);
-      }
-
-      // Trigger Edge Function to send emails
+      // Kick the edge function to process the queue
       try {
         await fetch(
           `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/send-escalation-emails`,
@@ -273,33 +305,33 @@ export async function POST(request: NextRequest) {
             },
           }
         );
-      } catch (emailError) {
-        console.warn('Failed to trigger email function:', emailError);
+      } catch (edgeErr: any) {
+        console.error('[deadline-reminders] Edge function trigger failed:', edgeErr.message);
       }
     }
 
-    // Update run record on success
-    await supabaseAdmin
+    if (uniqueInApp.length > 0) {
+      await supabase.from('in_app_notifications').insert(uniqueInApp);
+    }
+
+    await supabase
       .from('cron_runs')
       .update({
         status: 'success',
         completed_at: new Date().toISOString(),
-        records_processed: notificationsQueued,
+        records_processed: alertsQueued,
       })
       .eq('id', runId);
 
     return NextResponse.json({
       success: true,
-      approaching_deadlines: approachingUnits?.length || 0,
-      overdue_units: overdueUnits?.length || 0,
-      notifications_queued: notificationsQueued,
-      ...(notificationsQueued === 0 && { message: 'No deadline reminders needed' }),
+      units_checked: units.length,
+      alerts_queued: alertsQueued,
+      in_app_sent: uniqueInApp.length,
     });
   } catch (error: any) {
-    console.error('Deadline reminder error:', error);
-
-    // Update run record on failure
-    await supabaseAdmin
+    console.error('[deadline-reminders] Fatal error:', error);
+    await supabase
       .from('cron_runs')
       .update({
         status: 'failed',
@@ -307,16 +339,18 @@ export async function POST(request: NextRequest) {
         error_message: error instanceof Error ? error.message : 'Unknown error',
       })
       .eq('id', runId);
-
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// GET for health check
+// GET for health check / cron dashboard
 export async function GET() {
   return NextResponse.json({
     status: 'ok',
     endpoint: 'deadline-reminders',
-    description: 'Call POST to check deadlines and send notifications'
+    description:
+      'Percentage-based deadline alert engine. ' +
+      'L1 (50%) → Workstream Lead, L2 (75%) → Program Owner, L3 (90%) → Platform Admin. ' +
+      'Each (unit, level) pair is only ever sent once.',
   });
 }
