@@ -382,7 +382,7 @@ export default function WorkstreamBoard() {
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search units..."
+                placeholder={t('workstream.searchUnits')}
                 className="pl-9 bg-[#161b22] border-[#30363d] text-[#e6edf3] placeholder:text-[#484f58] focus-visible:ring-[#1f6feb]"
               />
             </div>
@@ -401,7 +401,7 @@ export default function WorkstreamBoard() {
           ) : filteredUnits.length === 0 ? (
             <Card className="bg-[#161b22] border-[#30363d]">
               <CardContent className="py-12 text-center">
-                <p className="text-[#7d8590]">No units match &ldquo;{searchQuery}&rdquo;</p>
+                <p className="text-[#7d8590]">{t('workstream.noUnitsMatch', { query: searchQuery })}</p>
               </CardContent>
             </Card>
           ) : (
