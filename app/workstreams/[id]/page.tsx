@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UnitWithProofs, WorkstreamWithMetrics } from '@/lib/types';
+import { Input } from '@/components/ui/input';
 import {
   AlertTriangle, CheckCircle2, Clock, Camera, ChevronLeft,
-  FileText, Video, Image as ImageIcon, Plus, Mic, Paperclip, AlertOctagon,
+  FileText, Video, Image as ImageIcon, Plus, Mic, Paperclip, AlertOctagon, Search,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isValid } from 'date-fns';
 import { supabase } from '@/lib/firebase';
@@ -51,6 +52,7 @@ export default function WorkstreamBoard() {
   const [workstream, setWorkstream] = useState<WorkstreamWithMetrics | null>(null);
   const [units, setUnits] = useState<UnitWithProofs[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (workstreamId) {
@@ -267,6 +269,12 @@ export default function WorkstreamBoard() {
       ? fieldUrgencyScore(b) - fieldUrgencyScore(a)
       : leadUrgencyScore(b) - leadUrgencyScore(a)
   );
+  const filteredUnits = searchQuery.trim()
+    ? sortedUnits.filter((u) =>
+        u.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (u.owner_party_name ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : sortedUnits;
 
   if (loading) {
     return (
@@ -368,6 +376,17 @@ export default function WorkstreamBoard() {
               </Button>
             )}
           </div>
+          {units.length > 0 && (
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#7d8590] pointer-events-none" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search units..."
+                className="pl-9 bg-[#161b22] border-[#30363d] text-[#e6edf3] placeholder:text-[#484f58] focus-visible:ring-[#1f6feb]"
+              />
+            </div>
+          )}
           {units.length === 0 ? (
             <Card className="bg-[#161b22] border-[#30363d]">
               <CardContent className="py-12 text-center">
@@ -379,9 +398,15 @@ export default function WorkstreamBoard() {
                 )}
               </CardContent>
             </Card>
+          ) : filteredUnits.length === 0 ? (
+            <Card className="bg-[#161b22] border-[#30363d]">
+              <CardContent className="py-12 text-center">
+                <p className="text-[#7d8590]">No units match &ldquo;{searchQuery}&rdquo;</p>
+              </CardContent>
+            </Card>
           ) : (
             <div className="space-y-3">
-              {sortedUnits.map((unit) => <UnitRow key={unit.id} unit={unit} isFieldView={isFieldView} />)}
+              {filteredUnits.map((unit) => <UnitRow key={unit.id} unit={unit} isFieldView={isFieldView} />)}
             </div>
           )}
         </div>
